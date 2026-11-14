@@ -1,5 +1,7 @@
 # This VPS deployment
 
+Live as of 14 November 2026. HTTPS, private API protection, and the existing apex site were verified after deployment.
+
 - Public URL: https://reentry.pavé.tech
 - Exact application origin / ASCII DNS name: `https://reentry.xn--pav-dma.tech`
 - Source: https://github.com/RNT56/reentry-web
@@ -27,9 +29,11 @@ docker compose -p reentry -f compose.yaml -f compose.caddy-network.yaml ps
 The Reentry block from `deploy/reentry.Caddyfile` must be appended once to the existing Caddyfile. Validate before a graceful reload:
 
 ```sh
-docker exec pave-company-caddy-1 caddy validate --config /etc/caddy/Caddyfile
-docker exec pave-company-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+docker exec -i pave-company-caddy-1 caddy validate --config - --adapter caddyfile < /home/deploy/pave/infra/Caddyfile
+docker exec -i pave-company-caddy-1 caddy reload --config - --adapter caddyfile < /home/deploy/pave/infra/Caddyfile
 ```
+
+These commands read the current host file directly. The running Caddy container has a single-file bind mount that held an older inode during deployment; reading `/etc/caddy/Caddyfile` inside that existing container would load the old config. A newly created container mounts the current host file.
 
 The Caddyfile is part of the other project's source checkout. Preserve this additional block during that project's updates or move it into that project's maintained configuration. Do not overwrite its existing route.
 
