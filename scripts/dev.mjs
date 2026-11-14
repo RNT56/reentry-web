@@ -1,0 +1,3 @@
+import http from 'node:http';import fs from 'node:fs';import {api} from '../src/server.js';
+const paths={'/':['src/index.html','text/html'],'/app.js':['src/app.js','text/javascript'],'/engine.js':['src/engine.js','text/javascript'],'/style.css':['src/style.css','text/css']};
+http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost:4173');if(url.pathname.startsWith('/api/')){const r=await api(url);res.writeHead(r.status,Object.fromEntries(r.headers));res.end(await r.text());return}const a=paths[url.pathname];if(!a){res.writeHead(404);res.end();return}res.writeHead(200,{'Content-Type':a[1]});res.end(fs.readFileSync(a[0]))}catch{res.writeHead(500);res.end('Server error')}}).listen(4173,'127.0.0.1',()=>console.log('Local: http://localhost:4173'));
