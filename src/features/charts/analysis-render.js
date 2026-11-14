@@ -180,7 +180,15 @@ function path(series, g) {
   return path;
 }
 export function renderDrawings(drawings, g, selected, preview = false) {
-  return drawings
+  // Keep the selected tool's handles above overlapping tools without mutating saved order.
+  const ordered =
+    selected && !preview
+      ? [
+          ...drawings.filter((d) => d.id !== selected),
+          ...drawings.filter((d) => d.id === selected),
+        ]
+      : drawings;
+  return ordered
     .map((d) => {
       const [a, b] = d.anchors,
         ax = g.timeX(a.time),
@@ -190,35 +198,36 @@ export function renderDrawings(drawings, g, selected, preview = false) {
         color = d.color || "#a4dec0",
         id = esc(d.id),
         hit = `data-drawing="${id}"`,
-        stroke = `stroke="${color}" stroke-width="1.6" fill="none" vector-effect="non-scaling-stroke"`,
+        hitPath = (path) =>
+          `<path d="${path}" class="ta-hit" ${hit} vector-effect="non-scaling-stroke"/>`,
+        stroke = `stroke="${color}" stroke-width="${d.id === selected && !preview ? "2.2" : "1.6"}" fill="none" vector-effect="non-scaling-stroke"`,
         selectedClass = d.id === selected ? " is-selected" : "";
       let content = "";
       if (d.type === "trend")
-        content = `<path d="M${ax} ${ay}L${bx} ${by}" ${stroke}/><path d="M${ax} ${ay}L${bx} ${by}" class="ta-hit" ${hit}/>`;
+        content = `<path d="M${ax} ${ay}L${bx} ${by}" ${stroke}/>${hitPath(`M${ax} ${ay}L${bx} ${by}`)}`;
       if (d.type === "horizontal")
-        content = `<path d="M${g.L} ${ay}H${g.R}" ${stroke} stroke-dasharray="6 5"/><path d="M${g.L} ${ay}H${g.R}" class="ta-hit" ${hit}/><text x="${g.R - 5}" y="${ay - 7}" text-anchor="end" fill="${color}">${chartNumber(a.price)}</text>`;
+        content = `<path d="M${g.L} ${ay}H${g.R}" ${stroke} stroke-dasharray="6 5"/>${hitPath(`M${g.L} ${ay}H${g.R}`)}<text x="${g.R - 5}" y="${ay - 7}" text-anchor="end" fill="${color}" ${hit}>${chartNumber(a.price)}</text>`;
       if (d.type === "fib")
         content =
           fibonacciLevels(a, b)
             .map(
               (l) =>
-                `<path d="M${Math.min(ax, bx)} ${g.y(l.price)}H${g.R}" ${stroke} opacity="${l.ratio === 0.618 ? 0.95 : 0.5}" stroke-dasharray="${l.ratio === 0 || l.ratio === 1 ? "0" : "4 4"}"/><text x="${g.R - 5}" y="${g.y(l.price) - 5}" text-anchor="end" fill="${color}">${(l.ratio * 100).toFixed(1)}% · ${chartNumber(l.price)}</text>`,
+                `<path d="M${Math.min(ax, bx)} ${g.y(l.price)}H${g.R}" ${stroke} opacity="${l.ratio === 0.618 ? 0.95 : 0.5}" stroke-dasharray="${l.ratio === 0 || l.ratio === 1 ? "0" : "4 4"}"/>${hitPath(`M${Math.min(ax, bx)} ${g.y(l.price)}H${g.R}`)}<text x="${g.R - 5}" y="${g.y(l.price) - 5}" text-anchor="end" fill="${color}" ${hit}>${(l.ratio * 100).toFixed(1)}% · ${chartNumber(l.price)}</text>`,
             )
-            .join("") +
-          `<path d="M${ax} ${ay}L${bx} ${by}" class="ta-hit" ${hit}/>`;
+            .join("") + `${hitPath(`M${ax} ${ay}L${bx} ${by}`)}`;
       if (d.type === "measure") {
         const m = measureRange(a, b, g.all);
-        content = `<rect x="${Math.min(ax, bx)}" y="${Math.min(ay, by)}" width="${Math.max(2, Math.abs(bx - ax))}" height="${Math.max(2, Math.abs(by - ay))}" fill="${color}" fill-opacity=".07" stroke="${color}" stroke-dasharray="4 4" ${hit}/><text x="${Math.max(g.L + 4, Math.min((ax + bx) / 2, g.R - 70))}" y="${Math.max(g.T + 16, Math.min(ay, by) - 10)}" fill="${color}">${m.percent >= 0 ? "+" : ""}${m.percent.toFixed(2)}% · ${m.bars} bars</text>`;
+        content = `<rect x="${Math.min(ax, bx)}" y="${Math.min(ay, by)}" width="${Math.max(2, Math.abs(bx - ax))}" height="${Math.max(2, Math.abs(by - ay))}" fill="${color}" fill-opacity=".07" stroke="${color}" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" ${hit}/><text x="${Math.max(g.L + 4, Math.min((ax + bx) / 2, g.R - 70))}" y="${Math.max(g.T + 16, Math.min(ay, by) - 10)}" fill="${color}" ${hit}>${m.percent >= 0 ? "+" : ""}${m.percent.toFixed(2)}% · ${m.bars} bars</text>`;
       }
       if (d.type === "note")
-        content = `<circle cx="${ax}" cy="${ay}" r="4" fill="${color}"/><text x="${Math.max(g.L + 6, Math.min(ax + 10, g.R - 135))}" y="${Math.max(g.T + 16, ay - 8)}" fill="${color}" ${hit}>${esc(d.text || "Note")}</text><circle cx="${ax}" cy="${ay}" r="15" fill="transparent" ${hit}/>`;
+        content = `<circle cx="${ax}" cy="${ay}" r="4" fill="${color}"/><text x="${Math.max(g.L + 6, Math.min(ax + 10, g.R - 135))}" y="${Math.max(g.T + 16, ay - 8)}" fill="${color}" ${hit}>${esc(d.text || "Note")}</text><circle cx="${ax}" cy="${ay}" r="15" fill="transparent" pointer-events="all" ${hit}/>`;
       if (d.type !== "note" && d.text)
         content += `<text class="ta-drawing-label" x="${Math.max(g.L + 6, Math.min(ax + 8, g.R - 135))}" y="${Math.max(g.T + 15, Math.min(g.B - 6, ay + 19))}" fill="${color}" ${hit}><title>${esc(d.text)}</title>${esc(d.text)}</text>`;
       if (d.id === selected && !preview)
         content += d.anchors
           .map(
             (p, i) =>
-              `<circle cx="${g.timeX(p.time)}" cy="${g.y(p.price)}" r="6" class="ta-anchor" data-drawing="${id}" data-anchor="${i}"/>`,
+              `<circle cx="${g.timeX(p.time)}" cy="${g.y(p.price)}" r="12" fill="transparent" pointer-events="all" class="ta-anchor-hit" data-drawing="${id}" data-anchor="${i}"/><circle cx="${g.timeX(p.time)}" cy="${g.y(p.price)}" r="5" class="ta-anchor" pointer-events="none"/>`,
           )
           .join("");
       return `<g class="ta-drawing${selectedClass}" data-drawing="${id}">${content}</g>`;
@@ -354,7 +363,7 @@ export function renderAnalysisPlot(
     )
     .join("");
   const gradientId = "ta-fill-" + data.symbol.replace(/[^a-z0-9]/gi, "");
-  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs><clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : priceLine}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${dates}</svg>`;
+  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs><clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : priceLine}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0" pointer-events="none"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${dates}</svg>`;
   const panes = state.indicators
     .filter((id) => ["rsi", "macd", "volume"].includes(id))
     .map((id) => renderPane(id, indicators[id], g))

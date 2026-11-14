@@ -39,7 +39,7 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
     current = null,
     selected = 0;
   const controls = `<form class="strategy-controls"><label>Capital<input name="capital" type="number" min="100" max="10000000" value="10000" step="100"></label><label>Order fee<input name="fee" type="number" min="0" max="1000" value="1" step="0.1"></label><label>Spread · bp<input name="bps" type="number" min="0" max="500" value="0"></label><label>Currency<select name="currency"><option ${currency === "EUR" ? "selected" : ""}>EUR</option><option ${currency === "USD" ? "selected" : ""}>USD</option></select></label><button class="secondary">Compare ↗</button></form>`;
-  root.innerHTML = `<section class="strategy-workspace"><div class="section-line"><h2>Strategies</h2><span>${esc(symbol || "")}</span></div><details class="strategy-parameters"><summary>Parameters <span class="strategy-parameters-summary">10,000 ${esc(currency)}</span></summary>${controls}</details><div class="strategy-output" aria-live="polite" aria-busy="true">${loadingSurface("strategies")}</div></section>`;
+  root.innerHTML = `<section class="strategy-workspace"><div class="section-line"><h2>Strategies</h2></div><details class="strategy-parameters"><summary>Parameters <span class="strategy-parameters-summary">10,000 ${esc(currency)}</span></summary>${controls}</details><div class="strategy-output" aria-live="polite" aria-busy="true">${loadingSurface("strategies")}</div></section>`;
   const output = root.querySelector(".strategy-output"),
     form = root.querySelector("form");
   function render() {

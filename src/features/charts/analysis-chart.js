@@ -13,13 +13,22 @@ import { convertDrawingCurrency } from "../../domain/chart-currency.js";
 import { technicalIndicators } from "../../domain/technical-analysis.js";
 import { aiOverlayDrawings, renderAIOverlays } from "./ai-overlays.js";
 import {
+  chartControlsMarkup,
+  chartControlIcon,
+  drawingListMarkup,
+} from "./analysis-controls.js";
+import {
+  mountChartGestures,
+  zoomChartView,
+  panChartView,
+  sameChartView,
+} from "./chart-gestures.js";
+import {
   chartGeometry,
   renderAnalysisPlot,
   renderDrawings,
   chartNumber,
-  indicatorLabels,
   toolLabels,
-  palette,
 } from "./analysis-render.js";
 
 const drafts = new Map();
@@ -34,17 +43,6 @@ const versionOf = (value) =>
         )
       : item,
   );
-const symbols = {
-  inspect: '<path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="4"/>',
-  trend:
-    '<path d="m4 18 16-12"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="6" r="2"/>',
-  horizontal: '<path d="M3 12h18"/><circle cx="8" cy="12" r="2"/>',
-  fib: '<path d="M3 4h18M3 10h18M3 15h18M3 20h18M5 4v16"/>',
-  measure: '<path d="M4 5v15h16M8 16 20 4M15 4h5v5M8 11v5h5"/>',
-  note: '<path d="M4 4h16v12H9l-5 4V4ZM8 8h8M8 12h5"/>',
-};
-const toolIcon = (id) =>
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${symbols[id]}</svg>`;
 const localDate = (time) => {
   const d = new Date(time * 1000);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
@@ -86,6 +84,8 @@ export function mountAnalysisChart(
     busy = false,
     saving = false,
     managing = false,
+    toolsOpen = false,
+    gestureBefore = null,
     baseRevision = memo?.revision ?? 0,
     conflict = false,
     data = null,
@@ -163,6 +163,7 @@ export function mountAnalysisChart(
     if (undo.length > 30) undo.shift();
     redo = [];
   }
+  const drawerId = "ta-tools-" + crypto.randomUUID();
   root.classList.add("analysis-chart");
   root.innerHTML = `<div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-heading"><div class="ta-readout"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
     historyRanges,
@@ -173,25 +174,7 @@ export function mountAnalysisChart(
     )
     .join(
       "",
-    )}</div></div><div class="ta-toolbar"><div class="ta-tools" role="toolbar" aria-label="Drawing tools">${Object.keys(
-    toolLabels,
-  )
-    .map(
-      (id) =>
-        `<button type="button" data-ta-tool="${id}" title="${toolLabels[id]}" aria-label="${toolLabels[id]}" aria-pressed="${id === tool}">${toolIcon(id)}</button>`,
-    )
-    .join(
-      "",
-    )}<span class="ta-tool-divider"></span><button type="button" data-ta-undo aria-label="Undo chart change" title="Undo" disabled>↶</button><button type="button" data-ta-redo aria-label="Redo chart change" title="Redo" disabled>↷</button></div><div class="ta-display"><button data-ta-currency>${state.currency}</button><button data-ta-type aria-label="Toggle candles">Line</button><button data-ta-scale aria-pressed="${state.scale === "log"}">Log</button><details class="ta-indicator-menu"><summary>Indicators ${icon("plus")}</summary><div>${Object.entries(
-    indicatorLabels,
-  )
-    .map(
-      ([id, label]) =>
-        `<label><input type="checkbox" data-ta-indicator="${id}" ${state.indicators.includes(id) ? "checked" : ""}><span style="--indicator:${palette[id] || "#a9c4aa"}">${label}</span></label>`,
-    )
-    .join(
-      "",
-    )}</div></details><button class="secondary" data-ta-save disabled>Save</button></div></div><div class="ta-active-row"><span data-ta-guide>Inspect</span><div data-ta-selected></div><div class="ta-zoom"><button data-ta-pan="-1" aria-label="Pan chart left">‹</button><button data-ta-zoom="0.65" aria-label="Zoom in">+</button><button data-ta-zoom="1.5" aria-label="Zoom out">−</button><button data-ta-fit aria-label="Fit all observations">Fit</button><button data-ta-pan="1" aria-label="Pan chart right">›</button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="Explore ${esc(asset.symbol)}. Arrow keys inspect; Enter places a drawing anchor." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div>`;
+    )}</div></div>${chartControlsMarkup(state, drawerId)}<div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div>`;
   const plot = root.querySelector(".ta-plot");
   const aiRail = document.createElement("div");
   aiRail.className = "ta-ai-rail";
@@ -271,8 +254,43 @@ export function mountAnalysisChart(
       state.drawings.length + " / " + MAX_CHART_DRAWINGS + " drawings";
     const selectedDrawing = state.drawings.find((d) => d.id === selected);
     root.querySelector("[data-ta-selected]").innerHTML = selectedDrawing
-      ? `<span>${toolLabels[selectedDrawing.type]}</span><button data-ta-edit>Edit</button><button data-ta-delete aria-label="Delete selected drawing">${icon("close")}</button>`
+      ? `<span>${esc(selectedDrawing.text || toolLabels[selectedDrawing.type])}</span><button data-ta-edit>Edit</button><button data-ta-delete aria-label="Delete selected drawing">${chartControlIcon("trash")}<span>Delete</span></button>`
       : "";
+    root.querySelector(".ta-active-row").hidden =
+      tool === "inspect" && !selectedDrawing;
+    root
+      .querySelector("[data-ta-tools-toggle]")
+      .setAttribute("aria-expanded", String(toolsOpen));
+    root.querySelector(".ta-tool-drawer").hidden = !toolsOpen;
+    root.querySelector("[data-ta-library-count]").textContent = String(
+      state.drawings.length,
+    );
+    const drawingList = root.querySelector("[data-ta-drawings]");
+    const listHTML = drawingListMarkup(
+      state.drawings,
+      selected,
+      state.currency,
+      locked,
+    );
+    if (drawingList.innerHTML !== listHTML) {
+      const focused = drawingList.contains(document.activeElement)
+        ? {
+            id:
+              document.activeElement.dataset.taSelectDrawing ||
+              document.activeElement.dataset.taDeleteDrawing,
+            deleting: document.activeElement.hasAttribute(
+              "data-ta-delete-drawing",
+            ),
+          }
+        : null;
+      drawingList.innerHTML = listHTML;
+      if (focused?.id)
+        drawingList
+          .querySelector(
+            `[data-ta-${focused.deleting ? "delete" : "select"}-drawing="${CSS.escape(focused.id)}"]`,
+          )
+          ?.focus({ preventScroll: true });
+    }
     root
       .querySelectorAll("[data-ta-tool]")
       .forEach((b) =>
@@ -281,7 +299,7 @@ export function mountAnalysisChart(
     plot.classList.toggle("is-drawing", tool !== "inspect");
     root.querySelector("[data-ta-guide]").textContent =
       tool === "inspect"
-        ? "Inspect"
+        ? ""
         : toolLabels[tool] +
           (pendingAnchor ? " · End point" : " · Start point");
     root
@@ -312,6 +330,37 @@ export function mountAnalysisChart(
     }
     updateAIRail();
   }
+  const view = () =>
+    geometry && data ? { ...geometry, length: data.points.length } : null;
+  function applyViewport(next) {
+    state.viewport =
+      next.from === 0 && next.to === data.points.length - 1
+        ? null
+        : { from: data.points[next.from].time, to: data.points[next.to].time };
+  }
+  const gestures = mountChartGestures(plot, {
+    getView: view,
+    enabled: () => editable() && !!geometry && tool === "inspect" && !drag,
+    onStart: () => {
+      gestureBefore = clone(state);
+    },
+    onChange: (next) => {
+      applyViewport(next);
+      draw();
+    },
+    onEnd: ({ cancelled }) => {
+      if (!gestureBefore) return;
+      if (cancelled) state = gestureBefore;
+      else if (versionOf(state) !== versionOf(gestureBefore)) {
+        undo.push(gestureBefore);
+        if (undo.length > 30) undo.shift();
+        redo = [];
+      }
+      gestureBefore = null;
+      reconcileDirty();
+      draw();
+    },
+  });
   function message(value = "") {
     if (live()) root.querySelector(".ta-message").textContent = value;
   }
@@ -348,7 +397,9 @@ export function mountAnalysisChart(
       " · " +
       state.currency +
       " · " +
-      data.points.length +
+      (geometry.to - geometry.from + 1 < data.points.length
+        ? `${geometry.to - geometry.from + 1} / ${data.points.length}`
+        : data.points.length) +
       " bars";
     selectPoint(data.points.length - 1, false);
     if (reveal) revealChart(plot.querySelector(".ta-price-line"));
@@ -760,6 +811,9 @@ export function mountAnalysisChart(
     if (!point || point.y > geometry.B) return;
     const target = e.target.closest("[data-drawing]");
     if (tool === "inspect" && target) {
+      gestures.finish();
+      e.preventDefault();
+      plot.focus({ preventScroll: true });
       selected = target.dataset.drawing;
       if (e.target.hasAttribute("data-anchor")) {
         drag = {
@@ -774,15 +828,19 @@ export function mountAnalysisChart(
     }
     if (tool !== "inspect") {
       e.preventDefault();
+      plot.focus({ preventScroll: true });
       addAnchor(geometry.anchor(point.x, point.y));
     } else {
+      plot.focus({ preventScroll: true });
+      const hadSelection = selected !== null;
       selected = null;
-      updateChrome();
+      if (hadSelection) draw();
+      else updateChrome();
       selectPoint(geometry.at(point.x));
     }
   };
   plot.onpointermove = (e) => {
-    if (!editable() || !geometry) return;
+    if (!editable() || !geometry || gestures.isActive()) return;
     const p = locate(e);
     if (!p || p.y > geometry.B) return;
     if (drag) {
@@ -814,11 +872,13 @@ export function mountAnalysisChart(
   };
   function finishDrag() {
     if (!drag || !editable()) return;
-    undo.push(drag.before);
-    if (undo.length > 30) undo.shift();
-    redo = [];
+    if (versionOf(state) !== versionOf(drag.before)) {
+      undo.push(drag.before);
+      if (undo.length > 30) undo.shift();
+      redo = [];
+    }
     drag = null;
-    mark();
+    reconcileDirty();
     draw();
   }
   plot.onpointerup = finishDrag;
@@ -829,8 +889,9 @@ export function mountAnalysisChart(
       draw();
     }
   };
+  plot.onlostpointercapture = plot.onpointercancel;
   plot.onpointerleave = () => {
-    if (!drag && !pendingAnchor && data)
+    if (!drag && !gestures.isActive() && !pendingAnchor && data)
       selectPoint(data.points.length - 1, false);
   };
   plot.onkeydown = (e) => {
@@ -851,6 +912,7 @@ export function mountAnalysisChart(
         price: data.points[hoverIndex].price,
       });
     } else if (e.key === "Escape") {
+      gestures.cancel();
       if (drag) {
         state = drag.before;
         drag = null;
@@ -861,14 +923,22 @@ export function mountAnalysisChart(
       draw();
     } else if ((e.key === "Delete" || e.key === "Backspace") && selected) {
       e.preventDefault();
-      checkpoint();
-      state.drawings = state.drawings.filter((d) => d.id !== selected);
-      selected = null;
-      mark();
-      draw();
+      removeDrawing(selected);
+    } else if (["+", "=", "-", "0"].includes(e.key)) {
+      e.preventDefault();
+      gestures.finish();
+      if (e.key === "0") setViewport({ from: 0, to: data.points.length - 1 });
+      else zoom(e.key === "-" ? 1.5 : 0.65);
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      gestures.finish();
+      root
+        .querySelector(e.shiftKey ? "[data-ta-redo]" : "[data-ta-undo]")
+        .click();
     }
   };
   root.querySelector(".ta-name").oninput = (e) => {
+    gestures.finish();
     if (!editable()) {
       e.target.value = state.name;
       return;
@@ -878,6 +948,8 @@ export function mountAnalysisChart(
   };
   root.onchange = (e) => {
     if (e.target.dataset.taIndicator) {
+      const checked = e.target.checked;
+      gestures.finish();
       if (!editable()) {
         e.target.checked = state.indicators.includes(
           e.target.dataset.taIndicator,
@@ -886,34 +958,44 @@ export function mountAnalysisChart(
       }
       checkpoint();
       const id = e.target.dataset.taIndicator;
-      state.indicators = e.target.checked
+      state.indicators = checked
         ? [...state.indicators, id]
         : state.indicators.filter((x) => x !== id);
-      mark();
+      reconcileDirty();
       draw();
     }
   };
+  root.onkeydown = (e) => {
+    if (e.key !== "Escape" || !toolsOpen || plot.contains(e.target)) return;
+    e.preventDefault();
+    toolsOpen = false;
+    root.querySelectorAll(".ta-tool-drawer details[open]").forEach((detail) => {
+      detail.open = false;
+    });
+    updateChrome();
+    root.querySelector("[data-ta-tools-toggle]").focus({ preventScroll: true });
+  };
+  function setViewport(next) {
+    if (!geometry || !editable() || sameChartView(view(), next)) return;
+    checkpoint();
+    applyViewport(next);
+    reconcileDirty();
+    draw();
+  }
   function zoom(factor, pan = 0) {
     if (!geometry || !editable()) return;
-    const length = data.points.length,
-      count = Math.min(
-        length,
-        Math.max(12, Math.round((geometry.to - geometry.from + 1) * factor)),
-      ),
-      center =
-        (geometry.from + geometry.to) / 2 +
-        pan * (geometry.to - geometry.from) * 0.35;
-    let a = Math.max(
-        0,
-        Math.min(length - count, Math.round(center - count / 2)),
-      ),
-      b = a + count - 1;
+    setViewport(
+      pan
+        ? panChartView(view(), pan * (geometry.to - geometry.from) * 0.35)
+        : zoomChartView(view(), factor),
+    );
+  }
+  function removeDrawing(id) {
+    if (!editable() || !state.drawings.some((d) => d.id === id)) return;
     checkpoint();
-    state.viewport =
-      count >= length
-        ? null
-        : { from: data.points[a].time, to: data.points[b].time };
-    mark();
+    state.drawings = state.drawings.filter((d) => d.id !== id);
+    if (selected === id) selected = null;
+    reconcileDirty();
     draw();
   }
   function manage() {
@@ -1011,6 +1093,16 @@ export function mountAnalysisChart(
   root.onclick = async (e) => {
     const b = e.target.closest("button");
     if (!b || !root.contains(b)) return;
+    gestures.finish();
+    if (b.hasAttribute("data-ta-tools-toggle")) {
+      toolsOpen = !toolsOpen;
+      if (!toolsOpen && tool !== "inspect") {
+        tool = "inspect";
+        pendingAnchor = null;
+        draw();
+      } else updateChrome();
+      return;
+    }
     if (b.hasAttribute("data-ta-ai-scenario")) {
       onAISelect(b.dataset.taAiScenario || null);
       return;
@@ -1042,9 +1134,30 @@ export function mountAnalysisChart(
     if (!data || !editable()) return;
     if (b.dataset.taTool) {
       tool = b.dataset.taTool;
+      toolsOpen = false;
       pendingAnchor = null;
       selected = null;
       draw();
+      plot.focus({ preventScroll: true });
+      return;
+    }
+    if (b.hasAttribute("data-ta-select-drawing")) {
+      selected = b.dataset.taSelectDrawing;
+      tool = "inspect";
+      pendingAnchor = null;
+      draw();
+      return;
+    }
+    if (b.hasAttribute("data-ta-delete-drawing")) {
+      const index = state.drawings.findIndex(
+        (d) => d.id === b.dataset.taDeleteDrawing,
+      );
+      removeDrawing(b.dataset.taDeleteDrawing);
+      const next = root.querySelectorAll("[data-ta-select-drawing]");
+      (
+        next[Math.min(index, next.length - 1)] ||
+        root.querySelector(".ta-drawing-library summary")
+      ).focus({ preventScroll: true });
       return;
     }
     if (b.hasAttribute("data-ta-edit")) {
@@ -1052,11 +1165,8 @@ export function mountAnalysisChart(
       return;
     }
     if (b.hasAttribute("data-ta-delete")) {
-      checkpoint();
-      state.drawings = state.drawings.filter((d) => d.id !== selected);
-      selected = null;
-      mark();
-      draw();
+      removeDrawing(selected);
+      plot.focus({ preventScroll: true });
       return;
     }
     if (b.hasAttribute("data-ta-undo") && undo.length) {
@@ -1108,10 +1218,7 @@ export function mountAnalysisChart(
       return;
     }
     if (b.hasAttribute("data-ta-fit")) {
-      checkpoint();
-      state.viewport = null;
-      mark();
-      draw();
+      setViewport({ from: 0, to: data.points.length - 1 });
       return;
     }
     if (b.hasAttribute("data-ta-currency")) {
@@ -1213,7 +1320,9 @@ export function mountAnalysisChart(
     isDirty: () => dirty,
     canLeave: () => true,
     destroy() {
+      gestures.finish();
       remember();
+      gestures.destroy();
       disposed = true;
       if (instances.get(key) === instance) instances.delete(key);
       storageGeneration++;
@@ -1224,6 +1333,7 @@ export function mountAnalysisChart(
         root.analysisChartInstance = null;
         root.onclick = null;
         root.onchange = null;
+        root.onkeydown = null;
       }
     },
   };

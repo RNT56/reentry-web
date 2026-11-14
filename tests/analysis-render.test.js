@@ -3,8 +3,12 @@ import assert from "node:assert/strict";
 import {
   chartGeometry,
   renderAnalysisPlot,
+  renderDrawings,
 } from "../src/features/charts/analysis-render.js";
-import { technicalIndicators } from "../src/domain/technical-analysis.js";
+import {
+  fibonacciLevels,
+  technicalIndicators,
+} from "../src/domain/technical-analysis.js";
 const state = {
   chartType: "line",
   scale: "linear",
@@ -134,4 +138,103 @@ test("labels on analytical drawings are rendered as escaped selectable text", ()
   assert.match(html, /class="ta-drawing-label"/);
   assert.match(html, /Support &lt;img/);
   assert.ok(!html.includes("<img"));
+});
+
+test("every Fibonacci level and its label select the same complete drawing", () => {
+  const d = data([100, 120, 90]),
+    i = technicalIndicators(d.points),
+    g = chartGeometry(d, state, i, 390),
+    anchors = [
+      { time: 100, price: 100 },
+      { time: 300, price: 90 },
+    ],
+    html = renderDrawings([{ id: "fib-one", type: "fib", anchors }], g, null),
+    levels = fibonacciLevels(...anchors);
+  const targets = [...html.matchAll(/<path[^>]+class="ta-hit"[^>]*>/g)];
+  // Every horizontal retracement and the original diagonal are selectable.
+  assert.equal(targets.length, levels.length + 1);
+  assert.ok(
+    targets.every(
+      ([path]) =>
+        path.includes('data-drawing="fib-one"') &&
+        path.includes('vector-effect="non-scaling-stroke"'),
+    ),
+  );
+  assert.equal(
+    [...html.matchAll(/<text[^>]+data-drawing="fib-one"/g)].length,
+    levels.length,
+  );
+});
+
+test("selected tools and their touch handles render above overlaps without changing saved order", () => {
+  const d = data([100, 120, 90]),
+    i = technicalIndicators(d.points),
+    g = chartGeometry(d, state, i, 390),
+    anchors = [
+      { time: 100, price: 100 },
+      { time: 300, price: 90 },
+    ],
+    drawings = [
+      { id: "first", type: "trend", anchors },
+      { id: "second", type: "horizontal", anchors: anchors.slice(0, 1) },
+    ],
+    before = structuredClone(drawings),
+    html = renderDrawings(drawings, g, "first");
+  assert.ok(
+    html.indexOf('data-drawing="second"') <
+      html.indexOf('data-drawing="first"'),
+  );
+  assert.match(html, /class="ta-drawing is-selected" data-drawing="first"/);
+  assert.match(html, /stroke-width="2.2"/);
+  assert.equal([...html.matchAll(/class="ta-anchor-hit"/g)].length, 2);
+  for (const index of [0, 1])
+    assert.match(
+      html,
+      new RegExp(
+        `r="12"[^>]+pointer-events="all"[^>]+data-drawing="first" data-anchor="${index}"`,
+      ),
+    );
+  assert.equal(
+    [...html.matchAll(/class="ta-anchor" pointer-events="none"/g)].length,
+    2,
+  );
+  assert.deepEqual(drawings, before);
+  assert.ok(!renderDrawings(drawings, g, "first", true).includes("ta-anchor"));
+});
+
+test("measurement labels, note bodies and level labels are selectable while crosshairs never intercept input", () => {
+  const d = data([100, 120, 90]),
+    i = technicalIndicators(d.points),
+    s = {
+      ...state,
+      drawings: [
+        {
+          id: "measure",
+          type: "measure",
+          anchors: [
+            { time: 100, price: 100 },
+            { time: 300, price: 90 },
+          ],
+        },
+        {
+          id: "note",
+          type: "note",
+          anchors: [{ time: 200, price: 120 }],
+          text: "Watch",
+        },
+        {
+          id: "level",
+          type: "horizontal",
+          anchors: [{ time: 100, price: 100 }],
+        },
+      ],
+    },
+    html = renderAnalysisPlot(d, s, i, chartGeometry(d, s, i, 390)).html;
+  for (const id of ["measure", "note", "level"])
+    assert.match(html, new RegExp(`<text[^>]+data-drawing="${id}"`));
+  assert.match(
+    html,
+    /r="15" fill="transparent" pointer-events="all" data-drawing="note"/,
+  );
+  assert.match(html, /class="ta-crosshair" opacity="0" pointer-events="none"/);
 });
