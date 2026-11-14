@@ -128,6 +128,14 @@ export async function createApp(options = {}) {
     const response = await api(new URL(req.url, origin));
     return reply.code(response.status).send(await response.json());
   });
+  app.get(
+    "/api/history",
+    { preHandler: app.requireUser },
+    async (req, reply) => {
+      const response = await api(new URL(req.url, origin));
+      return reply.code(response.status).send(await response.json());
+    },
+  );
   app.get("/healthz", async () => {
     db.prepare("SELECT 1").get();
     return { ok: true, revision: process.env.REENTRY_REVISION || null };

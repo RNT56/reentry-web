@@ -150,6 +150,10 @@ test("accounts, isolation, concurrency, recovery and WebAuthn cryptographic flow
     b = client(app),
     anon = client(app);
   assert.equal((await anon.call("/api/portfolio")).status, 401);
+  assert.equal(
+    (await anon.call("/api/history?symbol=AAPL&range=1mo")).status,
+    401,
+  );
   assert.equal((await anon.call("/api/quote?symbol=AAPL")).status, 401);
   assert.equal((await anon.call("/api/search?q=apple")).status, 401);
   assert.equal(

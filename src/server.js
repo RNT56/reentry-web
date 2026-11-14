@@ -1,3 +1,4 @@
+import { historyPath, normalizeHistory } from "./history.js";
 import { featuredAssets, assetInfo } from "./assets.js";
 const cache = new Map();
 async function yahoo(path) {
@@ -80,6 +81,14 @@ export async function api(url) {
             ),
         };
       }
+    } else if (url.pathname === "/api/history") {
+      const symbol = url.searchParams.get("symbol") || "";
+      const range = url.searchParams.get("range") || "1mo";
+      data = normalizeHistory(
+        await yahoo(historyPath(symbol, range)),
+        symbol,
+        range,
+      );
     } else if (url.pathname === "/api/quote") {
       const symbol = url.searchParams.get("symbol") || "";
       if (!/^[a-zA-Z0-9.^=\-]{1,32}$/.test(symbol))
@@ -131,7 +140,7 @@ export async function api(url) {
             ? "Market data timed out. Enter a EUR price."
             : e.message,
       },
-      { status: 502 },
+      { status: e.statusCode || 502 },
     );
   }
 }
