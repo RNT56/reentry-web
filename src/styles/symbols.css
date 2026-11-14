@@ -1,0 +1,58 @@
+/* UI symbols are vectors, independent of system and emoji fonts. */
+.icon {
+  display: inline-block;
+  overflow: visible;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.asset-select-arrow .icon,
+.history-currency-switch .icon,
+.dock-target > span > .icon {
+  width: 13px;
+  height: 13px;
+}
+.history-currency-switch,
+.dock-target > span,
+.drop-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.drop-badge > .icon {
+  width: 12px;
+  height: 12px;
+}
+.provider-glyph > .icon {
+  width: 21px;
+  height: 21px;
+}
+.large-icon > .icon {
+  width: 35px;
+  height: 35px;
+}
+.ta-history-tools .icon {
+  width: 17px;
+  height: 17px;
+}
+.journal-masthead > a:last-child,
+.journal-reading-rail a,
+.journal-passage-link > span,
+.journal-return b,
+.journal-footer a,
+.journal-evidence b {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.journal-masthead > a:last-child > .icon,
+.journal-reading-rail .icon,
+.journal-passage-link .icon,
+.journal-footer .icon,
+.journal-evidence .icon {
+  width: 14px;
+  height: 14px;
+}
+.journal-entry-arrow > .icon {
+  width: 25px;
+  height: 25px;
+}

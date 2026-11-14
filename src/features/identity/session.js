@@ -6,15 +6,17 @@ import {
 } from "@simplewebauthn/browser";
 import { esc } from "../../shared/format.js";
 import { request } from "../../shared/http.js";
+import { icon } from "../../shared/ui.js";
 const mark = brandMark();
 export function showAuth(onAuthenticated, registration = true, mode = "login") {
   const app = document.querySelector("#app");
-  app.innerHTML = `<main class="auth-shell"><div class="auth-brand">${mark}reentry</div><section class="auth-card"><h1>${mode === "register" ? "Create account." : mode === "recover" ? "Recover account." : "Welcome back."}</h1>${mode === "login" ? `<button class="secondary passkey-login" id="passkey-login" ${!browserSupportsWebAuthn() ? "disabled" : ""}>◉ Continue with passkey</button><div class="auth-or">or use your password</div>` : ""}<form id="auth-form"><div class="field"><label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" placeholder="Your username" required></div>${mode === "recover" ? '<div class="field"><label for="recovery-key">Recovery key</label><input id="recovery-key" name="recoveryKey" autocomplete="off" required></div>' : ""}<div class="field"><label for="password">${mode === "recover" ? "New password" : "Password"}</label><div class="password-field"><input id="password" name="password" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" minlength="${mode === "login" ? 1 : 12}" maxlength="128" placeholder="${mode === "login" ? "Your password" : "At least 12 characters"}" required><button type="button" id="show-password" aria-label="Show password">Show</button></div></div><p class="error" id="auth-error" role="alert"></p><button class="primary auth-submit" type="submit">${mode === "register" ? "Create account" : mode === "recover" ? "Recover account" : "Sign in"} <span>↗</span></button></form><div class="auth-links">${mode === "login" ? `${registration ? '<button class="link" id="to-register">Create an account</button>' : ""}<button class="link" id="to-recover">Lost access?</button>` : '<button class="link" id="to-login">Back to sign in</button>'}</div></section><p class="auth-footer"><a href="/journal">Read RNT’s journal ↗</a></p></main>`;
+  app.innerHTML = `<main class="auth-shell"><div class="auth-brand">${mark}reentry</div><section class="auth-card"><h1>${mode === "register" ? "Create account." : mode === "recover" ? "Recover account." : "Welcome back."}</h1>${mode === "login" ? `<button class="secondary passkey-login" id="passkey-login" ${!browserSupportsWebAuthn() ? "disabled" : ""}>${icon("passkey")}<span>Continue with passkey</span></button><div class="auth-or">or use your password</div>` : ""}<form id="auth-form"><div class="field"><label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" placeholder="Your username" required></div>${mode === "recover" ? '<div class="field"><label for="recovery-key">Recovery key</label><input id="recovery-key" name="recoveryKey" autocomplete="off" required></div>' : ""}<div class="field"><label for="password">${mode === "recover" ? "New password" : "Password"}</label><div class="password-field"><input id="password" name="password" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" minlength="${mode === "login" ? 1 : 12}" maxlength="128" placeholder="${mode === "login" ? "Your password" : "At least 12 characters"}" required><button type="button" id="show-password" aria-label="Show password" aria-pressed="false">${icon("eye")}</button></div></div><p class="error" id="auth-error" role="alert"></p><button class="primary auth-submit" type="submit">${mode === "register" ? "Create account" : mode === "recover" ? "Recover account" : "Sign in"} ${icon("arrow")}</button></form><div class="auth-links">${mode === "login" ? `${registration ? '<button class="link" id="to-register">Create an account</button>' : ""}<button class="link" id="to-recover">Lost access?</button>` : '<button class="link" id="to-login">Back to sign in</button>'}</div></section><p class="auth-footer"><a href="/journal">Read RNT’s journal ${icon("arrow")}</a></p></main>`;
   const $ = (s) => document.querySelector(s);
   $("#show-password").onclick = () => {
     const visible = $("#password").type === "password";
     $("#password").type = visible ? "text" : "password";
-    $("#show-password").textContent = visible ? "Hide" : "Show";
+    $("#show-password").innerHTML = icon(visible ? "eyeOff" : "eye");
+    $("#show-password").setAttribute("aria-pressed", String(visible));
     $("#show-password").setAttribute(
       "aria-label",
       visible ? "Hide password" : "Show password",
@@ -71,7 +73,7 @@ function passkeyMessage(e) {
 }
 function showRecovery(key, done) {
   document.querySelector("#app").innerHTML =
-    `<main class="auth-shell"><div class="auth-brand">${mark}reentry</div><section class="auth-card recovery-card"><span class="eyebrow">KEEP THIS SAFE</span><h1>Your way back in.</h1><p class="sub">Recovery key · shown once</p><code class="recovery-key">${esc(key)}</code><button class="secondary" id="download-key">↓ Download recovery key</button><label class="check-row"><input type="checkbox" id="key-saved"> I’ve saved my recovery key</label><button class="primary auth-submit" id="continue-key" disabled>Continue ↗</button></section></main>`;
+    `<main class="auth-shell"><div class="auth-brand">${mark}reentry</div><section class="auth-card recovery-card"><span class="eyebrow">KEEP THIS SAFE</span><h1>Your way back in.</h1><p class="sub">Recovery key · shown once</p><code class="recovery-key">${esc(key)}</code><button class="secondary" id="download-key">${icon("download")} Download recovery key</button><label class="check-row"><input type="checkbox" id="key-saved"> I’ve saved my recovery key</label><button class="primary auth-submit" id="continue-key" disabled>Continue ${icon("arrow")}</button></section></main>`;
   document.querySelector("#download-key").onclick = () =>
     download(
       "reentry-recovery-key.txt",
@@ -90,7 +92,7 @@ export function download(name, content) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function accountCard(user) {
-  return `<section class="panel settings-card account-card"><div class="account-heading"><span class="account-avatar">${esc(user.username[0].toUpperCase())}</span><div><h2>${esc(user.username)}</h2></div></div><div class="account-actions"><button class="secondary" id="passkeys">◉ Passkeys <span>↗</span></button><button class="secondary" id="change-password">Change password <span>↗</span></button><button class="secondary" id="sign-out">Sign out <span>↗</span></button><button class="link" id="sign-out-all">Sign out all devices</button></div></section>`;
+  return `<section class="panel settings-card account-card"><div class="account-heading"><span class="account-avatar">${esc(user.username[0].toUpperCase())}</span><div><h2>${esc(user.username)}</h2></div></div><div class="account-actions"><button class="secondary" id="passkeys"><span class="account-action-label">${icon("passkey")} Passkeys</span>${icon("arrow")}</button><button class="secondary" id="change-password"><span class="account-action-label">${icon("lock")} Change password</span>${icon("arrow")}</button><button class="secondary" id="sign-out">Sign out ${icon("logout")}</button><button class="link" id="sign-out-all">Sign out all devices</button></div></section>`;
 }
 export function bindAccount({ modal, close, toast, onLogout }) {
   document.querySelector("#sign-out").onclick = () => onLogout(false);
@@ -129,7 +131,7 @@ export async function openPasskeys({ modal, close, toast }) {
     return;
   }
   modal(
-    `<h2>Your passkeys</h2><div class="passkey-list">${data.passkeys.map((k) => `<div class="row lot-row"><div><b>${esc(k.name)}</b><span class="small">Added ${new Date(k.created_at).toLocaleDateString()}</span></div><button class="link" data-key-remove="${esc(k.id)}">Remove</button></div>`).join("") || '<p class="note">No passkeys</p>'}</div><div class="field"><label>Passkey name</label><input id="passkey-name" maxlength="60" value="My device"></div><div id="passkey-error" class="error" role="alert"></div><div class="actions"><button class="primary" id="add-passkey" ${!browserSupportsWebAuthn() ? "disabled" : ""}>Add passkey ↗</button></div>`,
+    `<h2>Your passkeys</h2><div class="passkey-list">${data.passkeys.map((k) => `<div class="row lot-row"><div><b>${esc(k.name)}</b><span class="small">Added ${new Date(k.created_at).toLocaleDateString()}</span></div><button class="link" data-key-remove="${esc(k.id)}">Remove</button></div>`).join("") || '<p class="note">No passkeys</p>'}</div><div class="field"><label>Passkey name</label><input id="passkey-name" maxlength="60" value="My device"></div><div id="passkey-error" class="error" role="alert"></div><div class="actions"><button class="primary" id="add-passkey" ${!browserSupportsWebAuthn() ? "disabled" : ""}>${icon("passkey")} Add passkey ${icon("arrow")}</button></div>`,
   );
   const reverify = (retry) => {
     close();

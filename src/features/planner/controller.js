@@ -130,7 +130,7 @@ export function createPlanner(model, services) {
       const firstResult = !results.querySelector(".target-price");
       if (firstResult) {
         destroyFullscreen();
-        results.innerHTML = `<div class="result-top"><div class="step-label"><span>02</span> Your reentry</div></div><div class="target-choice"><label>Share increase</label><div class="switch">${[0, 5, 10].map((n) => `<button data-gain="${n}" class="${model.percent === n ? "on" : ""}" aria-pressed="${model.percent === n}">${n === 0 ? "Same" : `+${n}%`}</button>`).join("")}<button id="custom" class="${![0, 5, 10].includes(model.percent) ? "on" : ""}">${![0, 5, 10].includes(model.percent) ? "+" + model.percent + "%" : "Custom"}</button></div></div><div class="ceiling"><div class="eyebrow">BUY BACK AT OR BELOW</div><div class="target-price" data-number>${money(t.price)}</div><div class="target-meta"><span>${icon("layers")}<b data-target-qty>${number(t.qty)}</b> shares</span><span class="drop-badge">↓ ${t.drop.toFixed(2)}%</span></div></div>${chart(r)}<div class="settlement"><div><span>Tax estimate</span><b data-target-tax>${money(r.tax)}</b></div><div><span>Available to reinvest</span><b data-target-cash>${money(r.cash)}</b></div></div><button class="primary record-button" id="record"><span>Record sale</span>${icon("arrow")}</button><div class="result-note">${money(r.buyFee)} buyback fee included · ${model.state.settings.whole ? "Whole shares" : "Fractional shares"}</div><div class="mobile-target-dock"><button class="dock-target" id="dock-target"><span>Target +${model.percent}% ↗</span><b>${money(t.price)}</b><small>${number(t.qty)} shares</small></button><button class="primary" id="dock-record">Record sale ${icon("arrow")}</button></div>`;
+        results.innerHTML = `<div class="result-top"><div class="step-label"><span>02</span> Your reentry</div></div><div class="target-choice"><label>Share increase</label><div class="switch">${[0, 5, 10].map((n) => `<button data-gain="${n}" class="${model.percent === n ? "on" : ""}" aria-pressed="${model.percent === n}">${n === 0 ? "Same" : `+${n}%`}</button>`).join("")}<button id="custom" class="${![0, 5, 10].includes(model.percent) ? "on" : ""}">${![0, 5, 10].includes(model.percent) ? "+" + model.percent + "%" : "Custom"}</button></div></div><div class="ceiling"><div class="eyebrow">BUY BACK AT OR BELOW</div><div class="target-price" data-number>${money(t.price)}</div><div class="target-meta"><span>${icon("layers")}<b data-target-qty>${number(t.qty)}</b> shares</span><span class="drop-badge">${icon("arrowDown")}<span class="sr-only">Price drop </span><span data-target-drop>${t.drop.toFixed(2)}%</span></span></div></div>${chart(r)}<div class="settlement"><div><span>Tax estimate</span><b data-target-tax>${money(r.tax)}</b></div><div><span>Available to reinvest</span><b data-target-cash>${money(r.cash)}</b></div></div><button class="primary record-button" id="record"><span>Record sale</span>${icon("arrow")}</button><div class="result-note">${money(r.buyFee)} buyback fee included · ${model.state.settings.whole ? "Whole shares" : "Fractional shares"}</div><div class="mobile-target-dock"><button class="dock-target" id="dock-target"><span><span data-target-label>Target +${model.percent}%</span>${icon("arrow")}</span><b>${money(t.price)}</b><small>${number(t.qty)} shares</small></button><button class="primary" id="dock-record">Record sale ${icon("arrow")}</button></div>`;
       }
       setAnimatedText(results.querySelector(".target-price"), money(t.price));
       setAnimatedText(
@@ -138,8 +138,8 @@ export function createPlanner(model, services) {
         number(t.qty),
       );
       setAnimatedText(
-        results.querySelector(".drop-badge"),
-        "↓ " + t.drop.toFixed(2) + "%",
+        results.querySelector("[data-target-drop]"),
+        t.drop.toFixed(2) + "%",
       );
       setAnimatedText(results.querySelector("[data-target-tax]"), money(r.tax));
       setAnimatedText(
@@ -152,8 +152,8 @@ export function createPlanner(model, services) {
         { animate: false },
       );
       setAnimatedText(
-        results.querySelector(".dock-target > span"),
-        `Target +${model.percent}% ↗`,
+        results.querySelector("[data-target-label]"),
+        `Target +${model.percent}%`,
         { animate: false },
       );
       setAnimatedText(results.querySelector(".dock-target b"), money(t.price));

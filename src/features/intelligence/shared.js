@@ -1,6 +1,6 @@
 import { loadingSurface } from "../../shared/motion.js";
 import { esc } from "../../shared/format.js";
-import { toast } from "../../shared/ui.js";
+import { icon, toast } from "../../shared/ui.js";
 export const usd = (n) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -61,7 +61,7 @@ export function sourceLinks(ids, sources) {
     .filter(Boolean)
     .map((s) =>
       s.url
-        ? `<a class="source-cite" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.title)}">${esc(s.connector || s.kind)} ↗</a>`
+        ? `<a class="source-cite" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.title)}">${esc(s.connector || s.kind)} ${icon("arrow")}</a>`
         : `<span class="source-cite">${esc(s.title)}</span>`,
     )
     .join(" ");
@@ -76,7 +76,7 @@ export function scenarioCards(
   return `<div class="scenario-root"><span class="root-dot"></span><span>${esc(set.symbol)}</span><b>${esc(set.title)}</b></div><div class="scenario-branches ${set.branches.length > 3 ? "many-branches" : ""}" style="--branches:${Math.min(3, set.branches.length)}">${set.branches
     .map(
       (b, i) =>
-        `<article class="scenario-node ${["upside", "base", "downside"][i % 3]} ${b.eventKey === selectedKey ? "is-focused" : ""}" data-scenario-key="${esc(b.eventKey)}"><span class="node-status state-${esc(b.status.status)}"><i></i>${esc(labels[b.status.status])}${b.status.invalidatedAfterOutcome ? " · later invalidated" : ""}</span><h3>${esc(b.title)}</h3><div class="node-range">${b.low.toLocaleString()}<span>–</span>${b.high.toLocaleString()}<small>${esc(b.currency)}</small></div><p>${esc(b.condition)}</p><span class="node-footer">${b.horizonDays} days · conditional</span>${interactive && chartJob ? `<div class="scenario-actions"><button class="link" data-ai-chart="${esc(chartJob)}" data-ai-symbol="${esc(set.symbol)}" data-event-key="${esc(b.eventKey)}">View on chart ↗</button><span class="chart-condition-tag">Daily close</span></div>` : interactive ? `<div class="scenario-actions"><button class="link" data-verify="${esc(set.id)}" data-key="${esc(b.eventKey)}">Verify event ↗</button><button class="link muted" data-verify="${esc(set.id)}" data-key="${esc(b.eventKey)}-invalidated">Invalidate</button></div>` : ""}<details><summary>${chartJob ? "Levels & evidence" : "Passage & evidence"}</summary>${b.passage ? `<blockquote>${esc(b.passage)}</blockquote>` : ""}<p class="small">Invalidation: ${esc(b.invalidation || "Not specified")}</p>${chartJob && b.invalidationRationale ? `<p class="small">${esc(b.invalidationRationale)}</p>` : ""}${
+        `<article class="scenario-node ${["upside", "base", "downside"][i % 3]} ${b.eventKey === selectedKey ? "is-focused" : ""}" data-scenario-key="${esc(b.eventKey)}"><span class="node-status state-${esc(b.status.status)}"><i></i>${esc(labels[b.status.status])}${b.status.invalidatedAfterOutcome ? " · later invalidated" : ""}</span><h3>${esc(b.title)}</h3><div class="node-range">${b.low.toLocaleString()}<span>–</span>${b.high.toLocaleString()}<small>${esc(b.currency)}</small></div><p>${esc(b.condition)}</p><span class="node-footer">${b.horizonDays} days · conditional</span>${interactive && chartJob ? `<div class="scenario-actions"><button class="link" data-ai-chart="${esc(chartJob)}" data-ai-symbol="${esc(set.symbol)}" data-event-key="${esc(b.eventKey)}">View on chart ${icon("arrow")}</button><span class="chart-condition-tag">Daily close</span></div>` : interactive ? `<div class="scenario-actions"><button class="link" data-verify="${esc(set.id)}" data-key="${esc(b.eventKey)}">Verify event ${icon("arrow")}</button><button class="link muted" data-verify="${esc(set.id)}" data-key="${esc(b.eventKey)}-invalidated">Invalidate</button></div>` : ""}<details><summary>${chartJob ? "Levels & evidence" : "Passage & evidence"}</summary>${b.passage ? `<blockquote>${esc(b.passage)}</blockquote>` : ""}<p class="small">Invalidation: ${esc(b.invalidation || "Not specified")}</p>${chartJob && b.invalidationRationale ? `<p class="small">${esc(b.invalidationRationale)}</p>` : ""}${
           set.observations
             .filter((o) => b.status.evidence.includes(o.id))
             .map(

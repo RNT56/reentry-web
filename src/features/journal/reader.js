@@ -1,5 +1,6 @@
 import { installSurfaceMotion } from "../../shared/surface-motion.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
+import { icon } from "../../shared/icons.js";
 
 installSurfaceMotion();
 
@@ -109,9 +110,9 @@ document
         await navigator.clipboard.writeText(location.href);
         document.querySelector("#journal-announcement").textContent =
           "Link copied";
-        button.textContent = "Copied ✓";
+        button.innerHTML = `Copied ${icon("check")}`;
         setTimeout(() => {
-          button.textContent = "Share ↗";
+          button.innerHTML = `Share ${icon("arrow")}`;
         }, 2200);
       }
     } catch (error) {

@@ -23,7 +23,7 @@ const symbols = {
   plus: '<path d="M5 12h14M12 5v14"/>',
 };
 export const chartControlIcon = (id) =>
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${symbols[id]}</svg>`;
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${symbols[id]}</svg>`;
 
 export function chartControlsMarkup(state, drawerId) {
   return `<div class="ta-toolbar">
@@ -49,7 +49,7 @@ export function chartControlsMarkup(state, drawerId) {
         )
         .join("")}</div>
       <div class="ta-drawer-options">
-        <div class="ta-history-tools" role="group" aria-label="Chart edit history"><button type="button" data-ta-undo aria-label="Undo chart change" title="Undo" disabled>↶</button><button type="button" data-ta-redo aria-label="Redo chart change" title="Redo" disabled>↷</button></div>
+        <div class="ta-history-tools" role="group" aria-label="Chart edit history"><button type="button" data-ta-undo aria-label="Undo chart change" title="Undo" disabled>${icon("undo")}</button><button type="button" data-ta-redo aria-label="Redo chart change" title="Redo" disabled>${icon("redo")}</button></div>
         <div class="ta-display"><button type="button" data-ta-type aria-label="Toggle candles">Line</button><button type="button" data-ta-scale aria-pressed="${state.scale === "log"}">Log</button><details class="ta-indicator-menu"><summary>Indicators ${icon("plus")}</summary><div>${Object.entries(
           indicatorLabels,
         )

@@ -3,6 +3,7 @@ import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { esc } from "../../shared/format.js";
 import { mountReorder, reorderHandle } from "../../shared/reorder.js";
 import {
+  icon,
   modal,
   close,
   toast,
@@ -697,7 +698,7 @@ export function mountIntelligence(root, { model, navigate }) {
               "",
             )}</div><details><summary>Inspect sentiment evidence</summary>${r.sentiment.map((s) => `<p class="small"><b>${esc(s.label)}</b> · ${esc(s.rationale)} ${sourceLinks([s.sourceId], job.sources)}</p>`).join("")}</details></div>`
         : ""
-    }<div class="claim-grid">${r.claims.map((c) => `<article class="claim"><span class="eyebrow">${c.kind === "fact" ? "REPORTED" : "INFERENCE"}</span><p>${esc(c.text)}</p>${sourceLinks(c.sourceIds, job.sources)}</article>`).join("")}</div>${r.eventMatches?.length ? `<div class="event-suggestions"><span class="eyebrow">POSSIBLE CONDITION MATCHES / REVIEW REQUIRED</span>${r.eventMatches.map((m, i) => `<div><p>${esc(m.rationale)}</p>${sourceLinks(m.sourceIds, job.sources)} <button class="secondary small-button" data-match="${i}">Review event ↗</button></div>`).join("")}</div>` : ""}${job.kind === "map-article" && info.author ? `<div class="inline-notice">${r.scenarios.length} branches mapped to article passages.<button class="primary small-button" data-apply-map>Review in studio ↗</button></div>` : r.scenarios.length ? `<button class="secondary" data-tab="scenarios">View ${r.scenarios.length} scenario branches ↗</button>` : ""}<details class="brief-limitations"><summary>Sources · ${job.sources.length}</summary>${job.coverage.map((c) => `<p class="small">${esc(c.label)} · ${esc(c.status)} · ${c.count} sources</p>`).join("")}</details></section>`;
+    }<div class="claim-grid">${r.claims.map((c) => `<article class="claim"><span class="eyebrow">${c.kind === "fact" ? "REPORTED" : "INFERENCE"}</span><p>${esc(c.text)}</p>${sourceLinks(c.sourceIds, job.sources)}</article>`).join("")}</div>${r.eventMatches?.length ? `<div class="event-suggestions"><span class="eyebrow">POSSIBLE CONDITION MATCHES / REVIEW REQUIRED</span>${r.eventMatches.map((m, i) => `<div><p>${esc(m.rationale)}</p>${sourceLinks(m.sourceIds, job.sources)} <button class="secondary small-button" data-match="${i}">Review event ${icon("arrow")}</button></div>`).join("")}</div>` : ""}${job.kind === "map-article" && info.author ? `<div class="inline-notice">${r.scenarios.length} branches mapped to article passages.<button class="primary small-button" data-apply-map>Review in studio ${icon("arrow")}</button></div>` : r.scenarios.length ? `<button class="secondary" data-tab="scenarios">View ${r.scenarios.length} scenario branches ${icon("arrow")}</button>` : ""}<details class="brief-limitations"><summary>Sources · ${job.sources.length}</summary>${job.coverage.map((c) => `<p class="small">${esc(c.label)} · ${esc(c.status)} · ${c.count} sources</p>`).join("")}</details></section>`;
   }
   function metricsPanel() {
     const source = sources.find((s) => s.kind === "fundamentals");
@@ -732,7 +733,7 @@ export function mountIntelligence(root, { model, navigate }) {
       return empty(
         "Select an asset",
         "",
-        '<button class="primary" data-focus-search>Find an asset ↗</button>',
+        `<button class="primary" data-focus-search>Find an asset ${icon("arrow")}</button>`,
       );
     const a = active(),
       pending = jobs.find(
@@ -750,12 +751,12 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</select></label><button class="primary" data-run ${pending ? "disabled" : ""}>${pending ? (pending.status === "running" ? "✦ Researching…" : "Queued…") : "✦ Run research"}</button></div></section>${a.automatic ? `<div class="automation-note small">${info.preferences.enabled ? "Next automatic brief: " + esc(when(a.next_run)) : "Automation paused · enable AI in settings"}</div>` : ""}${pending ? `<div class="job-progress" role="status"><i></i><span>${pending.status === "running" ? "Researching…" : "Queued"}</span>${pending.status === "queued" ? `<button class="link" data-cancel-job="${esc(pending.id)}">Cancel</button>` : ""}</div>` : ""}<section id="source-monitor"></section><div data-research-metrics>${metricsPanel()}</div><div class="research-main ${job ? "has-brief" : ""}">${resultPanel()}${sourcePanel()}</div><details class="run-history"><summary>Research history · ${jobs.filter((j) => j.symbol === a.symbol).length}</summary>${jobs
+      )}</select></label><button class="primary" data-run ${pending ? "disabled" : ""}>${icon("sparkles")}${pending ? (pending.status === "running" ? "Researching…" : "Queued…") : "Run research"}</button></div></section>${a.automatic ? `<div class="automation-note small">${info.preferences.enabled ? "Next automatic brief: " + esc(when(a.next_run)) : "Automation paused · enable AI in settings"}</div>` : ""}${pending ? `<div class="job-progress" role="status"><i></i><span>${pending.status === "running" ? "Researching…" : "Queued"}</span>${pending.status === "queued" ? `<button class="link" data-cancel-job="${esc(pending.id)}">Cancel</button>` : ""}</div>` : ""}<section id="source-monitor"></section><div data-research-metrics>${metricsPanel()}</div><div class="research-main ${job ? "has-brief" : ""}">${resultPanel()}${sourcePanel()}</div><details class="run-history"><summary>Research history · ${jobs.filter((j) => j.symbol === a.symbol).length}</summary>${jobs
       .filter((j) => j.symbol === a.symbol)
       .slice(0, 20)
       .map(
         (j) =>
-          `<button class="run-row" data-job="${esc(j.id)}"><span>${esc(j.kind)}<small>${esc(when(j.created_at))}</small></span><span>${esc(j.status)} ↗</span></button>`,
+          `<button class="run-row" data-job="${esc(j.id)}"><span>${esc(j.kind)}<small>${esc(when(j.created_at))}</small></span><span>${esc(j.status)} ${icon("arrow")}</span></button>`,
       )
       .join("")}</details>`;
   }
@@ -767,7 +768,7 @@ export function mountIntelligence(root, { model, navigate }) {
       ? `<div class="section-line"><div><span class="eyebrow"></span><h2>Scenarios</h2></div></div>${visible
           .map(
             (s) =>
-              `<section class="panel live-scenario ${s.id === memory.focusSetId ? "is-focused" : ""}" data-scenario-set="${esc(s.id)}"><div class="scenario-set-meta"><span class="privacy-chip">${s.provenance?.kind === "published-article" ? "RNT · published edition " + s.provenance.revision : s.provenance?.kind === "public-fork" ? "Private copy of RNT · edition " + s.provenance.revision : s.provenance?.kind === "private-revision" ? "Private · your revision" : s.provenance?.kind === "ai-chart" ? "AI chart · daily closes" : s.provenance?.kind === "ai-research" ? "Private · AI proposal" : "Private · your scenario"}</span><div class="scenario-set-tools">${s.provenance?.kind !== "published-article" ? `<button class="link" data-revise-set="${esc(s.id)}">Revise privately ↗</button>` : ""}<button class="link" data-check-set="${esc(s.id)}">Refresh price ↻</button></div></div>${scenarioCards(s, true, { selectedKey: s.id === memory.focusSetId ? memory.aiEventKey : null })}<div class="scenario-foot"><span>Created ${esc(when(s.createdAt))}</span><span>${s.counts.prices} price samples · ${s.counts.events} verified events</span></div>${
+              `<section class="panel live-scenario ${s.id === memory.focusSetId ? "is-focused" : ""}" data-scenario-set="${esc(s.id)}"><div class="scenario-set-meta"><span class="privacy-chip">${s.provenance?.kind === "published-article" ? "RNT · published edition " + s.provenance.revision : s.provenance?.kind === "public-fork" ? "Private copy of RNT · edition " + s.provenance.revision : s.provenance?.kind === "private-revision" ? "Private · your revision" : s.provenance?.kind === "ai-chart" ? "AI chart · daily closes" : s.provenance?.kind === "ai-research" ? "Private · AI proposal" : "Private · your scenario"}</span><div class="scenario-set-tools">${s.provenance?.kind !== "published-article" ? `<button class="link" data-revise-set="${esc(s.id)}">Revise privately ${icon("arrow")}</button>` : ""}<button class="link" data-check-set="${esc(s.id)}">Refresh price ${icon("refresh")}</button></div></div>${scenarioCards(s, true, { selectedKey: s.id === memory.focusSetId ? memory.aiEventKey : null })}<div class="scenario-foot"><span>Created ${esc(when(s.createdAt))}</span><span>${s.counts.prices} price samples · ${s.counts.events} verified events</span></div>${
                 s.observations.some((o) => o.kind === "event" && o.verified)
                   ? `<details><summary>Verified events</summary>${s.observations
                       .filter((o) => o.kind === "event" && o.verified)
@@ -783,7 +784,7 @@ export function mountIntelligence(root, { model, navigate }) {
       : empty(
           "No scenarios",
           "",
-          '<button class="secondary" data-tab="journal">Explore the journal ↗</button>',
+          `<button class="secondary" data-tab="journal">Explore the journal ${icon("arrow")}</button>`,
         );
   }
   function mountScenarioFullscreens() {
@@ -835,7 +836,7 @@ export function mountIntelligence(root, { model, navigate }) {
     }
   }
   function journalView() {
-    return `<div class="section-line"><div><span class="eyebrow">RNT</span><h2>Journal</h2></div><a class="link" href="/journal" target="_blank" rel="noopener">Open public journal ↗</a></div>${journal.length ? `<div class="public-articles">${journal.map((a) => `<article class="journal-public-card"><span class="eyebrow">${esc(a.symbol)} / EDITION ${a.revision}</span><h2>${esc(a.title)}</h2><p>${esc(a.excerpt)}</p><div class="actions"><a class="link" href="/journal/${esc(a.slug)}" target="_blank" rel="noopener">Read article ↗</a><button class="secondary small-button" data-fork="${esc(a.slug)}" data-revision="${a.revision}">Copy scenarios privately</button></div><small>${esc(when(a.publishedAt))} · RNT</small></article>`).join("")}</div>` : empty("No published articles", "")}`;
+    return `<div class="section-line"><div><span class="eyebrow">RNT</span><h2>Journal</h2></div><a class="link" href="/journal" target="_blank" rel="noopener">Open public journal ${icon("arrow")}</a></div>${journal.length ? `<div class="public-articles">${journal.map((a) => `<article class="journal-public-card"><span class="eyebrow">${esc(a.symbol)} / EDITION ${a.revision}</span><h2>${esc(a.title)}</h2><p>${esc(a.excerpt)}</p><div class="actions"><a class="link" href="/journal/${esc(a.slug)}" target="_blank" rel="noopener">Read article ${icon("arrow")}</a><button class="secondary small-button" data-fork="${esc(a.slug)}" data-revision="${a.revision}">Copy scenarios privately</button></div><small>${esc(when(a.publishedAt))} · RNT</small></article>`).join("")}</div>` : empty("No published articles", "")}`;
   }
   function render() {
     if (!live()) return;
@@ -887,7 +888,7 @@ export function mountIntelligence(root, { model, navigate }) {
         ? document.activeElement
         : null;
     destroyChildren(!!retainedChart, retainedScenario);
-    root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ↗</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
+    root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ${icon("arrow")}</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
       ["research", "Overview"],
       ["strategies", "Strategies"],
       ["scenarios", "Scenarios"],
@@ -905,7 +906,7 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assetChips()}</div><span class="research-order-state"><span data-research-order-state role="status">${esc(orderStatus)}</span><button type="button" data-research-order-retry ${!orderUnsynced ? "hidden" : ""}>Retry</button></span><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button></div>`;
+      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assetChips()}</div><span class="research-order-state"><span data-research-order-state role="status">${esc(orderStatus)}</span><button type="button" data-research-order-retry ${!orderUnsynced ? "hidden" : ""}>Retry</button></span><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", `<button class="link" data-focus-search>Find asset ${icon("arrow")}</button>`)) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ${icon("download")}</button></div>`;
     if (memory.tab === "strategies" && active())
       strategies = mountStrategies(root.querySelector("#strategy-workspace"), {
         symbol: memory.symbol,

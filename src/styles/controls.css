@@ -369,11 +369,11 @@ summary:focus-visible {
   padding-right: 64px !important;
 }
 .password-field button {
-  top: 3px;
-  bottom: 3px;
+  top: 50%;
+  bottom: auto;
   right: 4px;
-  min-width: 52px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   border-radius: 8px;
 }
 .password-field button:hover {

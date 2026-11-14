@@ -257,13 +257,23 @@
   padding-block: 14px;
 }
 .strategy-parameters > summary:after {
-  content: "+";
+  content: "";
+  display: inline-block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  background:
+    linear-gradient(currentColor, currentColor) center / 12px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1px 12px no-repeat;
   color: var(--muted);
   font-size: 18px;
   font-weight: 300;
 }
 .strategy-parameters[open] > summary:after {
-  content: "−";
+  background-size:
+    12px 1px,
+    1px 0;
 }
 .strategy-parameters-summary {
   margin-left: auto;

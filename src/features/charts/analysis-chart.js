@@ -246,7 +246,7 @@ export function mountAnalysisChart(
     const layer =
       aiLayer?.visible && aiLayer.currency === data?.currency ? aiLayer : null;
     const html = layer
-      ? `<span>AI</span><div><button data-ta-ai-scenario="" aria-pressed="${!layer.selectedKey}">All levels</button>${(layer.scenarios || []).map((b) => `<button data-ta-ai-scenario="${esc(b.eventKey)}" aria-pressed="${layer.selectedKey === b.eventKey}">${esc(b.title)}</button>`).join("")}</div>${layer.setId ? '<button class="ta-ai-tree" data-ta-ai-tree aria-label="Open AI scenario tree">Tree ↗</button>' : ""}`
+      ? `<span>AI</span><div><button data-ta-ai-scenario="" aria-pressed="${!layer.selectedKey}">All levels</button>${(layer.scenarios || []).map((b) => `<button data-ta-ai-scenario="${esc(b.eventKey)}" aria-pressed="${layer.selectedKey === b.eventKey}">${esc(b.title)}</button>`).join("")}</div>${layer.setId ? `<button class="ta-ai-tree" data-ta-ai-tree aria-label="Open AI scenario tree">Tree ${icon("arrow")}</button>` : ""}`
       : "";
     if (aiRail.innerHTML === html) return;
     const focused = aiRail.contains(document.activeElement)

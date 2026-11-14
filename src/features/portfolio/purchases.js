@@ -1,5 +1,6 @@
 import { $, money, number, esc, uid, today } from "../../shared/format.js";
 import {
+  icon,
   monogram,
   bindLogos,
   associateLabels,
@@ -81,7 +82,7 @@ export function createPurchases(model, services) {
         $("#search-results").innerHTML = filtered
           .map(
             (r) =>
-              `<button type="button" class="asset-result" data-symbol="${esc(r.symbol)}">${monogram(r)}<span><b>${esc(r.name)}</b><small>${esc(r.symbol)} · ${esc(r.exchange)} · ${assetTypeLabel(r.assetType)}</small></span><span class="asset-select-arrow">↗</span></button>`,
+              `<button type="button" class="asset-result" data-symbol="${esc(r.symbol)}">${monogram(r)}<span><b>${esc(r.name)}</b><small>${esc(r.symbol)} · ${esc(r.exchange)} · ${assetTypeLabel(r.assetType)}</small></span><span class="asset-select-arrow">${icon("arrow")}</span></button>`,
           )
           .join("");
         const query = $("#stock-search").value.trim();
@@ -115,7 +116,7 @@ export function createPurchases(model, services) {
         $("#asset-filters").hidden = true;
         $("#stock-search").value = r.name;
         $("#chosen").innerHTML =
-          `<div class="selected-stock row">${monogram(r)}<span><b>${esc(r.name)}</b><small>${esc(r.symbol)} · ${assetTypeLabel(r.assetType)}</small></span><button type="button" id="change-asset" aria-label="Change asset">×</button></div>`;
+          `<div class="selected-stock row">${monogram(r)}<span><b>${esc(r.name)}</b><small>${esc(r.symbol)} · ${assetTypeLabel(r.assetType)}</small></span><button type="button" id="change-asset" aria-label="Change asset">${icon("close")}</button></div>`;
         $("#change-asset").onclick = () => {
           chosen = null;
           $("#chosen").innerHTML = "";
@@ -268,7 +269,7 @@ export function createPurchases(model, services) {
         )
         .join(
           "",
-        )}<button class="secondary" id="asset-metadata">Asset settings ↗</button><div class="actions"><button class="danger" id="remove">Remove holding</button><button class="primary" id="add-lot">＋ Add purchase</button></div>`,
+        )}<button class="secondary" id="asset-metadata">Asset settings ${icon("arrow")}</button><div class="actions"><button class="danger" id="remove">Remove holding</button><button class="primary" id="add-lot">${icon("plus")} Add purchase</button></div>`,
     );
     $("#asset-metadata").onclick = () => {
       close();

@@ -69,6 +69,16 @@
   color: #697d64;
   margin-top: 24px;
 }
+.auth-footer a,
+.account-action-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-footer .icon {
+  width: 12px;
+  height: 12px;
+}
 .passkey-login {
   width: 100%;
   margin: 27px 0 0;
@@ -98,11 +108,22 @@
 }
 .password-field button {
   position: absolute;
-  right: 8px;
-  top: 8px;
-  padding: 9px;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 8px;
   color: #9cb48e;
-  font-size: 10px;
+  touch-action: manipulation;
+}
+.password-field button:focus-visible {
+  outline: 1px solid #b9f68b80;
+  outline-offset: -3px;
 }
 .recovery-key {
   display: block;

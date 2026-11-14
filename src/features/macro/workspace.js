@@ -1,3 +1,4 @@
+import { icon } from "../../shared/ui.js";
 import { loadingSurface, revealChart } from "../../shared/motion.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
@@ -79,7 +80,7 @@ export function mountMacro(root) {
       ink = macroChartInk(points, { id: inkId }),
       { low, high } = ink;
     if (!previousStage) {
-      root.innerHTML = `<header class="macro-heading"><div><h1>Markets</h1></div><span class="macro-provenance">FRED ↗<br>${new Date(data.fetchedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span></header><nav class="macro-filters" aria-label="Macro categories">${["All", ...new Set(data.indicators.map((i) => i.group))].map((group) => `<button data-filter="${esc(group)}" aria-pressed="${filter === group}">${esc(group)}</button>`).join("")}</nav><div class="macro-board"><div class="macro-stage"><div class="macro-stage-tools"><label class="macro-series-picker"><span class="sr-only">Market indicator</span><select aria-label="Market indicator">${data.indicators.map((item) => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("")}</select></label></div><div class="macro-stage-content"></div></div><div class="macro-tape"></div></div>`;
+      root.innerHTML = `<header class="macro-heading"><div><h1>Markets</h1></div><span class="macro-provenance">FRED ${icon("arrow")}<br>${new Date(data.fetchedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span></header><nav class="macro-filters" aria-label="Macro categories">${["All", ...new Set(data.indicators.map((i) => i.group))].map((group) => `<button data-filter="${esc(group)}" aria-pressed="${filter === group}">${esc(group)}</button>`).join("")}</nav><div class="macro-board"><div class="macro-stage"><div class="macro-stage-tools"><label class="macro-series-picker"><span class="sr-only">Market indicator</span><select aria-label="Market indicator">${data.indicators.map((item) => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join("")}</select></label></div><div class="macro-stage-content"></div></div><div class="macro-tape"></div></div>`;
       const stage = root.querySelector(".macro-stage");
       fullscreen = mountChartFullscreen(stage, {
         native: true,
@@ -103,7 +104,7 @@ export function mountMacro(root) {
       .join("")}`;
     if (selected !== shownSeries) {
       root.querySelector(".macro-stage-content").innerHTML =
-        `<div class="macro-focus"><span class="eyebrow">${esc(active.region)} / ${esc(active.group)}</span><h2>${esc(active.label)}</h2><div class="macro-large"><span data-number>${active.latest ? number(active.latest.value) : "—"}</span><small>${esc(active.unit)}</small></div><div class="macro-date"><a href="${active.source}" target="_blank" rel="noopener noreferrer">${active.id} ↗</a><span>${active.latest?.date || "Unavailable"}${active.status === "stale" ? " · stale" : ""}</span></div></div><div class="macro-chart">${points.length ? `<div class="macro-y-axis" aria-hidden="true"><span>${number(high)}</span><span>${number((low + high) / 2)}</span><span>${number(low)}</span></div>` : ""}${points.length ? `<svg viewBox="0 0 800 250" role="img" aria-label="${esc(active.label)} history"><defs>${ink.defs}</defs><path d="M0 234H800 M0 125H800 M0 16H800" class="macro-grid"/>${ink.markup}</svg><div class="macro-axis"><span>${points[0].date}</span><span>${points.at(-1).date}</span></div>` : '<div class="macro-unavailable">No observations</div>'}</div>`;
+        `<div class="macro-focus"><span class="eyebrow">${esc(active.region)} / ${esc(active.group)}</span><h2>${esc(active.label)}</h2><div class="macro-large"><span data-number>${active.latest ? number(active.latest.value) : "—"}</span><small>${esc(active.unit)}</small></div><div class="macro-date"><a href="${active.source}" target="_blank" rel="noopener noreferrer">${active.id} ${icon("arrow")}</a><span>${active.latest?.date || "Unavailable"}${active.status === "stale" ? " · stale" : ""}</span></div></div><div class="macro-chart">${points.length ? `<div class="macro-y-axis" aria-hidden="true"><span>${number(high)}</span><span>${number((low + high) / 2)}</span><span>${number(low)}</span></div>` : ""}${points.length ? `<svg viewBox="0 0 800 250" role="img" aria-label="${esc(active.label)} history"><defs>${ink.defs}</defs><path d="M0 234H800 M0 125H800 M0 16H800" class="macro-grid"/>${ink.markup}</svg><div class="macro-axis"><span>${points[0].date}</span><span>${points.at(-1).date}</span></div>` : '<div class="macro-unavailable">No observations</div>'}</div>`;
       resize.disconnect();
       const chart = root.querySelector(".macro-chart");
       if (chart) resize.observe(chart);
@@ -172,8 +173,7 @@ export function mountMacro(root) {
           resize.disconnect();
           shownSeries = null;
           root.setAttribute("aria-busy", "false");
-          root.innerHTML =
-            '<button class="secondary" data-retry>Retry market data ↻</button>';
+          root.innerHTML = `<button class="secondary" data-retry>Retry market data ${icon("refresh")}</button>`;
           root.querySelector("button").onclick = () => {
             root.innerHTML = loadingSurface("macro");
             load();

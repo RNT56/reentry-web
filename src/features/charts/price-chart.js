@@ -3,6 +3,7 @@ import { historyRanges } from "../../domain/market-history.js";
 import { setAnimatedText, revealChart } from "../../shared/motion.js";
 import { renderChartInk, newChartInkId } from "../../shared/chart-ink.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
+import { icon } from "../../shared/icons.js";
 const inkIds = new WeakMap();
 const cache = new Map(),
   pending = new Map();
@@ -75,7 +76,7 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
       button.classList.toggle("selected", selected);
       button.setAttribute("aria-pressed", String(selected));
     }
-    currencyButton.textContent = currency + " ⇄";
+    currencyButton.innerHTML = `${escape(currency)} ${icon("swap")}`;
     currencyButton.setAttribute(
       "aria-label",
       `Chart currency: ${currency}. Switch currency`,
@@ -124,10 +125,10 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
       if (data) {
         controls(data.range, data.currency);
         root.querySelector(".history-hover-hint").innerHTML =
-          `${escape(text)}${retry ? ' · <button class="link history-retry" type="button">Retry ↗</button>' : ""}`;
+          `${escape(text)}${retry ? ` · <button class="link history-retry" type="button">Retry ${icon("arrow")}</button>` : ""}`;
       } else {
         root.querySelector(".history-body").innerHTML =
-          `<div class="history-placeholder history-unavailable"><span>${escape(text)}</span>${retry ? '<button class="link history-retry" type="button">Try again ↗</button>' : ""}</div>`;
+          `<div class="history-placeholder history-unavailable"><span>${escape(text)}</span>${retry ? `<button class="link history-retry" type="button">Try again ${icon("arrow")}</button>` : ""}</div>`;
         root.querySelector(".history-caption").innerHTML =
           "<span>Market price</span><span></span>";
       }

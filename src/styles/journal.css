@@ -467,12 +467,22 @@
   gap: 12px;
 }
 .journal-scenario summary::after {
-  content: "+";
+  content: "";
+  display: inline-block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  background:
+    linear-gradient(currentColor, currentColor) center / 12px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1px 12px no-repeat;
   color: #bbec91;
   font-size: 18px;
 }
 .journal-scenario details[open] summary::after {
-  content: "−";
+  background-size:
+    12px 1px,
+    1px 0;
 }
 .journal-invalidation {
   padding: 20px 0 0;

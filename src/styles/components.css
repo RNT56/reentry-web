@@ -701,13 +701,23 @@ summary::-webkit-details-marker {
   color: #6d836b;
 }
 .trade-details summary:after {
-  content: "+";
+  content: "";
+  display: inline-block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  background:
+    linear-gradient(currentColor, currentColor) center / 12px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1px 12px no-repeat;
   font-size: 14px;
   color: #83977e;
   margin-left: 3px;
 }
 .trade-details[open] summary:after {
-  content: "−";
+  background-size:
+    12px 1px,
+    1px 0;
 }
 .trade-details .form-row {
   margin-top: 20px;
@@ -1256,11 +1266,21 @@ dialog summary {
   justify-content: space-between;
 }
 dialog summary:after {
-  content: "+";
+  content: "";
+  display: inline-block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  background:
+    linear-gradient(currentColor, currentColor) center / 12px 1px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1px 12px no-repeat;
   font-size: 13px;
 }
 dialog details[open] summary:after {
-  content: "−";
+  background-size:
+    12px 1px,
+    1px 0;
 }
 dialog .note {
   font-size: 9px;
