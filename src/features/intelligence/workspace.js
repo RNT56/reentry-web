@@ -1,5 +1,6 @@
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
+import { mountReorder, reorderHandle } from "../../shared/reorder.js";
 import {
   modal,
   close,
@@ -29,6 +30,27 @@ import {
   sourceLinks,
   scenarioCards,
 } from "./shared.js";
+const researchOrderPool = new Map();
+const researchOrderErrors = new Set();
+function trackResearchOrder(ownerId, promise) {
+  const pool = researchOrderPool.get(ownerId) || new Set();
+  researchOrderPool.set(ownerId, pool);
+  pool.add(promise);
+  const done = () => {
+    pool.delete(promise);
+    if (!pool.size) researchOrderPool.delete(ownerId);
+  };
+  promise.then(done, done);
+  return promise;
+}
+export async function flushResearchOrders(ownerId) {
+  while (researchOrderPool.get(ownerId)?.size)
+    await Promise.all([...researchOrderPool.get(ownerId)]);
+  if (researchOrderErrors.has(ownerId))
+    throw Error(
+      "Research order is not synced. Open Research to retry before signing out.",
+    );
+}
 export const intelligenceView = () =>
   '<section class="intelligence-page" id="intelligence"></section>';
 export function mountIntelligence(root, { model, navigate }) {
@@ -65,7 +87,17 @@ export function mountIntelligence(root, { model, navigate }) {
     navigationEpoch = 0,
     loadGeneration = 0,
     assetListGeneration = 0,
-    assetMutation = 0;
+    assetMutation = 0,
+    orderRevision = 0,
+    pendingOrder = null,
+    orderSaving = false,
+    orderReconciling = false,
+    orderStatus = "",
+    orderStatusTimer,
+    membershipBusy = 0,
+    reorder = null,
+    orderDrain = null,
+    orderUnsynced = false;
   const hiddenAssets = new Set(),
     removingAssets = new Set();
   const ownerId = model.currentUser.id || model.currentUser.username;
@@ -100,21 +132,240 @@ export function mountIntelligence(root, { model, navigate }) {
     return assets
       .map(
         (a) =>
-          `<span class="research-asset-item ${a.symbol === memory.symbol ? "is-selected" : ""}"><button type="button" class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}" aria-current="${a.symbol === memory.symbol ? "true" : "false"}" ${removingAssets.has(a.symbol) ? "disabled" : ""}>${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button><button type="button" class="research-asset-remove" data-remove-research="${esc(a.symbol)}" aria-label="Remove ${esc(a.symbol)} from research" title="Remove from research" ${removingAssets.has(a.symbol) ? 'disabled aria-busy="true"' : ""}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="m5 5 6 6m0-6-6 6"/></svg></button></span>`,
+          `<span class="research-asset-item ${a.symbol === memory.symbol ? "is-selected" : ""}" data-order-symbol="${esc(a.symbol)}">${assets.length > 1 ? reorderHandle("Reorder " + a.symbol) : ""}<button type="button" class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}" aria-current="${a.symbol === memory.symbol ? "true" : "false"}" ${removingAssets.has(a.symbol) ? "disabled" : ""}>${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button><button type="button" class="research-asset-remove" data-reorder-ignore data-remove-research="${esc(a.symbol)}" aria-label="Remove ${esc(a.symbol)} from research" title="Remove from research" ${removingAssets.has(a.symbol) ? 'disabled aria-busy="true"' : ""}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="m5 5 6 6m0-6-6 6"/></svg></button></span>`,
       )
       .join("");
   }
   function patchAssetChips(focusSymbol = null) {
     const rail = root.querySelector(".research-assets");
     if (!rail) return;
+    reorder?.destroy();
+    reorder = null;
     const scroll = rail.scrollLeft;
     rail.innerHTML = assetChips();
     rail.scrollLeft = scroll;
     bindLogos();
+    mountAssetReorder();
     if (focusSymbol)
       rail
         .querySelector(`[data-research-asset="${CSS.escape(focusSymbol)}"]`)
         ?.focus({ preventScroll: true });
+  }
+  function orderFeedback(value = "") {
+    orderStatus = value;
+    const label = root.querySelector("[data-research-order-state]");
+    if (label) label.textContent = value;
+    const retry = root.querySelector("[data-research-order-retry]");
+    if (retry) retry.hidden = !orderUnsynced;
+  }
+  function syncReorderHandles() {
+    root
+      .querySelectorAll(".research-assets [data-reorder-handle]")
+      .forEach((handle) => {
+        handle.disabled = !!(
+          removingAssets.size ||
+          membershipBusy ||
+          orderReconciling ||
+          orderUnsynced ||
+          assets.length < 2
+        );
+      });
+  }
+  function adoptAssets(response, canonical = false) {
+    if (
+      Number.isSafeInteger(response.orderRevision) &&
+      response.orderRevision < orderRevision
+    )
+      return false;
+    const incoming = response.assets.filter((a) => !hiddenAssets.has(a.symbol));
+    if (Number.isSafeInteger(response.orderRevision))
+      orderRevision = Math.max(orderRevision, response.orderRevision);
+    if (!canonical && (orderSaving || pendingOrder)) {
+      const bySymbol = new Map(incoming.map((a) => [a.symbol, a]));
+      assets = [
+        ...assets.map((a) => bySymbol.get(a.symbol)).filter(Boolean),
+        ...incoming.filter(
+          (a) => !assets.some((current) => current.symbol === a.symbol),
+        ),
+      ];
+    } else assets = incoming;
+    if (!orderSaving && !pendingOrder) researchOrderErrors.delete(ownerId);
+    return true;
+  }
+  function mountAssetReorder() {
+    reorder?.destroy();
+    reorder = null;
+    const rail = root.querySelector(".research-assets");
+    if (!rail || assets.length < 2) return;
+    reorder = mountReorder(rail, {
+      itemSelector: ".research-asset-item",
+      key: (item) => item.dataset.orderSymbol,
+      axis: "x",
+      activationSelector: ".asset-chip",
+      disabled: () =>
+        !!(
+          removingAssets.size ||
+          membershipBusy ||
+          orderReconciling ||
+          orderUnsynced
+        ),
+      onReorder: (symbols) => {
+        const bySymbol = new Map(assets.map((a) => [a.symbol, a]));
+        if (
+          symbols.length !== assets.length ||
+          new Set(symbols).size !== assets.length ||
+          symbols.some((symbol) => !bySymbol.has(symbol))
+        ) {
+          patchAssetChips();
+          return;
+        }
+        assets = symbols.map((symbol) => bySymbol.get(symbol));
+        assetMutation++;
+        pendingOrder = [...symbols];
+        clearTimeout(orderStatusTimer);
+        orderFeedback("Saving…");
+        if (!orderSaving)
+          orderDrain = trackResearchOrder(ownerId, persistAssetOrder());
+      },
+    });
+    syncReorderHandles();
+  }
+  async function persistAssetOrder() {
+    if (orderSaving) return;
+    orderSaving = true;
+    try {
+      while (
+        pendingOrder &&
+        (model.currentUser?.id || model.currentUser?.username) === ownerId
+      ) {
+        const wanted = pendingOrder;
+        pendingOrder = null;
+        const currentSymbols = new Set(assets.map((a) => a.symbol));
+        const symbols = [
+          ...wanted.filter((symbol) => currentSymbols.has(symbol)),
+          ...assets
+            .map((a) => a.symbol)
+            .filter((symbol) => !wanted.includes(symbol)),
+        ];
+        const reply = await request("/api/research/order", "PUT", {
+          symbols,
+          revision: orderRevision,
+        });
+        orderRevision = Math.max(orderRevision, reply.revision);
+      }
+      if (
+        live() &&
+        (model.currentUser?.id || model.currentUser?.username) === ownerId
+      ) {
+        researchOrderErrors.delete(ownerId);
+        orderFeedback("Saved");
+        orderStatusTimer = setTimeout(() => {
+          if (live()) orderFeedback();
+        }, 1600);
+      } else if (
+        (model.currentUser?.id || model.currentUser?.username) === ownerId
+      )
+        window.dispatchEvent(
+          new CustomEvent("reentry:research-order-saved", {
+            detail: { ownerId },
+          }),
+        );
+    } catch (error) {
+      pendingOrder = null;
+      orderReconciling = true;
+      assetMutation++;
+      if ((model.currentUser?.id || model.currentUser?.username) === ownerId) {
+        let restored = false;
+        try {
+          restored = await readCanonicalOrder();
+        } catch {
+          /* Keep the failed order actionable until a canonical read succeeds. */
+        }
+        orderUnsynced = !restored;
+        if (restored) researchOrderErrors.delete(ownerId);
+        else researchOrderErrors.add(ownerId);
+        if (live()) orderFeedback(restored ? "" : "Order not synced");
+        if ((model.currentUser?.id || model.currentUser?.username) === ownerId)
+          toast(
+            restored
+              ? error.status === 409
+                ? "Research order changed elsewhere. Latest order restored."
+                : error.message
+              : "Research order is not synced.",
+            restored ? {} : { actionLabel: "Retry", onAction: retryOrderSync },
+          );
+      }
+    } finally {
+      orderSaving = false;
+      orderReconciling = false;
+      if (live()) syncReorderHandles();
+      else window.removeEventListener("beforeunload", warnOrderUnload);
+    }
+  }
+  async function readCanonicalOrder() {
+    if ((model.currentUser?.id || model.currentUser?.username) !== ownerId)
+      return false;
+    if (live()) return refreshAssetList({ canonical: true });
+    const response = await request("/api/research/assets");
+    if (
+      (model.currentUser?.id || model.currentUser?.username) !== ownerId ||
+      !Array.isArray(response.assets) ||
+      !Number.isSafeInteger(response.orderRevision) ||
+      response.orderRevision < orderRevision
+    )
+      return false;
+    orderRevision = Math.max(orderRevision, response.orderRevision);
+    window.dispatchEvent(
+      new CustomEvent("reentry:research-order-saved", { detail: { ownerId } }),
+    );
+    return true;
+  }
+  async function retryOrderSync() {
+    if (orderSaving || orderReconciling) return;
+    orderReconciling = true;
+    if (live()) {
+      syncReorderHandles();
+      orderFeedback("Syncing…");
+    }
+    try {
+      if (!(await readCanonicalOrder()))
+        throw Error("Research order is not synced. Retry when connected.");
+      orderUnsynced = false;
+      researchOrderErrors.delete(ownerId);
+      if (live()) orderFeedback();
+    } catch (error) {
+      orderUnsynced = true;
+      researchOrderErrors.add(ownerId);
+      if (live()) orderFeedback("Order not synced");
+      throw error;
+    } finally {
+      orderReconciling = false;
+      if (live()) syncReorderHandles();
+    }
+  }
+  const warnOrderUnload = (event) => {
+    if (
+      (model.currentUser?.id || model.currentUser?.username) === ownerId &&
+      (orderSaving || pendingOrder || (live() && orderUnsynced))
+    ) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  };
+  window.addEventListener("beforeunload", warnOrderUnload);
+  async function withMembershipChange(fn) {
+    membershipBusy++;
+    reorder?.cancel();
+    if (live()) syncReorderHandles();
+    try {
+      await orderDrain;
+      if ((model.currentUser?.id || model.currentUser?.username) !== ownerId)
+        throw Error("Sign in to update this research list.");
+      return await fn();
+    } finally {
+      membershipBusy--;
+      if (live()) syncReorderHandles();
+    }
   }
   function clearAssetSelection(symbol) {
     memory.symbol = symbol;
@@ -132,7 +383,7 @@ export function mountIntelligence(root, { model, navigate }) {
     sourceSignals = null;
     sourceConnections = [];
   }
-  async function refreshAssetList() {
+  async function refreshAssetList({ canonical = false } = {}) {
     const generation = ++assetListGeneration,
       mutation = assetMutation;
     const response = await request("/api/research/assets");
@@ -141,8 +392,8 @@ export function mountIntelligence(root, { model, navigate }) {
       generation !== assetListGeneration ||
       mutation !== assetMutation
     )
-      return;
-    assets = response.assets.filter((a) => !hiddenAssets.has(a.symbol));
+      return false;
+    if (adoptAssets(response, canonical) === false) return false;
     if (
       !memory.symbol &&
       assets.length &&
@@ -153,17 +404,31 @@ export function mountIntelligence(root, { model, navigate }) {
       await loadAsset();
       if (live() && operation === navigationEpoch) render();
     } else patchAssetChips();
+    return true;
   }
   const onResearchAssetRestored = (event) => {
     if (!live() || event.detail?.ownerId !== ownerId) return;
     hiddenAssets.delete(event.detail.symbol);
     assetMutation++;
-    refreshAssetList().catch((e) => live() && toast(e.message));
+    membershipBusy++;
+    reorder?.cancel();
+    syncReorderHandles();
+    refreshAssetList()
+      .catch((e) => live() && toast(e.message))
+      .finally(() => {
+        membershipBusy--;
+        if (live()) syncReorderHandles();
+      });
   };
   window.addEventListener(
     "reentry:research-asset-restored",
     onResearchAssetRestored,
   );
+  const onOrderSaved = (event) => {
+    if (live() && event.detail?.ownerId === ownerId)
+      refreshAssetList().catch(() => {});
+  };
+  window.addEventListener("reentry:research-order-saved", onOrderSaved);
   async function removeResearchAsset(symbol) {
     const removed = assets.find((a) => a.symbol === symbol);
     if (!removed || removingAssets.has(symbol)) return;
@@ -175,9 +440,13 @@ export function mountIntelligence(root, { model, navigate }) {
       root.querySelector(`[data-remove-research="${CSS.escape(symbol)}"]`) ===
       document.activeElement;
     removingAssets.add(symbol);
+    membershipBusy++;
     assetMutation++;
     patchAssetChips();
     try {
+      await orderDrain;
+      if ((model.currentUser?.id || model.currentUser?.username) !== ownerId)
+        return;
       await request(
         "/api/research/assets/" + encodeURIComponent(symbol),
         "DELETE",
@@ -221,30 +490,32 @@ export function mountIntelligence(root, { model, navigate }) {
       }
       toast(symbol + " removed from research", {
         actionLabel: "Undo",
-        onAction: async () => {
-          if (
-            (model.currentUser?.id || model.currentUser?.username) !== ownerId
-          )
-            throw Error("Sign in to restore this asset.");
-          if (!hiddenAssets.has(symbol)) return;
-          await request(
-            "/api/research/assets/" + encodeURIComponent(symbol),
-            "PUT",
-            {
-              name: removed.name,
-              assetType: removed.assetType,
-              isin: removed.isin,
-              automatic: false,
-              intervalHours: removed.interval_hours || 24,
-            },
-          );
-          hiddenAssets.delete(symbol);
-          window.dispatchEvent(
-            new CustomEvent("reentry:research-asset-restored", {
-              detail: { ownerId, symbol },
-            }),
-          );
-        },
+        onAction: () =>
+          withMembershipChange(async () => {
+            await orderDrain;
+            if (
+              (model.currentUser?.id || model.currentUser?.username) !== ownerId
+            )
+              throw Error("Sign in to restore this asset.");
+            if (!hiddenAssets.has(symbol)) return;
+            await request(
+              "/api/research/assets/" + encodeURIComponent(symbol),
+              "PUT",
+              {
+                name: removed.name,
+                assetType: removed.assetType,
+                isin: removed.isin,
+                automatic: false,
+                intervalHours: removed.interval_hours || 24,
+              },
+            );
+            hiddenAssets.delete(symbol);
+            window.dispatchEvent(
+              new CustomEvent("reentry:research-asset-restored", {
+                detail: { ownerId, symbol },
+              }),
+            );
+          }),
       });
     } catch (e) {
       if (live()) {
@@ -252,6 +523,19 @@ export function mountIntelligence(root, { model, navigate }) {
         patchAssetChips();
         toast(e.message);
       }
+    } finally {
+      if (live()) {
+        try {
+          if (await refreshAssetList({ canonical: orderUnsynced })) {
+            orderUnsynced = false;
+            if (!orderSaving) orderFeedback();
+          }
+        } catch {
+          /* Retry the account's list on its next successful load. */
+        }
+      }
+      membershipBusy--;
+      if (live()) syncReorderHandles();
     }
   }
   async function load() {
@@ -267,7 +551,7 @@ export function mountIntelligence(root, { model, navigate }) {
     if (!live() || generation !== loadGeneration || mutation !== assetMutation)
       return;
     [info] = data;
-    assets = data[1].assets.filter((a) => !hiddenAssets.has(a.symbol));
+    adoptAssets(data[1]);
     jobs = data[2].jobs.filter((j) =>
       ["research", "map-article"].includes(j.kind),
     );
@@ -501,6 +785,8 @@ export function mountIntelligence(root, { model, navigate }) {
   }
   function render() {
     if (!live()) return;
+    reorder?.destroy();
+    reorder = null;
     const retainedChart =
       memory.tab === "research" && chartSymbol === memory.symbol
         ? root.querySelector("#research-chart")
@@ -532,7 +818,7 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assetChips()}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button></div>`;
+      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assetChips()}</div><span class="research-order-state"><span data-research-order-state role="status">${esc(orderStatus)}</span><button type="button" data-research-order-retry ${!orderUnsynced ? "hidden" : ""}>Retry</button></span><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button></div>`;
     if (memory.tab === "strategies" && active())
       strategies = mountStrategies(root.querySelector("#strategy-workspace"), {
         symbol: memory.symbol,
@@ -695,6 +981,7 @@ export function mountIntelligence(root, { model, navigate }) {
       });
     associateLabels(root);
     bindLogos();
+    mountAssetReorder();
     const tabs = root.querySelector(".intelligence-tabs"),
       selectedTab = tabs.querySelector('[aria-current="page"]');
     if (selectedTab)
@@ -889,35 +1176,43 @@ export function mountIntelligence(root, { model, navigate }) {
     }
     if (b.hasAttribute("data-focus-search"))
       root.querySelector("#research-search").focus();
+    if (b.hasAttribute("data-research-order-retry")) {
+      retryOrderSync().catch((error) => toast(error.message));
+      return;
+    }
     if (b.dataset.removeResearch) {
       removeResearchAsset(b.dataset.removeResearch);
       return;
     }
     if (b.dataset.addAsset)
-      action(b, async () => {
-        const operation = ++navigationEpoch;
-        await request(
-          "/api/research/assets/" + encodeURIComponent(b.dataset.addAsset),
-          "PUT",
-          {
-            name: b.dataset.name,
-            assetType: b.dataset.assetType,
-            isin: b.dataset.isin,
-            automatic: false,
-            intervalHours: 24,
-          },
-        );
-        hiddenAssets.delete(b.dataset.addAsset);
-        assetMutation++;
-        if (!live() || operation !== navigationEpoch) return;
-        memory.symbol = b.dataset.addAsset;
-        memory.jobId = null;
-        memory.aiJobId = null;
-        memory.aiEventKey = null;
-        memory.monitorJobId = null;
-        memory.monitorChange = null;
-        await load();
-      });
+      action(b, () =>
+        withMembershipChange(async () => {
+          const operation = ++navigationEpoch;
+          await orderDrain;
+          if (!live() || operation !== navigationEpoch) return;
+          await request(
+            "/api/research/assets/" + encodeURIComponent(b.dataset.addAsset),
+            "PUT",
+            {
+              name: b.dataset.name,
+              assetType: b.dataset.assetType,
+              isin: b.dataset.isin,
+              automatic: false,
+              intervalHours: 24,
+            },
+          );
+          hiddenAssets.delete(b.dataset.addAsset);
+          assetMutation++;
+          if (!live() || operation !== navigationEpoch) return;
+          memory.symbol = b.dataset.addAsset;
+          memory.jobId = null;
+          memory.aiJobId = null;
+          memory.aiEventKey = null;
+          memory.monitorJobId = null;
+          memory.monitorChange = null;
+          await load();
+        }),
+      );
     if (b.dataset.researchAsset)
       action(b, async () => {
         navigationEpoch++;
@@ -1014,38 +1309,42 @@ export function mountIntelligence(root, { model, navigate }) {
         },
       );
     if (b.dataset.aiChart)
-      action(b, async () => {
-        const selectedSymbol = b.dataset.aiSymbol,
-          operation = ++navigationEpoch;
-        if (!assets.some((a) => a.symbol === selectedSymbol)) {
-          await request(
-            "/api/research/assets/" + encodeURIComponent(selectedSymbol),
-            "PUT",
-            {
-              name: selectedSymbol,
-              automatic: false,
-              intervalHours: 24,
-            },
-          );
-          hiddenAssets.delete(selectedSymbol);
-          assetMutation++;
-          const response = await request("/api/research/assets");
+      action(b, () =>
+        withMembershipChange(async () => {
+          const selectedSymbol = b.dataset.aiSymbol,
+            operation = ++navigationEpoch;
+          if (!assets.some((a) => a.symbol === selectedSymbol)) {
+            await orderDrain;
+            if (!live() || operation !== navigationEpoch) return;
+            await request(
+              "/api/research/assets/" + encodeURIComponent(selectedSymbol),
+              "PUT",
+              {
+                name: selectedSymbol,
+                automatic: false,
+                intervalHours: 24,
+              },
+            );
+            hiddenAssets.delete(selectedSymbol);
+            assetMutation++;
+            const response = await request("/api/research/assets");
+            if (!live() || operation !== navigationEpoch) return;
+            adoptAssets(response);
+          }
           if (!live() || operation !== navigationEpoch) return;
-          assets = response.assets.filter((a) => !hiddenAssets.has(a.symbol));
-        }
-        if (!live() || operation !== navigationEpoch) return;
-        memory.symbol = selectedSymbol;
-        memory.aiJobId = b.dataset.aiChart;
-        memory.aiEventKey = b.dataset.eventKey || null;
-        memory.jobId = null;
-        await loadAsset();
-        if (!live() || operation !== navigationEpoch) return;
-        memory.tab = "research";
-        render();
-        root
-          .querySelector("#research-chart")
-          ?.scrollIntoView({ block: "start", behavior: "smooth" });
-      });
+          memory.symbol = selectedSymbol;
+          memory.aiJobId = b.dataset.aiChart;
+          memory.aiEventKey = b.dataset.eventKey || null;
+          memory.jobId = null;
+          await loadAsset();
+          if (!live() || operation !== navigationEpoch) return;
+          memory.tab = "research";
+          render();
+          root
+            .querySelector("#research-chart")
+            ?.scrollIntoView({ block: "start", behavior: "smooth" });
+        }),
+      );
     if (b.dataset.monitorOpen) {
       navigationEpoch++;
       memory.monitorJobId = b.dataset.monitorOpen;
@@ -1167,8 +1466,18 @@ export function mountIntelligence(root, { model, navigate }) {
   }, 5000);
   return {
     canLeave,
+    async flushPendingOrder() {
+      await orderDrain;
+      return !orderSaving && !pendingOrder && !orderUnsynced;
+    },
     destroy() {
       alive = false;
+      reorder?.destroy();
+      reorder = null;
+      clearTimeout(orderStatusTimer);
+      window.removeEventListener("reentry:research-order-saved", onOrderSaved);
+      if (!orderSaving && !pendingOrder)
+        window.removeEventListener("beforeunload", warnOrderUnload);
       clearInterval(poll);
       clearInterval(sourcePoll);
       sourceGeneration++;

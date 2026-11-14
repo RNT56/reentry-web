@@ -9,7 +9,12 @@ import {
   transaction,
 } from "../platform/util.js";
 import { putSource } from "./sources.js";
-import { researchAsset } from "./portfolio-sources.js";
+import {
+  initializeResearchOrder,
+  readResearchOrder,
+  writeResearchOrder,
+} from "./research-order.js";
+import { portfolioAssets, researchAsset } from "./portfolio-sources.js";
 import {
   hiddenResearchSymbols,
   researchHidden,
@@ -20,14 +25,14 @@ export function registerIntelligenceRoutes(
   app,
   { db, engine, market, portfolioSources },
 ) {
+  initializeResearchOrder(db);
   const auth = { preHandler: app.requireUser },
     limited = {
       ...auth,
       config: { rateLimit: { max: 12, timeWindow: "1 minute" } },
     };
-  app.get("/api/research/assets", auth, async (req) => {
-    const user = req.auth.user_id;
-    const held = portfolioSources.sync(user);
+  function visibleAssets(user) {
+    const held = portfolioAssets(db, user);
     const hidden = hiddenResearchSymbols(db, user);
     const assets = new Map(
       held.map((asset) => [
@@ -46,16 +51,31 @@ export function registerIntelligenceRoutes(
         ...JSON.parse(metadata),
       });
     }
+    return [...assets.values()].filter((asset) => !hidden.has(asset.symbol));
+  }
+  app.get("/api/research/assets", auth, async (req) => {
+    const user = req.auth.user_id;
+    portfolioSources.sync(user);
+    const visible = visibleAssets(user);
+    const order = readResearchOrder(
+      db,
+      user,
+      visible.map((asset) => asset.symbol),
+    );
+    const assets = new Map(visible.map((asset) => [asset.symbol, asset]));
     return {
-      assets: [...assets.values()]
-        .filter((asset) => !hidden.has(asset.symbol))
-        .sort((a, b) => a.symbol.localeCompare(b.symbol))
-        .map((asset) => ({
-          ...asset,
-          sourceStatus: portfolioSources.state(user, asset.symbol),
-        })),
+      assets: order.symbols.map((symbol) => ({
+        ...assets.get(symbol),
+        sourceStatus: portfolioSources.state(user, symbol),
+      })),
+      orderRevision: order.revision,
     };
   });
+  app.put("/api/research/order", { ...auth, bodyLimit: 80000 }, async (req) =>
+    writeResearchOrder(db, req.auth.user_id, req.body || {}, () =>
+      visibleAssets(req.auth.user_id).map((asset) => asset.symbol),
+    ),
+  );
   app.put("/api/research/assets/:symbol", auth, async (req) => {
     const s = symbol(req.params.symbol),
       user = req.auth.user_id,
@@ -356,6 +376,7 @@ export function registerIntelligenceRoutes(
       tables = [
         "research_assets",
         "research_hidden_assets",
+        "research_asset_order",
         "research_sources",
         "source_monitors",
         "source_monitor_reviews",

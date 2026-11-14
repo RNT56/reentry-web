@@ -5,6 +5,18 @@
   --holding-inset: 15px;
   --holding-logo: 37px;
 }
+.holding-shell > .reorder-handle {
+  position: absolute;
+  right: 7px;
+  top: 16px;
+}
+.holding-reorder-space {
+  flex: 0 0 15px;
+  height: 30px;
+}
+.holdings-list:not(:has(.holding-shell:nth-child(2))) .reorder-handle {
+  visibility: hidden;
+}
 .holding-remove {
   position: absolute;
   top: 3px;
@@ -44,5 +56,8 @@
 @media (max-width: 600px) {
   .holding-shell {
     --holding-inset: 13px;
+  }
+  .holding-shell > .reorder-handle {
+    top: 12px;
   }
 }

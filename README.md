@@ -12,6 +12,10 @@ AI starts **off** for every account, with a **US$5/month** and **US$0.25/run** d
 
 Holdings across all depots appear in Research automatically. With background jobs enabled, their available news, filings, fundamentals, and technical evidence refresh without an AI key. Chart tools, saved analyses, and AI controls sit below the full-width plot.
 
+Drag asset cards on desktop or use their grips on touch screens to reorder Research and portfolio holdings independently. Orders are saved per account with conflict protection. Keyboard users can focus a grip, press Space or Enter to lift, use arrows or Home/End to move, then press Space/Enter to place or Escape to cancel. Reordering keeps the active chart and purchase data intact.
+
+Line charts share crisp vector strokes, subtle depth, and precise inspection markers. Every observation is retained; gaps stay separated and no smoothing invents intermediate highs or lows. Strategy colors, dashed fits, and conditional projections retain distinct meanings. Candlesticks are unchanged.
+
 **What changed** compares newly collected evidence with a previous AI review and links cited developments to selected private scenario branches. Preview a single review or enable **Watch sources** for an asset; both use your existing BYOC limits. AI suggestions remain separate from verified events and public articles. See [private source monitoring](docs/SOURCE_MONITORING.md).
 
 ## Hostinger Ubuntu VPS: Docker + existing Caddy

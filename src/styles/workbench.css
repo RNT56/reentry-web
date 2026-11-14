@@ -737,3 +737,61 @@
     padding-right: 30px;
   }
 }
+/* Research ordering remains independent of selection and dismissal. */
+.research-asset-bar {
+  position: relative;
+}
+.research-asset-item > [data-reorder-handle] {
+  width: 26px;
+  min-width: 26px;
+  height: 42px;
+  align-self: center;
+  padding: 0;
+  color: #556e5d;
+  opacity: 0.72;
+}
+.research-asset-item:hover > [data-reorder-handle],
+.research-asset-item > [data-reorder-handle]:focus-visible {
+  color: #a2bda6;
+  opacity: 1;
+}
+.research-asset-item > [data-reorder-handle] svg {
+  width: 10px;
+  height: 15px;
+}
+.research-asset-item > [data-reorder-handle]:disabled {
+  opacity: 0.25;
+}
+.research-order-state {
+  position: absolute;
+  left: 0;
+  bottom: -13px;
+  font-size: 9px;
+  line-height: 12px;
+  color: #698d72;
+  min-height: 12px;
+  pointer-events: none;
+}
+@media (max-width: 680px) {
+  .research-asset-item > [data-reorder-handle] {
+    width: 30px;
+    min-width: 30px;
+    height: 46px;
+    opacity: 0.8;
+  }
+}
+.research-order-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.research-order-state button {
+  pointer-events: auto;
+  font-size: 9px;
+  color: #b0cda9;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.research-order-state button[hidden] {
+  display: none;
+}

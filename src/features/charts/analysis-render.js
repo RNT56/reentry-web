@@ -1,3 +1,4 @@
+import { renderChartInk, newChartInkId } from "../../shared/chart-ink.js";
 import {
   fibonacciLevels,
   measureRange,
@@ -333,11 +334,16 @@ export function renderAnalysisPlot(
       const c = p.close >= p.open ? "#8bd5ab" : "#df9d90";
       candles += `<path d="M${g.x(i)} ${g.y(p.high)}V${g.y(p.low)}" stroke="${c}"/><rect x="${g.x(i) - candleWidth / 2}" y="${Math.min(g.y(p.open), g.y(p.close))}" width="${candleWidth}" height="${Math.max(1, Math.abs(g.y(p.close) - g.y(p.open)))}" fill="${c}"/>`;
     }
-  const closePath = path(
-      data.points.map((p) => p.price),
-      g,
-    ),
-    priceLine = `<path class="ta-price-line" d="${closePath}" stroke="${color}" fill="none" stroke-width="1.8" stroke-linejoin="round"/>`;
+  const inkId = newChartInkId("research"),
+    ink = renderChartInk(data.points.slice(g.from, g.to + 1), {
+      id: inkId,
+      x: (i) => g.x(i + g.from),
+      y: g.y,
+      baseline: g.B,
+      color: up ? "#9bd5aa" : "#dca295",
+      highlight: up ? "#dcf1d5" : "#f1c8bb",
+      className: "ta-price-line",
+    });
   let overlays = "";
   for (const id of state.indicators) {
     if (id === "bollinger") {
@@ -362,8 +368,8 @@ export function renderAnalysisPlot(
         `<text x="${g.x(i)}" y="${g.H - 7}" text-anchor="${k === 0 ? "start" : k === 2 ? "end" : "middle"}" class="ta-axis">${date(data.points[i].time)}</text>`,
     )
     .join("");
-  const gradientId = "ta-fill-" + data.symbol.replace(/[^a-z0-9]/gi, "");
-  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs><clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : priceLine}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0" pointer-events="none"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${dates}</svg>`;
+  const gradientId = inkId;
+  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs>${hasCandles ? "" : ink.defs}<clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : ink.bodyMarkup}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0" pointer-events="none"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${hasCandles ? "" : `<g class="ta-line-endpoint" pointer-events="none">${ink.endpointMarkup}</g>`}${dates}</svg>`;
   const panes = state.indicators
     .filter((id) => ["rsi", "macd", "volume"].includes(id))
     .map((id) => renderPane(id, indicators[id], g))

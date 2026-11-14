@@ -55,6 +55,15 @@
   overflow: visible;
   margin-top: 28px;
 }
+.strategy-series {
+  opacity: 0.42;
+}
+.strategy-series.is-selected {
+  opacity: 1;
+}
+.strategy-series.is-selected .strategy-account-line {
+  stroke-width: 2.1;
+}
 .strategy-dates {
   display: flex;
   justify-content: space-between;

@@ -1,6 +1,10 @@
 import { installMotion, setAnimatedText } from "../shared/motion.js";
+import { mountReorder } from "../shared/reorder.js";
 import { mountViewport } from "../shared/viewport.js";
-import { mountIntelligence } from "../features/intelligence/workspace.js";
+import {
+  mountIntelligence,
+  flushResearchOrders,
+} from "../features/intelligence/workspace.js";
 import { mountMacro } from "../features/macro/workspace.js";
 import { mountAISettings } from "../features/intelligence/settings.js";
 import { createSaveQueue } from "../shared/save-queue.js";
@@ -58,6 +62,7 @@ export function startWorkspace() {
     logout,
   });
   let priceChart = null,
+    holdingReorder = null,
     intelligence = null,
     aiSettings = null,
     macro = null;
@@ -135,6 +140,8 @@ export function startWorkspace() {
       if (newAccount) openPasskeys({ modal, close, toast });
     } catch (e) {
       model.currentUser = null;
+      holdingReorder?.destroy();
+      holdingReorder = null;
       setChartWorkspaceOwner(null);
       showAuth(signedIn);
       toast(e.message);
@@ -158,6 +165,14 @@ export function startWorkspace() {
   }
   async function logout(all) {
     if (intelligence && !intelligence.canLeave()) return;
+    try {
+      await flushResearchOrders(
+        model.currentUser.id || model.currentUser.username,
+      );
+    } catch {
+      toast("Research order not synced. Retry in Research before signing out.");
+      return;
+    }
     await flushSave();
     if (queue.status.pendingSave || queue.status.saving) {
       toast("Save or export your changes before signing out.");
@@ -168,6 +183,8 @@ export function startWorkspace() {
       refreshEpoch++;
       model.busy = false;
       model.currentUser = null;
+      holdingReorder?.destroy();
+      holdingReorder = null;
       setChartWorkspaceOwner(null);
       model.state = emptyPortfolio();
       model.quotes = {};
@@ -223,6 +240,8 @@ export function startWorkspace() {
     try {
       renderWorkspace();
     } catch {
+      holdingReorder?.destroy();
+      holdingReorder = null;
       priceChart?.destroy();
       priceChart = null;
       $("#app").innerHTML =
@@ -235,6 +254,8 @@ export function startWorkspace() {
     }
   }
   function renderWorkspace() {
+    holdingReorder?.destroy();
+    holdingReorder = null;
     macro?.destroy();
     macro = null;
     intelligence?.destroy();
@@ -284,6 +305,34 @@ export function startWorkspace() {
     document.querySelectorAll("[data-remove-holding]").forEach((button) => {
       button.onclick = () => removeHolding(button.dataset.removeHolding);
     });
+    const holdingList = document.querySelector(".holdings-list");
+    if (holdingList)
+      holdingReorder = mountReorder(holdingList, {
+        itemSelector: ".holding-shell",
+        key: (item) => item.querySelector("[data-holding]").dataset.holding,
+        activationSelector: ".holding",
+        axis: () =>
+          window.matchMedia("(max-width: 850px)").matches ? "x" : "y",
+        onReorder: async (ids) => {
+          const holdings = new Map(
+            model.state.holdings.map((asset) => [asset.id, asset]),
+          );
+          if (
+            ids.length !== holdings.size ||
+            new Set(ids).size !== ids.length ||
+            ids.some((id) => !holdings.has(id))
+          )
+            return;
+          model.state.holdings = ids.map((id) => holdings.get(id));
+          save();
+          await flushSave();
+          if (queue.status.saveProblem)
+            toast("Order not synced", {
+              actionLabel: "Retry",
+              onAction: resolveSync,
+            });
+        },
+      });
     ["add", "add-second", "empty-add"].forEach((id) => {
       if ($("#" + id))
         $("#" + id).onclick = () => {

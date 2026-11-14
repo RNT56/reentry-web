@@ -1,6 +1,8 @@
 import { referenceLevels, chartScale } from "../../domain/chart-levels.js";
 import { historyRanges } from "../../domain/market-history.js";
 import { setAnimatedText, revealChart } from "../../shared/motion.js";
+import { renderChartInk, newChartInkId } from "../../shared/chart-ink.js";
+const inkIds = new WeakMap();
 const cache = new Map(),
   pending = new Map();
 let activeRange = "1mo",
@@ -164,9 +166,17 @@ function draw(root, data, inputs, hidden) {
   const visible = references.levels.filter((l) => !hidden.has(l.id));
   const { low, high, y } = chartScale(points, visible);
   const x = (i) => (points.length === 1 ? 500 : 8 + (i / last) * 984);
-  const line = points
-    .map((p, i) => `${x(i).toFixed(2)},${y(p.price).toFixed(2)}`)
-    .join(" ");
+  if (!inkIds.has(root)) inkIds.set(root, newChartInkId("portfolio"));
+  const ink = renderChartInk(points, {
+    id: inkIds.get(root),
+    x,
+    y,
+    baseline: 195,
+    color: rise ? "#9bd5aa" : "#dca295",
+    highlight: rise ? "#dcf1d5" : "#f1c8bb",
+    className: "history-market-line",
+    endpoint: false,
+  });
   const intraday = ["1d", "1wk"].includes(data.range);
   const date = (time, detail = false) =>
     new Intl.DateTimeFormat("en-GB", {
@@ -190,7 +200,7 @@ function draw(root, data, inputs, hidden) {
     data.conversionUnavailable ? data.currency + " data" : "";
   root.querySelector(".history-body").setAttribute("aria-busy", "false");
   root.querySelector(".history-body").innerHTML =
-    `<div class="history-plot" role="slider" tabindex="0" aria-label="Explore ${escape(data.symbol)} price history" aria-valuemin="0" aria-valuemax="${last}" aria-valuenow="${last}"><svg viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="history-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${color}" stop-opacity=".18"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="M8 12H992 M8 98H992 M8 184H992" class="history-grid"/><path d="M${line.replaceAll(" ", " L")} L${x(last)} 198 L${x(0)} 198Z" fill="url(#history-fill)"/><polyline class="history-market-line" points="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>${visible.map((l) => `<line class="history-reference" x1="8" x2="992" y1="${y(l.price)}" y2="${y(l.price)}" stroke="${l.color}" vector-effect="non-scaling-stroke"/>`).join("")}<line class="history-crosshair" x1="${x(last)}" x2="${x(last)}" y1="5" y2="195"/><path class="history-point" d="M${x(last)} ${y(latest)}h.01" stroke="${color}" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>${visible.map((l) => `<span class="history-level-label level-${l.id}" style="top:${y(l.price) / 2}%;--level-color:${l.color}">${escape(l.label)} ${price(l.price)}</span>`).join("")}<span class="history-axis history-axis-high">${price(high)}</span><span class="history-axis history-axis-low">${price(low)}</span></div><div class="history-dates"><span>${date(points[0].time)}</span><span>${date(points[Math.floor(last / 2)].time)}</span><span>${date(points[last].time)}</span></div>`;
+    `<div class="history-plot" role="slider" tabindex="0" aria-label="Explore ${escape(data.symbol)} price history" aria-valuemin="0" aria-valuemax="${last}" aria-valuenow="${last}"><svg viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true"><defs>${ink.defs}</defs><path d="M8 12H992 M8 98H992 M8 184H992" class="history-grid"/>${ink.markup}${visible.map((l) => `<line class="history-reference" x1="8" x2="992" y1="${y(l.price)}" y2="${y(l.price)}" stroke="${l.color}" vector-effect="non-scaling-stroke"/>`).join("")}<line class="history-crosshair-horizontal" x1="8" x2="992" y1="${y(latest)}" y2="${y(latest)}"/><line class="history-crosshair" x1="${x(last)}" x2="${x(last)}" y1="5" y2="195"/><path class="history-point-ring" d="M${x(last)} ${y(latest)}h.01" stroke="${color}" stroke-opacity=".14" stroke-width="10" stroke-linecap="round" vector-effect="non-scaling-stroke"/><path class="history-point" d="M${x(last)} ${y(latest)}h.01" stroke="${color}" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>${visible.map((l) => `<span class="history-level-label level-${l.id}" style="top:${y(l.price) / 2}%;--level-color:${l.color}">${escape(l.label)} ${price(l.price)}</span>`).join("")}<span class="history-axis history-axis-high">${price(high)}</span><span class="history-axis history-axis-low">${price(low)}</span></div><div class="history-dates"><span>${date(points[0].time)}</span><span>${date(points[Math.floor(last / 2)].time)}</span><span>${date(points[last].time)}</span></div>`;
   root.querySelector(".history-caption").innerHTML =
     `<span>${escape(data.source)} · ${escape(data.currency)}${data.conversionUnavailable ? " · FX unavailable" : ""}</span><span class="history-hover-hint">Drag to explore</span>`;
   let legend = root.querySelector(".history-levels");
@@ -220,7 +230,9 @@ function draw(root, data, inputs, hidden) {
   const plot = root.querySelector(".history-plot"),
     svg = plot.querySelector("svg"),
     crosshair = plot.querySelector(".history-crosshair"),
-    dot = plot.querySelector(".history-point");
+    dot = plot.querySelector(".history-point"),
+    ring = plot.querySelector(".history-point-ring"),
+    horizontal = plot.querySelector(".history-crosshair-horizontal");
   let index = last,
     pressed = false;
   const select = (i, exploring = true) => {
@@ -247,6 +259,9 @@ function draw(root, data, inputs, hidden) {
     crosshair.setAttribute("x1", x(index));
     crosshair.setAttribute("x2", x(index));
     dot.setAttribute("d", `M${x(index)} ${y(point.price)}h.01`);
+    ring.setAttribute("d", `M${x(index)} ${y(point.price)}h.01`);
+    horizontal.setAttribute("y1", y(point.price));
+    horizontal.setAttribute("y2", y(point.price));
     plot.classList.toggle("exploring", exploring);
   };
   const locate = (e) => {

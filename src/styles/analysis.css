@@ -1157,3 +1157,18 @@
     position: static;
   }
 }
+
+/* A sharp observation line, quiet area ink, and a precise inspection marker. */
+.ta-price-line {
+  shape-rendering: geometricPrecision;
+}
+.ta-cross-dot {
+  stroke: #101a14;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+.ta-cross-v,
+.ta-cross-h {
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}

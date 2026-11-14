@@ -396,3 +396,34 @@
     animation: none;
   }
 }
+
+/* Ink follows the observations exactly; the wash only gives the line depth. */
+.chart-ink-line,
+.chart-ink-understroke {
+  shape-rendering: geometricPrecision;
+}
+.chart-ink-end,
+.chart-ink-end-ring,
+.chart-ink-wash {
+  pointer-events: none;
+}
+.history-crosshair-horizontal {
+  stroke: #a2bba035;
+  stroke-width: 0.7;
+  stroke-dasharray: 2 5;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+}
+.history-plot.exploring .history-crosshair-horizontal {
+  opacity: 1;
+}
+.history-point {
+  filter: none;
+  stroke-width: 4;
+}
+.history-point-ring {
+  pointer-events: none;
+}
+.history-plot:not(.exploring) .history-point-ring {
+  stroke-opacity: 0.07;
+}

@@ -1,0 +1,93 @@
+/* Grips share the instrument's surface; the item itself keeps its layout slot. */
+.reorder-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 32px;
+  padding: 5px;
+  border: 0;
+  border-radius: 7px;
+  color: #8ca391;
+  background: transparent;
+  opacity: 0.45;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition:
+    opacity 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+}
+.reorder-handle svg {
+  width: 13px;
+  height: 19px;
+  pointer-events: none;
+}
+.reorder-handle:hover,
+.reorder-handle:focus-visible,
+.reorder-is-dragging .reorder-handle {
+  opacity: 1;
+  color: #d0e5ce;
+  background: #b9e5b50c;
+}
+.reorder-handle:focus-visible {
+  outline: 1px solid #bceca580;
+  outline-offset: 2px;
+}
+.reorder-is-dragging {
+  position: relative;
+  z-index: 8;
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
+  transform: translate(var(--reorder-x, 0px), var(--reorder-y, 0px)) !important;
+  transition: none !important;
+  animation: none !important;
+  border-radius: 12px;
+  background: #18221b;
+  box-shadow:
+    0 12px 28px #0005,
+    0 0 0 1px #b9e5b52a;
+}
+.reorder-is-dragging .reorder-handle {
+  cursor: grabbing;
+}
+.reorder-is-keyboard {
+  box-shadow:
+    0 0 0 1px #bceca580,
+    0 8px 24px #0003;
+}
+.reorder-is-active {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.reorder-announcement {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (hover: none) {
+  .reorder-handle {
+    opacity: 0.65;
+    width: 32px;
+    min-width: 32px;
+    height: 36px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reorder-handle {
+    transition: none;
+  }
+  .reorder-is-dragging {
+    box-shadow: 0 0 0 1px #bceca580;
+  }
+}

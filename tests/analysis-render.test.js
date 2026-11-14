@@ -77,7 +77,7 @@ test("viewport trend color follows its own endpoints", () => {
     html = renderAnalysisPlot(d, s, i, g).html;
   assert.equal(g.from, 1);
   assert.equal(g.to, 3);
-  assert.match(html, /ta-price-line[^>]+stroke="#e3a295"/);
+  assert.match(html, /stop-color="#dca295"/);
   assert.throws(() =>
     chartGeometry(
       data([10]),
