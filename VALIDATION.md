@@ -21,3 +21,14 @@
 - Initial database backup saved in the application volume and copied to `/home/deploy/reentry/backups/reentry-before-launch.sqlite`. This initial on-server backup is not an off-server backup schedule.
 
 Native biometric/passkey-manager enrollment was not automated; server verification was tested with signed authenticator responses. Enroll a passkey after creating your own account on the final HTTPS domain. Unofficial market data and logo coverage remain dependent on the upstream providers.
+
+## Chart reference levels and platform foundation — 14 November 2026
+
+- ESLint checks the complete browser/server/test/script codebase, including restricted domain dependencies. Production build and all 27 Node tests passed; all 5 deployment guard tests passed.
+- Added coverage for currency-safe reference lines, FIFO/fees/whole-share changes, invalid targets, save coalescing/conflicts/retries, bounded provider caching, provider replacement, migration rollback/downgrade protection, immutable trade commands, scenario evidence/knowledge time, graph cycles and routes.
+- Production dependency audit reported zero vulnerabilities. A rebuilt production image passed account isolation, container-restart persistence, backup integrity and restore smoke checks with disposable containers/volumes.
+- Browser verified Apple USD reference conversion, SAP native EUR levels, quantity changes, +10% and custom +17% targets, invalid quantity removing the target, settings save and selected-holding continuity, purchase and sale dialogs, and the linked article/scenario replay.
+- Explore is a fictional product preview, not live Intel research. Replay correctly changed from Watching to Condition met; a sampled price observation is separate evidence. Research and journal views are interactive and mobile responsive.
+- SQLite schema and portfolio JSON stay at version 1. Existing credentials, holdings and passkeys are not migrated or rewritten by this release. No test trades or accounts were created in production.
+
+- Final UI regression: rapid asset switches during quote refresh, browser back, EUR/USD reference lines, level visibility toggles and 320px/390px layouts passed; the final browser console contained no errors. Screenshots use disposable local portfolio fixtures.

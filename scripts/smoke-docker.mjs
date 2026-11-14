@@ -20,7 +20,9 @@ async function ready() {
   for (let i = 0; i < 40; i++) {
     try {
       if ((await fetch(base + "/healthz")).ok) return;
-    } catch {}
+    } catch {
+      /* Disposable smoke-test cleanup/readiness is best effort. */
+    }
     await new Promise((r) => setTimeout(r, 250));
   }
   console.error(docker("logs", name));
@@ -150,9 +152,13 @@ try {
 } finally {
   try {
     docker("rm", "-f", name);
-  } catch {}
+  } catch {
+    /* Disposable smoke-test cleanup/readiness is best effort. */
+  }
   try {
     docker("volume", "rm", volume);
-  } catch {}
+  } catch {
+    /* Disposable smoke-test cleanup/readiness is best effort. */
+  }
   rmSync(directory, { recursive: true, force: true });
 }

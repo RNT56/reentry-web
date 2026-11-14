@@ -11,7 +11,13 @@ await build({
   outfile: "dist/public/app.js",
   legalComments: "eof",
 });
-await copyFile("src/style.css", "dist/public/style.css");
+await build({
+  entryPoints: ["src/style.css"],
+  bundle: true,
+  minify: true,
+  outfile: "dist/public/style.css",
+  external: ["/fonts/*"],
+});
 await copyFile("src/index.html", "dist/public/index.html");
 await cp("public", "dist/public", { recursive: true });
 await mkdir("dist/public/fonts", { recursive: true });

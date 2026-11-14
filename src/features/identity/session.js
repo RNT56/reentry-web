@@ -3,33 +3,8 @@ import {
   startAuthentication,
   browserSupportsWebAuthn,
 } from "@simplewebauthn/browser";
-const esc = (s) =>
-  String(s ?? "").replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
-      ],
-  );
-export async function request(path, method = "GET", body) {
-  const res = await fetch(path, {
-    method,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", "X-Reentry-Request": "1" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    throw Error("The server is unavailable. Please try again.");
-  }
-  if (!res.ok)
-    throw Object.assign(Error(data.error || "Request failed."), {
-      status: res.status,
-    });
-  return data;
-}
+import { esc } from "../../shared/format.js";
+import { request } from "../../shared/http.js";
 const mark =
   '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 23V9h14M12 26 26 12M17 12h9v9" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 export function showAuth(onAuthenticated, registration = true, mode = "login") {

@@ -14,7 +14,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force && mkdir /data && chown node:node /data
 COPY --from=build --chown=node:node /app/dist/public ./dist/public
 COPY --chown=node:node server ./server
-COPY --chown=node:node src/server.js src/assets.js src/validation.js src/history.js ./src/
+COPY --chown=node:node src/domain ./src/domain
 COPY --chown=node:node scripts/backup.mjs ./scripts/backup.mjs
 USER node
 VOLUME /data

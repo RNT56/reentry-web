@@ -32,7 +32,7 @@ export function validatePortfolio(s) {
       ids.has(h.id) ||
       !str(h.name) ||
       !str(h.symbol, 32) ||
-      !/^[A-Za-z0-9.^=\-]+$/.test(h.symbol) ||
+      !/^[A-Za-z0-9.^=-]+$/.test(h.symbol) ||
       !["Trade Republic", "Consorsbank", "Other"].includes(h.broker) ||
       !Array.isArray(h.lots) ||
       !h.lots.length ||
@@ -78,7 +78,7 @@ export function validatePortfolio(s) {
     )
       fail();
     ids.add(sale.id);
-    if (!/^[A-Za-z0-9.^=\-]+$/.test(sale.symbol)) fail();
+    if (!/^[A-Za-z0-9.^=-]+$/.test(sale.symbol)) fail();
     if (sale.targetGain != null && !num(sale.targetGain, 0, 1000)) fail();
     if (sale.taxRate != null && !num(sale.taxRate, 0, 100)) fail();
     if (sale.precision != null && ![2, 8].includes(sale.precision)) fail();

@@ -12,7 +12,7 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
-import { emptyPortfolio } from "./store.js";
+import { emptyPortfolio } from "../store.js";
 const scrypt = promisify(scryptCb),
   digest = (v) => createHash("sha256").update(v).digest("hex"),
   token = () => randomBytes(32).toString("base64url");

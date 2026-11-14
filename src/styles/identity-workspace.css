@@ -1,0 +1,728 @@
+/* Account + mobile workspace */
+.auth-shell {
+  min-height: 100dvh;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background:
+    radial-gradient(ellipse at 50% 0, #b9f68b09, transparent 55%), #101512;
+}
+.auth-brand {
+  font-family: Manrope;
+  font-weight: 700;
+  font-size: 25px;
+  letter-spacing: -1px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 35px;
+}
+.auth-brand svg {
+  width: 30px;
+  color: var(--green);
+}
+.auth-card {
+  width: 100%;
+  max-width: 405px;
+  padding: 31px;
+  border: 1px solid #ffffff10;
+  border-radius: 20px;
+  background: #192019;
+  box-shadow: 0 20px 90px #0003;
+}
+.auth-card h1 {
+  font-size: 30px;
+  letter-spacing: -1px;
+  font-weight: 500;
+  margin: 10px 0;
+}
+.auth-card .sub {
+  font-size: 12px;
+}
+.auth-card .field {
+  margin: 19px 0;
+}
+.auth-card input {
+  min-height: 48px;
+  font-size: 15px;
+}
+.auth-submit {
+  width: 100%;
+  justify-content: space-between;
+  margin-top: 8px;
+  min-height: 46px;
+}
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+  gap: 14px;
+}
+.auth-links .link {
+  font-size: 11px;
+}
+.auth-footer {
+  font-size: 11px;
+  color: #697d64;
+  margin-top: 24px;
+}
+.passkey-login {
+  width: 100%;
+  margin: 27px 0 0;
+  min-height: 46px;
+  font-size: 12px;
+}
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  color: #637b5c;
+  margin: 22px 0;
+}
+.auth-or:before,
+.auth-or:after {
+  content: "";
+  height: 1px;
+  background: #ffffff0d;
+  flex: 1;
+}
+.password-field {
+  position: relative;
+}
+.password-field input {
+  padding-right: 55px;
+}
+.password-field button {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  padding: 9px;
+  color: #9cb48e;
+  font-size: 10px;
+}
+.recovery-key {
+  display: block;
+  overflow-wrap: anywhere;
+  background: #0f1710;
+  border: 1px solid #b9f68b22;
+  border-radius: 9px;
+  padding: 17px;
+  line-height: 1.9;
+  letter-spacing: 1px;
+  font-size: 14px;
+  margin: 24px 0;
+  color: #c6e2b1;
+  user-select: all;
+}
+.recovery-card > .secondary {
+  width: 100%;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 25px 0 16px;
+  font-size: 12px;
+}
+.check-row input {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  accent-color: var(--green);
+}
+.account-heading {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+}
+.account-avatar {
+  background: #b9f68b15;
+  border: 1px solid #b9f68b22;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #c0e3a9;
+  font-size: 18px;
+}
+.account-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 27px;
+}
+.account-actions .secondary {
+  justify-content: space-between;
+  min-height: 46px;
+}
+.account-actions .link {
+  margin-top: 12px;
+}
+.account-card .sub {
+  font-size: 11px;
+  margin-top: 5px;
+}
+.settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 1100px;
+}
+.account-card {
+  grid-column: 1 / -1;
+}
+.account-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.account-actions .link {
+  grid-column: 1 / -1;
+}
+.asset-logo {
+  position: relative;
+  overflow: hidden;
+  background: #f0f3ed;
+  isolation: isolate;
+}
+.asset-logo > span {
+  color: #4d654c;
+}
+.asset-logo img {
+  position: absolute;
+  inset: 0;
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  padding: 5px;
+  background: #f7f9f4;
+}
+.logo-credit {
+  font-size: 16px;
+  line-height: 1.4;
+  color: #82967a;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.logo-credit:hover {
+  color: #c8e3b4;
+}
+.foot {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sync-error {
+  color: #e4a199 !important;
+}
+.asset-search-field {
+  margin-top: 15px;
+}
+.asset-filters {
+  display: flex;
+  gap: 5px;
+  margin: 12px 0 6px;
+}
+.asset-filters[hidden] {
+  display: none;
+}
+.asset-filters button {
+  font-size: 10px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  color: #7f9675;
+}
+.asset-filters button.selected {
+  background: #b9f68b12;
+  color: #c6dfb4;
+}
+.search-results {
+  max-height: 235px;
+}
+.search-results .asset-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+.asset-result > .stock-icon {
+  width: 33px;
+  height: 33px;
+  border-radius: 9px;
+}
+.asset-result > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+.asset-result b {
+  font-size: 11px;
+  font-weight: 500;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asset-result small {
+  font-size: 9px;
+}
+.asset-select-arrow {
+  color: #799e69;
+  font-size: 14px;
+}
+.search-status {
+  padding: 14px;
+  font-size: 11px;
+  color: #809177;
+}
+.manual-result {
+  color: #9ebc8b;
+  font-size: 10px !important;
+}
+.selected-stock {
+  justify-content: flex-start;
+  gap: 10px;
+}
+.selected-stock > span {
+  flex: 1;
+  min-width: 0;
+}
+.selected-stock small {
+  display: block;
+  margin-top: 5px;
+  font-size: 9px;
+  color: #829b77;
+}
+.selected-stock b {
+  font-weight: 500;
+}
+.selected-stock button {
+  padding: 8px;
+}
+.entry-mode {
+  display: flex;
+  gap: 4px;
+  margin: 17px 0;
+  background: #111811;
+  padding: 4px;
+  border-radius: 8px;
+  width: fit-content;
+}
+.entry-mode button {
+  font-size: 10px;
+  padding: 7px 13px;
+  border-radius: 5px;
+  color: #839a79;
+}
+.entry-mode button.on {
+  background: #32452a;
+  color: #d2ebc2;
+}
+.entry-preview {
+  font-size: 10px;
+  color: #819977;
+  margin: -3px 0 20px;
+  line-height: 1.7;
+}
+.asset-tax-notice {
+  border: 1px solid #d4bc7a20;
+  background: #d4bc7a06;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 16px 0;
+}
+.asset-tax-notice p {
+  font-size: 10px;
+  color: #acac87;
+  line-height: 1.7;
+  margin: 10px 0;
+}
+.mobile-target-dock {
+  display: none;
+}
+.account-username {
+  font-size: 11px;
+  color: #91a687;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.account-username .icon {
+  width: 12px;
+  height: 12px;
+}
+.passkey-list .lot-row {
+  align-items: center;
+}
+.passkey-list .small {
+  display: block;
+  margin-top: 6px;
+}
+.passkey-list .lot-row .link {
+  min-height: 44px;
+}
+.settings-card label,
+.trade-details label {
+  font-size: 11px;
+}
+.position-context {
+  font-size: 10px;
+}
+.small {
+  font-size: 11px;
+}
+@media (max-width: 850px) {
+  .nav {
+    position: fixed;
+    z-index: 15;
+    left: 16px;
+    right: 16px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    grid-column: auto;
+    display: flex;
+    justify-content: center;
+    border: 1px solid #c2dbac20;
+    background: #182217f2;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 8px 40px #0008;
+    border-radius: 15px;
+    padding: 5px;
+    max-width: 480px;
+    margin: auto;
+  }
+  .nav button {
+    min-height: 44px;
+    flex: 1;
+    justify-content: center;
+    font-size: 12px;
+    border-radius: 10px;
+  }
+  .app-header {
+    height: 71px;
+    min-height: 71px;
+    display: flex;
+    gap: 12px;
+    padding: 17px 20px;
+  }
+  .header-right {
+    display: flex;
+    gap: 10px;
+  }
+  .private {
+    display: none;
+  }
+  .app-header .small-button {
+    min-height: 38px;
+  }
+  .app-header .small-button > span {
+    display: block;
+  }
+  .account-username {
+    display: none;
+  }
+  main {
+    padding-bottom: 100px;
+  }
+  .overview {
+    padding: 23px 0;
+  }
+  .balance {
+    font-size: 36px;
+    margin: 10px 0;
+  }
+  .overview-secondary {
+    margin-top: 17px;
+    padding-top: 16px;
+  }
+  .overview-secondary strong {
+    font-size: 20px;
+  }
+  .overview-secondary .small {
+    font-size: 10px;
+  }
+  .portfolio-total > .small {
+    font-size: 10px;
+  }
+  .section-top h2 {
+    font-size: 13px;
+  }
+  .holding {
+    min-width: 190px;
+    width: 190px;
+  }
+  .holding .stock-info > span {
+    font-size: 10px;
+  }
+  .holding-values {
+    font-size: 10px;
+  }
+  .holding-values b {
+    font-size: 11px;
+  }
+  .holding .stock-icon {
+    width: 34px;
+    height: 34px;
+  }
+  .planner {
+    overflow: visible;
+  }
+  .panel-head {
+    border-radius: 14px 14px 0 0;
+  }
+  .results {
+    border-radius: 0 0 14px 14px;
+  }
+  .mobile-target-dock {
+    display: flex;
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 68px);
+    z-index: 14;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    background: #263821f5;
+    border: 1px solid #b9f68b30;
+    backdrop-filter: blur(15px);
+    padding: 12px 14px;
+    border-radius: 13px;
+    box-shadow: 0 6px 35px #0006;
+    max-width: 480px;
+    margin: auto;
+  }
+  .mobile-target-dock > div {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 3px 8px;
+  }
+  .mobile-target-dock span {
+    font-size: 9px;
+    color: #a9c196;
+    grid-column: 1/-1;
+  }
+  .mobile-target-dock b {
+    font-family: Manrope;
+    font-size: 23px;
+    font-weight: 500;
+    color: #d7f7c0;
+    letter-spacing: -0.6px;
+  }
+  .mobile-target-dock small {
+    font-size: 9px;
+    color: #9bb28a;
+  }
+  .mobile-target-dock button {
+    padding: 12px;
+    font-size: 11px;
+    min-height: 44px;
+  }
+  .shell:has(.mobile-target-dock) main {
+    padding-bottom: 180px;
+  }
+  .record-button {
+    display: none;
+  }
+  .result-note {
+    margin-top: 16px;
+  }
+  .target-price {
+    font-size: 49px;
+  }
+  .auth-shell {
+    padding: 28px 18px;
+    min-height: 100dvh;
+  }
+  .auth-card {
+    padding: 27px 23px;
+    max-width: 405px;
+  }
+  .auth-brand {
+    margin-bottom: 28px;
+  }
+  .auth-footer {
+    font-size: 11px;
+  }
+  .auth-card input {
+    font-size: 16px;
+  }
+  .auth-links button {
+    min-height: 44px;
+  }
+  .account-actions {
+    grid-template-columns: 1fr;
+  }
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .account-card {
+    grid-column: auto;
+  }
+  .foot {
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .foot > span {
+    font-size: 10px;
+  }
+  .foot .link {
+    font-size: 10px;
+  }
+  .logo-credit {
+    font-size: 16px;
+    width: 100%;
+    order: 3;
+  }
+  .asset-result {
+    min-height: 58px;
+  }
+  .asset-filters button {
+    min-height: 38px;
+  }
+  .asset-filters {
+    gap: 3px;
+  }
+  .entry-mode button {
+    min-height: 37px;
+    font-size: 12px;
+  }
+  .entry-preview {
+    font-size: 11px;
+  }
+  dialog {
+    width: 480px;
+    padding: 26px 22px;
+    max-height: calc(100dvh - 30px);
+  }
+  dialog:has(#purchase-form) {
+    margin-bottom: 12px;
+    border-radius: 22px;
+    max-height: calc(100dvh - 24px);
+  }
+  dialog input,
+  dialog select {
+    font-size: 16px;
+    min-height: 46px;
+  }
+  dialog .form-row input {
+    font-size: 17px;
+  }
+  dialog .actions button {
+    min-height: 44px;
+    font-size: 12px;
+  }
+  .trade-details input {
+    font-size: 16px;
+  }
+  .trade-details summary {
+    min-height: 28px;
+    font-size: 12px;
+  }
+  .trade-details label {
+    font-size: 11px;
+  }
+  .quantity-actions {
+    font-size: 11px;
+  }
+  .quantity-actions button {
+    min-height: 32px;
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+  .quote-line {
+    font-size: 10px;
+  }
+  .quote-line .link {
+    min-height: 30px;
+    font-size: 11px;
+  }
+  .result-note {
+    font-size: 10px;
+  }
+  .curve-label {
+    font-size: 10px;
+  }
+  .asset-tax-notice p {
+    font-size: 12px;
+  }
+  .auth-card h1 {
+    font-size: 30px;
+  }
+  .stock-info b {
+    font-size: 12px;
+  }
+  .settings-card .sub {
+    font-size: 12px;
+  }
+}
+
+.dock-target {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  min-height: 44px;
+}
+.picker-credit {
+  display: block;
+  text-align: center;
+  margin-top: 20px;
+  font-size: 16px;
+}
+@media (max-width: 850px) {
+  .mobile-target-dock .dock-target {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 2px 8px;
+    padding: 0;
+    text-align: left;
+  }
+  .mobile-target-dock .dock-target span {
+    grid-column: 1/-1;
+  }
+  .mobile-target-dock .dock-target small {
+    align-self: center;
+  }
+  .overview {
+    gap: 16px;
+    padding: 20px 0;
+  }
+  .overview-secondary {
+    margin-top: 9px;
+    padding-top: 13px;
+  }
+  .overview-secondary > div {
+    gap: 7px;
+  }
+  .icon-button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .quantity-actions button {
+    min-height: 44px;
+  }
+  .trade-details summary {
+    min-height: 44px;
+  }
+}
+
+.history-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.history-identity > div {
+  min-width: 0;
+}
+.history-identity .stock-icon {
+  width: 36px;
+  height: 36px;
+}
+.history-targets {
+  flex-wrap: wrap;
+}

@@ -1,20 +1,10 @@
-export const historyRanges = {
-  "1d": { label: "1D", interval: "5m" },
-  "1wk": { label: "1W", interval: "15m" },
-  "1mo": { label: "1M", interval: "1d" },
-  "3mo": { label: "3M", interval: "1d" },
-  "1y": { label: "1Y", interval: "1d" },
-  "5y": { label: "5Y", interval: "1wk" },
-};
-
+import {
+  historyRanges,
+  validateHistoryInput,
+} from "../../src/domain/market-history.js";
+import { currencyUnit } from "../../src/domain/currency.js";
 export function historyPath(symbol, range = "1mo") {
-  if (
-    !/^[A-Za-z0-9.^=\-]{1,32}$/.test(symbol) ||
-    !Object.hasOwn(historyRanges, range)
-  )
-    throw Object.assign(Error("Invalid asset or chart range."), {
-      statusCode: 400,
-    });
+  validateHistoryInput(symbol, range);
   if (range === "1wk") {
     const end = Math.floor(Date.now() / 1000);
     return `/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${end - 7 * 86400}&period2=${end}&interval=15m&includePrePost=false`;
@@ -27,13 +17,7 @@ export function normalizeHistory(payload, symbol, range) {
   if (!result || payload.chart.error)
     throw Error("Price history is unavailable for this asset.");
   const meta = result.meta || {};
-  const units = {
-    GBp: ["GBP", 0.01],
-    GBX: ["GBP", 0.01],
-    ILA: ["ILS", 0.01],
-    ZAc: ["ZAR", 0.01],
-  };
-  const [currency, unit] = units[meta.currency] || [meta.currency, 1];
+  const [currency, unit] = currencyUnit(meta.currency);
   if (!/^[A-Z]{3}$/.test(currency || ""))
     throw Error("The history currency is unavailable.");
   const closes = result.indicators?.quote?.[0]?.close || [];

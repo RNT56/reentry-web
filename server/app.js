@@ -5,9 +5,11 @@ import rateLimit from "@fastify/rate-limit";
 import serveStatic from "@fastify/static";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { openStore, validatePortfolio } from "./store.js";
-import { registerAuth } from "./auth.js";
-import { api } from "../src/server.js";
+import { openStore } from "./store.js";
+import { registerAuth } from "./identity/auth.js";
+import { registerPortfolioRoutes } from "./portfolio/routes.js";
+import { registerMarketRoutes } from "./market/routes.js";
+import { createMarketService } from "./market/service.js";
 export async function createApp(options = {}) {
   const origin =
     options.origin || process.env.APP_ORIGIN || "http://localhost:4173";
@@ -89,53 +91,8 @@ export async function createApp(options = {}) {
     }
   });
   await registerAuth(app, db, config);
-  app.get("/api/portfolio", { preHandler: app.requireUser }, async (req) => {
-    const r = db
-      .prepare("SELECT data,revision FROM portfolios WHERE user_id=?")
-      .get(req.auth.user_id);
-    return { state: JSON.parse(r.data), revision: r.revision };
-  });
-  app.put(
-    "/api/portfolio",
-    { preHandler: app.requireUser },
-    async (req, reply) => {
-      const data = validatePortfolio(req.body?.state),
-        revision = req.body?.revision;
-      if (!Number.isSafeInteger(revision) || revision < 0)
-        return reply.code(400).send({ error: "Invalid revision." });
-      const row = db
-        .prepare(
-          "UPDATE portfolios SET data=?,revision=revision+1 WHERE user_id=? AND revision=? RETURNING revision",
-        )
-        .get(JSON.stringify(data), req.auth.user_id, revision);
-      if (!row)
-        return reply.code(409).send({
-          error:
-            "Your portfolio changed in another tab or device. Export your changes before reloading.",
-        });
-      return row;
-    },
-  );
-  app.get(
-    "/api/search",
-    { preHandler: app.requireUser },
-    async (req, reply) => {
-      const response = await api(new URL(req.url, origin));
-      return reply.code(response.status).send(await response.json());
-    },
-  );
-  app.get("/api/quote", { preHandler: app.requireUser }, async (req, reply) => {
-    const response = await api(new URL(req.url, origin));
-    return reply.code(response.status).send(await response.json());
-  });
-  app.get(
-    "/api/history",
-    { preHandler: app.requireUser },
-    async (req, reply) => {
-      const response = await api(new URL(req.url, origin));
-      return reply.code(response.status).send(await response.json());
-    },
-  );
+  registerPortfolioRoutes(app, db);
+  registerMarketRoutes(app, options.marketService || createMarketService());
   app.get("/healthz", async () => {
     db.prepare("SELECT 1").get();
     return { ok: true, revision: process.env.REENTRY_REVISION || null };

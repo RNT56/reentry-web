@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { calculate, target, fifo } from "../src/engine.js";
+import { calculate, target, fifo } from "../src/domain/reentry.js";
 const lots = [{ qty: 100, price: 100, fee: 0, date: "2025-01-01" }];
 test("original 27% example", () => {
   const r = calculate(lots, 100, 150, 0, 0, 27);

@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { historyPath, normalizeHistory } from "../src/history.js";
-import { api } from "../src/server.js";
+import {
+  historyPath,
+  normalizeHistory,
+} from "../server/market/yahoo-history.js";
+import { createMarketService } from "../server/market/service.js";
 const payload = (currency = "USD") => ({
   chart: {
     result: [
@@ -28,6 +31,9 @@ test("history ranges are bounded and symbols stay exact", () => {
     7 * 86400,
   );
   for (const [symbol, range] of [
+    [undefined, "1mo"],
+    [["AAPL"], "1mo"],
+    ["AAPL", ["1mo"]],
     ["AAPL", "max"],
     ["AAPL", "__proto__"],
     ["../../etc", "1d"],
@@ -71,9 +77,8 @@ test("single points, duplicates and invalid provider metadata are handled", () =
   );
   assert.throws(() => normalizeHistory(payload("INVALID"), "AAPL", "1mo"));
 });
-test("invalid history API input fails before an upstream request", async () => {
-  const response = await api(
-    new URL("http://localhost/api/history?symbol=AAPL&range=bad"),
-  );
-  assert.equal(response.status, 400);
+test("invalid history input fails before an upstream request", () => {
+  assert.throws(() => createMarketService().history("AAPL", "bad"), {
+    statusCode: 400,
+  });
 });
