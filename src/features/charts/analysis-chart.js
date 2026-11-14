@@ -11,6 +11,7 @@ import {
 } from "../../domain/chart-workspace.js";
 import { convertDrawingCurrency } from "../../domain/chart-currency.js";
 import { technicalIndicators } from "../../domain/technical-analysis.js";
+import { aiOverlayDrawings, renderAIOverlays } from "./ai-overlays.js";
 import {
   chartGeometry,
   renderAnalysisPlot,
@@ -56,7 +57,16 @@ export function setChartWorkspaceOwner(ownerId) {
   activeOwner =
     ownerId === null || ownerId === undefined ? null : String(ownerId);
 }
-export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
+export function mountAnalysisChart(
+  root,
+  asset,
+  {
+    ownerId = "session",
+    onContextChange = () => {},
+    onAISelect = () => {},
+    onAITree = () => {},
+  } = {},
+) {
   const owner = String(ownerId),
     key = owner + ":" + asset.symbol,
     instance = Symbol(key);
@@ -90,7 +100,14 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
     storageGeneration = 0,
     resizeFrame = 0;
   let undo = [],
-    redo = [];
+    redo = [],
+    aiLayer = null,
+    aiVersion = "null",
+    contextVersion = "";
+  const chartContext = () => ({
+    range: data?.range || state.range,
+    currency: data?.currency || state.currency,
+  });
   if (!unloadInstalled) {
     unloadInstalled = true;
     addEventListener("beforeunload", (e) => {
@@ -147,7 +164,7 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
     redo = [];
   }
   root.classList.add("analysis-chart");
-  root.innerHTML = `<div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-heading"><div class="ta-readout"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
+  root.innerHTML = `<div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-heading"><div class="ta-readout"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
     historyRanges,
   )
     .map(
@@ -176,6 +193,27 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
       "",
     )}</div></details><button class="secondary" data-ta-save disabled>Save</button></div></div><div class="ta-active-row"><span data-ta-guide>Inspect</span><div data-ta-selected></div><div class="ta-zoom"><button data-ta-pan="-1" aria-label="Pan chart left">‹</button><button data-ta-zoom="0.65" aria-label="Zoom in">+</button><button data-ta-zoom="1.5" aria-label="Zoom out">−</button><button data-ta-fit aria-label="Fit all observations">Fit</button><button data-ta-pan="1" aria-label="Pan chart right">›</button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="Explore ${esc(asset.symbol)}. Arrow keys inspect; Enter places a drawing anchor." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div>`;
   const plot = root.querySelector(".ta-plot");
+  const aiRail = document.createElement("div");
+  aiRail.className = "ta-ai-rail";
+  aiRail.setAttribute("role", "group");
+  aiRail.setAttribute("aria-label", "AI chart scenario focus");
+  root.querySelector(".ta-toolbar").append(aiRail);
+  function updateAIRail() {
+    const layer =
+      aiLayer?.visible && aiLayer.currency === data?.currency ? aiLayer : null;
+    const html = layer
+      ? `<span>AI</span><div><button data-ta-ai-scenario="" aria-pressed="${!layer.selectedKey}">All levels</button>${(layer.scenarios || []).map((b) => `<button data-ta-ai-scenario="${esc(b.eventKey)}" aria-pressed="${layer.selectedKey === b.eventKey}">${esc(b.title)}</button>`).join("")}</div>${layer.setId ? '<button class="ta-ai-tree" data-ta-ai-tree aria-label="Open AI scenario tree">Tree ↗</button>' : ""}`
+      : "";
+    if (aiRail.innerHTML === html) return;
+    const focused = aiRail.contains(document.activeElement)
+      ? document.activeElement.dataset.taAiScenario
+      : undefined;
+    aiRail.innerHTML = html;
+    if (focused !== undefined)
+      aiRail
+        .querySelector(`[data-ta-ai-scenario="${CSS.escape(focused)}"]`)
+        ?.focus({ preventScroll: true });
+  }
   function updateChrome() {
     if (!live()) return;
     const locked = !ready || busy || saving || managing;
@@ -266,6 +304,13 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
                     : "Private · " + slot + "/3",
         conflict,
       );
+    const context = chartContext(),
+      nextContext = JSON.stringify(context);
+    if (contextVersion !== nextContext) {
+      contextVersion = nextContext;
+      onContextChange(context);
+    }
+    updateAIRail();
   }
   function message(value = "") {
     if (live()) root.querySelector(".ta-message").textContent = value;
@@ -273,13 +318,23 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
   function draw(reveal = false) {
     if (!data || !live()) return;
     const width = plot.clientWidth;
-    geometry = chartGeometry(data, state, indicators, width);
+    const activeAI =
+      aiLayer?.visible && aiLayer.currency === data.currency ? aiLayer : null;
+    // AI geometry is a transient display layer, never part of a personal workspace.
+    const displayed = activeAI
+      ? {
+          ...state,
+          drawings: [...state.drawings, ...aiOverlayDrawings(activeAI)],
+        }
+      : state;
+    geometry = chartGeometry(data, displayed, indicators, width);
     const result = renderAnalysisPlot(
       data,
       state,
       indicators,
       geometry,
       selected,
+      renderAIOverlays(activeAI, geometry),
     );
     plot.innerHTML = result.html;
     plot.setAttribute("aria-busy", "false");
@@ -695,6 +750,12 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
   }
   plot.onpointerdown = (e) => {
     if (!editable() || !geometry || e.button !== 0) return;
+    const aiTarget = e.target.closest("[data-ai-scenario]");
+    if (tool === "inspect" && aiTarget) {
+      e.preventDefault();
+      onAISelect(aiTarget.dataset.aiScenario);
+      return;
+    }
     const point = locate(e);
     if (!point || point.y > geometry.B) return;
     const target = e.target.closest("[data-drawing]");
@@ -950,6 +1011,14 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
   root.onclick = async (e) => {
     const b = e.target.closest("button");
     if (!b || !root.contains(b)) return;
+    if (b.hasAttribute("data-ta-ai-scenario")) {
+      onAISelect(b.dataset.taAiScenario || null);
+      return;
+    }
+    if (b.hasAttribute("data-ta-ai-tree")) {
+      onAITree();
+      return;
+    }
     if (b.dataset.taSlot) {
       await switchSlot(Number(b.dataset.taSlot));
       return;
@@ -999,7 +1068,8 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
       pendingAnchor = null;
       selected = null;
       root.querySelector(".ta-name").value = state.name;
-      mark();
+      reconcileDirty();
+      updateChrome();
       if (data.range !== state.range || data.currency !== state.currency) {
         if (!(await loadHistory({ rollback: previous })) && live()) {
           undo = previousUndo;
@@ -1018,7 +1088,8 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
       pendingAnchor = null;
       selected = null;
       root.querySelector(".ta-name").value = state.name;
-      mark();
+      reconcileDirty();
+      updateChrome();
       if (data.range !== state.range || data.currency !== state.currency) {
         if (!(await loadHistory({ rollback: previous })) && live()) {
           undo = previousUndo;
@@ -1130,6 +1201,15 @@ export function mountAnalysisChart(root, asset, { ownerId = "session" } = {}) {
   updateChrome();
   loadWorkspaces();
   return {
+    getContext: chartContext,
+    setAILayer(layer) {
+      if (!live()) return;
+      const nextVersion = versionOf(layer);
+      if (aiVersion === nextVersion) return;
+      aiVersion = nextVersion;
+      aiLayer = layer ? clone(layer) : null;
+      if (data && !busy) draw();
+    },
     isDirty: () => dirty,
     canLeave: () => true,
     destroy() {

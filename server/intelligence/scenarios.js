@@ -1,6 +1,7 @@
 import { id, fail } from "../platform/util.js";
 import { evaluateBranch } from "../../src/domain/scenarios.js";
 import { currencyUnit } from "../../src/domain/currency.js";
+import { observeChartPrices } from "./chart-observations.js";
 export function createSet(
   db,
   user,
@@ -123,12 +124,14 @@ export function setView(db, row, asOf = Date.now()) {
     counts: { prices, events: events.filter((o) => o.verified).length },
   };
 }
-export async function observePrice(db, market, row) {
+export async function observePrice(db, market, row, now = Date.now()) {
+  const provenance = row.provenance ? JSON.parse(row.provenance) : null;
+  if (provenance?.kind === "ai-chart")
+    return observeChartPrices(db, market, row, now);
   const q = await market.quote(row.symbol),
     [currency, unit] = currencyUnit(q.originalCurrency || q.currency),
     value = (q.originalPrice || q.price) * unit,
-    occurred = q.time * 1000,
-    now = Date.now();
+    occurred = q.time * 1000;
   if (
     !Number.isFinite(value) ||
     value <= 0 ||

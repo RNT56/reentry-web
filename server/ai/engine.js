@@ -1,7 +1,13 @@
-import { effectiveModel } from "./catalog.js";
+import { effectiveModel, priceFor, reservationFor } from "./catalog.js";
 import { id, fail, transaction } from "../platform/util.js";
-import { preferences, reserve, settle, release } from "./billing.js";
+import { preferences, spending, reserve, settle, release } from "./billing.js";
 import { makePrompt, validateResult, PROMPT_VERSION } from "./contract.js";
+import {
+  buildChartSnapshot,
+  makeChartPrompt,
+  validateChartResult,
+  chartResultSchema,
+} from "./chart-contract.js";
 import { collectSources } from "../intelligence/sources.js";
 import { createSet, observePrice } from "../intelligence/scenarios.js";
 export function createEngine({
@@ -17,6 +23,187 @@ export function createEngine({
     running = null,
     stopped = false,
     aborter;
+  const chartQuotes = new Map();
+  const chartSchemaInput = JSON.stringify(chartResultSchema);
+  function chartAccess(user) {
+    if (paused()) throw fail("AI is paused by the owner.", 503);
+    const p = preferences(db, user);
+    if (!enabled) throw fail("Chart AI is unavailable on this server.", 503);
+    if (!vault.available || !p.enabled || !p.consent_at)
+      throw fail("Connect your key and enable AI in settings.", 409);
+    if (
+      !db
+        .prepare("SELECT 1 FROM ai_credentials WHERE user_id=? AND provider=?")
+        .get(user, p.provider)
+    )
+      throw fail("Connect your own provider key first.", 409);
+    if (
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM ai_jobs WHERE user_id=? AND status IN ('queued','running')",
+        )
+        .get(user).n >= 2
+    )
+      throw fail("Two jobs are already queued or running.", 429);
+    if (
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM ai_jobs WHERE user_id=? AND created_at>?",
+        )
+        .get(user, Date.now() - 86400000).n >= 40
+    )
+      throw fail("Daily research limit reached. Try again tomorrow.", 429);
+    if (
+      db
+        .prepare("SELECT COUNT(*) AS n FROM scenario_sets WHERE user_id=?")
+        .get(user).n >= 500
+    )
+      throw fail("Scenario limit reached. No AI request was sent.", 409);
+    return p;
+  }
+  function chartBudget(user, prompt, model, approved) {
+    const p = preferences(db, user),
+      maximum = reservationFor(prompt + chartSchemaInput, priceFor(model)),
+      totals = spending(db, user);
+    if (
+      maximum > p.run_limit ||
+      maximum + totals.spent + totals.held > p.monthly_limit
+    )
+      throw fail("Spending limit reached. No AI request was sent.", 409);
+    if (approved !== undefined && maximum > approved)
+      throw fail("Model pricing changed. Preview this analysis again.", 409);
+    return {
+      maximum,
+      totals,
+      monthlyLimit: p.monthly_limit,
+      runLimit: p.run_limit,
+      available: Math.max(0, p.monthly_limit - totals.spent - totals.held),
+    };
+  }
+  async function estimateChart(
+    user,
+    { symbol, range = "1y", currency = "EUR" },
+  ) {
+    if (
+      !["1mo", "3mo", "1y"].includes(range) ||
+      !["EUR", "USD"].includes(currency)
+    )
+      throw fail("Choose 1M, 3M or 1Y and EUR or USD.");
+    const p = chartAccess(user),
+      asset = db
+        .prepare(
+          "SELECT symbol,name FROM research_assets WHERE user_id=? AND symbol=?",
+        )
+        .get(user, symbol);
+    if (!asset) throw fail("Add this asset to your research list first.", 409);
+    let chart;
+    try {
+      chart = buildChartSnapshot(
+        await market.history(symbol, range, currency),
+        { symbol, range, currency, asOf: Date.now() },
+      );
+    } catch (error) {
+      throw fail(
+        error.message?.startsWith("Chart analysis:")
+          ? error.message
+          : "Chart history is unavailable. Try again later.",
+        409,
+      );
+    }
+    const input = {
+        kind: "chart-analysis",
+        asset,
+        chart,
+        promptVersion: "chart-v1",
+      },
+      prompt = makeChartPrompt(input),
+      current = chartAccess(user);
+    if (current.provider !== p.provider || current.model !== p.model)
+      throw fail("AI settings changed. Preview this analysis again.", 409);
+    const budget = chartBudget(user, prompt, p.model),
+      now = Date.now();
+    for (const [key, q] of chartQuotes)
+      if (q.expiresAt <= now) chartQuotes.delete(key);
+    while (chartQuotes.size >= 256)
+      chartQuotes.delete(chartQuotes.keys().next().value);
+    const own = [...chartQuotes].filter(([, q]) => q.user === user);
+    for (const [key] of own.slice(0, Math.max(0, own.length - 7)))
+      chartQuotes.delete(key);
+    const quoteId = id(),
+      expiresAt = now + 300000;
+    chartQuotes.set(quoteId, {
+      user,
+      provider: p.provider,
+      model: p.model,
+      input,
+      prompt,
+      maximum: budget.maximum,
+      createdAt: now,
+      expiresAt,
+    });
+    return {
+      quoteId,
+      expiresAt,
+      symbol,
+      range,
+      currency,
+      provider: p.provider,
+      model: p.model,
+      maxCost: budget.maximum,
+      snapshot: chartSummary(chart),
+      budget,
+    };
+  }
+  function chartSummary(chart) {
+    const summary = { ...chart, barCount: chart.bars.length };
+    delete summary.bars;
+    delete summary.indicators;
+    return summary;
+  }
+  function enqueueChart(user, { quoteId, requestKey }) {
+    const existing = db
+      .prepare(
+        "SELECT id,status,kind,input FROM ai_jobs WHERE user_id=? AND request_key=?",
+      )
+      .get(user, requestKey);
+    if (existing) {
+      if (
+        existing.kind !== "chart-analysis" ||
+        JSON.parse(existing.input).quoteId !== quoteId
+      )
+        throw fail("Request key already used.", 409);
+      return { id: existing.id, status: existing.status };
+    }
+    const quote = chartQuotes.get(quoteId);
+    if (!quote || quote.user !== user || quote.expiresAt <= Date.now())
+      throw fail("Analysis preview expired. Preview again.", 409);
+    const p = chartAccess(user);
+    if (p.provider !== quote.provider || p.model !== quote.model)
+      throw fail("AI settings changed. Preview this analysis again.", 409);
+    chartBudget(user, quote.prompt, quote.model, quote.maximum);
+    const job = id();
+    db.prepare(
+      "INSERT INTO ai_jobs(id,user_id,kind,symbol,provider,model,status,input,request_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+    ).run(
+      job,
+      user,
+      "chart-analysis",
+      quote.input.asset.symbol,
+      quote.provider,
+      quote.model,
+      "queued",
+      JSON.stringify({
+        ...quote.input,
+        quoteId,
+        approvedMaximum: quote.maximum,
+        preparedAt: quote.createdAt,
+      }),
+      requestKey,
+      Date.now(),
+    );
+    chartQuotes.delete(quoteId);
+    return { id: job, status: "queued" };
+  }
   function enqueue(
     user,
     { symbol, kind = "research", article = null, requestKey },
@@ -108,6 +295,8 @@ export function createEngine({
     try {
       if (paused()) throw fail("AI is paused by the owner.", 503);
       const resolvedModel = effectiveModel(job.provider, job.model);
+      if (job.kind === "chart-analysis" && resolvedModel !== job.model)
+        throw fail("Quoted model is no longer available. Preview again.", 409);
       if (resolvedModel !== job.model) {
         db.prepare("UPDATE ai_jobs SET model=? WHERE id=?").run(
           resolvedModel,
@@ -116,19 +305,17 @@ export function createEngine({
         job.model = resolvedModel;
       }
       const input = JSON.parse(job.input),
-        collected = await collectSources(
-          db,
-          connectors,
-          job.user_id,
-          input.asset,
-        );
+        chartJob = job.kind === "chart-analysis",
+        collected = chartJob
+          ? { sources: [], coverage: [] }
+          : await collectSources(db, connectors, job.user_id, input.asset);
       if (
         stopped ||
         db.prepare("SELECT status FROM ai_jobs WHERE id=?").get(job.id)
           ?.status !== "running"
       )
         throw fail("Research cancelled before dispatch.", 409);
-      if (!collected.sources.length && !input.article)
+      if (!chartJob && !collected.sources.length && !input.article)
         throw fail(
           "No evidence available. Add a source or try again later.",
           409,
@@ -147,22 +334,26 @@ export function createEngine({
           fetchedAt: Date.now(),
         });
       }
-      const watched = db
-        .prepare(
-          "SELECT id,title,branches FROM scenario_sets WHERE user_id=? AND symbol=? ORDER BY created_at DESC LIMIT 4",
-        )
-        .all(job.user_id, job.symbol)
-        .map((s) => ({
-          id: s.id,
-          title: s.title,
-          branches: JSON.parse(s.branches).map((b) => ({
-            eventKey: b.eventKey,
-            condition: b.condition,
-            invalidation: b.invalidation,
-          })),
-        }));
-      const snapshot = { ...input, ...collected, watched, asOf: Date.now() },
-        prompt = makePrompt(snapshot);
+      const watched = chartJob
+        ? []
+        : db
+            .prepare(
+              "SELECT id,title,branches FROM scenario_sets WHERE user_id=? AND symbol=? ORDER BY created_at DESC LIMIT 4",
+            )
+            .all(job.user_id, job.symbol)
+            .map((s) => ({
+              id: s.id,
+              title: s.title,
+              branches: JSON.parse(s.branches).map((b) => ({
+                eventKey: b.eventKey,
+                condition: b.condition,
+                invalidation: b.invalidation,
+              })),
+            }));
+      const snapshot = chartJob
+          ? input
+          : { ...input, ...collected, watched, asOf: Date.now() },
+        prompt = chartJob ? makeChartPrompt(snapshot) : makePrompt(snapshot);
       db.prepare("UPDATE ai_jobs SET input=? WHERE id=?").run(
         JSON.stringify(snapshot),
         job.id,
@@ -174,8 +365,34 @@ export function createEngine({
         .get(job.user_id, job.provider);
       if (!credential) throw fail("Provider key was removed.", 409);
       if (paused()) throw fail("AI is paused by the owner.", 503);
+      if (chartJob) {
+        const p = preferences(db, job.user_id);
+        if (p.provider !== job.provider || p.model !== job.model)
+          throw fail("AI settings changed. Preview this analysis again.", 409);
+        if (
+          !Number.isFinite(input.preparedAt) ||
+          Date.now() - input.preparedAt > 900000
+        )
+          throw fail(
+            "Chart snapshot expired before dispatch. Preview again.",
+            409,
+          );
+        if (
+          db
+            .prepare("SELECT COUNT(*) AS n FROM scenario_sets WHERE user_id=?")
+            .get(job.user_id).n >= 500
+        )
+          throw fail("Scenario limit reached. No AI request was sent.", 409);
+        chartBudget(job.user_id, prompt, job.model, input.approvedMaximum);
+      }
       const key = vault.open(job.user_id, job.provider, credential.encrypted);
-      const { pricing } = reserve(db, job, prompt);
+      const { pricing } = reserve(
+        db,
+        job,
+        prompt,
+        Date.now(),
+        chartJob ? chartSchemaInput : "",
+      );
       db.prepare("UPDATE ai_jobs SET dispatched_at=? WHERE id=?").run(
         Date.now(),
         job.id,
@@ -186,6 +403,7 @@ export function createEngine({
         model: job.model,
         key,
         prompt,
+        ...(chartJob ? { schema: chartResultSchema } : {}),
         signal: aborter.signal,
       });
       // Charge valid usage even if the response is refused, truncated or fails our content checks.
@@ -204,7 +422,9 @@ export function createEngine({
           409,
         );
       }
-      const result = validateResult(parsed, snapshot);
+      const result = chartJob
+        ? validateChartResult(parsed, snapshot)
+        : validateResult(parsed, snapshot);
       if (input.article?.truncated)
         result.limitations.push(
           "Only the first 18,000 characters of this article were mapped. Later passages were excluded.",
@@ -215,7 +435,18 @@ export function createEngine({
         );
       transaction(db, () => {
         if (
-          job.kind === "research" &&
+          chartJob &&
+          result.scenarios.length &&
+          db
+            .prepare("SELECT COUNT(*) AS n FROM scenario_sets WHERE user_id=?")
+            .get(job.user_id).n >= 500
+        )
+          throw fail(
+            "Scenario limit reached while this analysis ran. Usage was recorded; no partial analysis was saved.",
+            409,
+          );
+        if (
+          ["research", "chart-analysis"].includes(job.kind) &&
           result.scenarios.length &&
           db
             .prepare("SELECT COUNT(*) AS n FROM scenario_sets WHERE user_id=?")
@@ -225,9 +456,20 @@ export function createEngine({
             db,
             job.user_id,
             job.symbol,
-            `${job.symbol} · AI scenarios`,
+            `${job.symbol} · ${chartJob ? "AI chart" : "AI scenarios"}`,
             result.scenarios,
-            { kind: "ai-research", jobId: job.id },
+            chartJob
+              ? {
+                  kind: "ai-chart",
+                  jobId: job.id,
+                  snapshotHash: input.chart.hash,
+                  range: input.chart.range,
+                  currency: input.chart.currency,
+                  lastTime: input.chart.lastTime,
+                  provider: job.provider,
+                  model: job.model,
+                }
+              : { kind: "ai-research", jobId: job.id },
           );
         db.prepare(
           "UPDATE ai_jobs SET status='completed',result=?,finished_at=?,lease_until=NULL WHERE id=?",
@@ -318,6 +560,8 @@ export function createEngine({
   return {
     enabled,
     enqueue,
+    estimateChart,
+    enqueueChart,
     tick,
     start() {
       if (!enabled || timer) return;

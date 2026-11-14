@@ -31,13 +31,19 @@ export function preferences(db, user) {
     .get(user);
   return { ...stored, model: effectiveModel(stored.provider, stored.model) };
 }
-export function reserve(db, job, prompt, now = Date.now()) {
+export function reserve(
+  db,
+  job,
+  prompt,
+  now = Date.now(),
+  additionalInput = "",
+) {
   return transaction(db, () => {
     const p = preferences(db, job.user_id);
     if (!p.enabled || !p.consent_at)
       throw fail("Enable AI and approve data sharing in AI settings.", 409);
     const pricing = priceFor(job.model, now),
-      reserved = reservationFor(prompt, pricing),
+      reserved = reservationFor(prompt + additionalInput, pricing),
       totals = spending(db, job.user_id, now);
     if (
       reserved > p.run_limit ||

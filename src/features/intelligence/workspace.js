@@ -9,6 +9,7 @@ import {
   associateLabels,
 } from "../../shared/ui.js";
 import { mountAnalysisChart } from "../charts/analysis-chart.js";
+import { mountAIAnalysis } from "../charts/ai-analysis.js";
 import { editPrivateScenario } from "./scenario-editor.js";
 import { mountStrategies } from "../strategies/workspace.js";
 import { mountAdmin } from "../admin/workspace.js";
@@ -38,13 +39,15 @@ export function mountIntelligence(root, { model, navigate }) {
     coverage = [],
     job = null,
     chart = null,
+    aiAnalysis = null,
     chartSymbol = null,
     studio = null,
     strategies = null,
     admin = null,
     poll,
     searchTimer,
-    searchEpoch = 0;
+    searchEpoch = 0,
+    navigationEpoch = 0;
   root.innerHTML = loading();
   const active = () => assets.find((a) => a.symbol === memory.symbol);
   const live = () => alive && root.isConnected;
@@ -61,6 +64,8 @@ export function mountIntelligence(root, { model, navigate }) {
     admin?.destroy();
     admin = null;
     if (!keepChart) {
+      aiAnalysis?.destroy();
+      aiAnalysis = null;
       chart?.destroy();
       chart = null;
       chartSymbol = null;
@@ -79,7 +84,7 @@ export function mountIntelligence(root, { model, navigate }) {
     if (!live()) return;
     [info] = data;
     assets = data[1].assets;
-    jobs = data[2].jobs;
+    jobs = data[2].jobs.filter((j) => j.kind !== "chart-analysis");
     sets = data[3].sets;
     journal = data[4].articles;
     if (!assets.some((a) => a.symbol === memory.symbol))
@@ -234,10 +239,10 @@ export function mountIntelligence(root, { model, navigate }) {
       (s) => !memory.symbol || s.symbol === memory.symbol,
     );
     return visible.length
-      ? `<div class="section-line"><div><span class="eyebrow"></span><h2>Scenarios</h2></div><span class="small">Price samples every ~15 min</span></div>${visible
+      ? `<div class="section-line"><div><span class="eyebrow"></span><h2>Scenarios</h2></div></div>${visible
           .map(
             (s) =>
-              `<section class="panel live-scenario"><div class="scenario-set-meta"><span class="privacy-chip">${s.provenance?.kind === "published-article" ? "RNT · published edition " + s.provenance.revision : s.provenance?.kind === "public-fork" ? "Private copy of RNT · edition " + s.provenance.revision : s.provenance?.kind === "private-revision" ? "Private · your revision" : s.provenance?.kind === "ai-research" ? "Private · AI proposal" : "Private · your scenario"}</span><div class="scenario-set-tools">${s.provenance?.kind !== "published-article" ? `<button class="link" data-revise-set="${esc(s.id)}">Revise privately ↗</button>` : ""}<button class="link" data-check-set="${esc(s.id)}">Refresh price ↻</button></div></div>${scenarioCards(s)}<div class="scenario-foot"><span>Created ${esc(when(s.createdAt))}</span><span>${s.counts.prices} price samples · ${s.counts.events} verified events</span></div>${
+              `<section class="panel live-scenario ${s.id === memory.focusSetId ? "is-focused" : ""}" data-scenario-set="${esc(s.id)}"><div class="scenario-set-meta"><span class="privacy-chip">${s.provenance?.kind === "published-article" ? "RNT · published edition " + s.provenance.revision : s.provenance?.kind === "public-fork" ? "Private copy of RNT · edition " + s.provenance.revision : s.provenance?.kind === "private-revision" ? "Private · your revision" : s.provenance?.kind === "ai-chart" ? "AI chart · daily closes" : s.provenance?.kind === "ai-research" ? "Private · AI proposal" : "Private · your scenario"}</span><div class="scenario-set-tools">${s.provenance?.kind !== "published-article" ? `<button class="link" data-revise-set="${esc(s.id)}">Revise privately ↗</button>` : ""}<button class="link" data-check-set="${esc(s.id)}">Refresh price ↻</button></div></div>${scenarioCards(s, true, { selectedKey: s.id === memory.focusSetId ? memory.aiEventKey : null })}<div class="scenario-foot"><span>Created ${esc(when(s.createdAt))}</span><span>${s.counts.prices} price samples · ${s.counts.events} verified events</span></div>${
                 s.observations.some((o) => o.kind === "event" && o.verified)
                   ? `<details><summary>Verified events</summary>${s.observations
                       .filter((o) => o.kind === "event" && o.verified)
@@ -309,9 +314,69 @@ export function mountIntelligence(root, { model, navigate }) {
         chart = mountAnalysisChart(
           root.querySelector("#research-chart"),
           active(),
-          { ownerId: model.currentUser.id || model.currentUser.username },
+          {
+            ownerId: model.currentUser.id || model.currentUser.username,
+            onContextChange: () => aiAnalysis?.updateContext(),
+            onAISelect: (eventKey) => aiAnalysis?.setSelection(eventKey),
+            onAITree: () => aiAnalysis?.openScenario(),
+          },
         );
         chartSymbol = memory.symbol;
+        const aiRoot = document.createElement("section");
+        aiRoot.className = "ai-analysis";
+        const aiBody = document.createElement("aside");
+        aiBody.className = "ai-analysis-detail";
+        aiBody.hidden = true;
+        aiBody.setAttribute("aria-label", "AI chart evidence and scenarios");
+        root.querySelector(".ta-heading").before(aiRoot);
+        root.querySelector("#research-chart").append(aiBody);
+        aiAnalysis = mountAIAnalysis(aiRoot, {
+          asset: active(),
+          bodyRoot: aiBody,
+          getChartContext: () =>
+            chart?.getContext() || { range: "1y", currency: "EUR" },
+          onLayer: (layer) => chart?.setAILayer(layer),
+          initialJobId: memory.aiJobId,
+          initialEventKey: memory.aiEventKey,
+          onSettings: () => navigate("settings"),
+          onComplete: () => {
+            if (live())
+              root
+                .querySelector(".ta-heading")
+                ?.scrollIntoView({ block: "start", behavior: "smooth" });
+          },
+          onScenario: async ({ setId, eventKey, jobId }) => {
+            const selectedSymbol = memory.symbol,
+              operation = ++navigationEpoch;
+            try {
+              const [response, selectedSet] = await Promise.all([
+                request("/api/scenarios"),
+                request("/api/scenarios/" + encodeURIComponent(setId)),
+              ]);
+              if (
+                !live() ||
+                operation !== navigationEpoch ||
+                memory.tab !== "research" ||
+                memory.symbol !== selectedSymbol
+              )
+                return;
+              sets = [
+                selectedSet,
+                ...response.sets.filter((s) => s.id !== setId),
+              ];
+              memory.focusSetId = setId;
+              memory.aiEventKey = eventKey;
+              memory.aiJobId = jobId;
+              memory.tab = "scenarios";
+              render();
+              root
+                .querySelector(`[data-scenario-set="${CSS.escape(setId)}"]`)
+                ?.scrollIntoView({ block: "start", behavior: "smooth" });
+            } catch (e) {
+              toast(e.message);
+            }
+          },
+        });
       }
     }
     if (memory.tab === "studio" && info.author)
@@ -428,6 +493,7 @@ export function mountIntelligence(root, { model, navigate }) {
     if (!b || b.disabled) return;
     if (b.dataset.tab) {
       if (!canLeave()) return;
+      navigationEpoch++;
       const wasScrolled = window.scrollY > root.offsetTop;
       memory.tab = b.dataset.tab;
       render();
@@ -448,6 +514,7 @@ export function mountIntelligence(root, { model, navigate }) {
       root.querySelector("#research-search").focus();
     if (b.dataset.addAsset)
       action(b, async () => {
+        const operation = ++navigationEpoch;
         await request(
           "/api/research/assets/" + encodeURIComponent(b.dataset.addAsset),
           "PUT",
@@ -459,8 +526,11 @@ export function mountIntelligence(root, { model, navigate }) {
             intervalHours: 24,
           },
         );
+        if (!live() || operation !== navigationEpoch) return;
         memory.symbol = b.dataset.addAsset;
         memory.jobId = null;
+        memory.aiJobId = null;
+        memory.aiEventKey = null;
         await load();
       });
     if (b.hasAttribute("data-add-holdings"))
@@ -482,8 +552,11 @@ export function mountIntelligence(root, { model, navigate }) {
       });
     if (b.dataset.researchAsset)
       action(b, async () => {
+        navigationEpoch++;
         memory.symbol = b.dataset.researchAsset;
         memory.jobId = null;
+        memory.aiJobId = null;
+        memory.aiEventKey = null;
         coverage = [];
         await loadAsset();
         render();
@@ -564,6 +637,35 @@ export function mountIntelligence(root, { model, navigate }) {
           toast("Private revision saved.");
         },
       );
+    if (b.dataset.aiChart)
+      action(b, async () => {
+        const selectedSymbol = b.dataset.aiSymbol,
+          operation = ++navigationEpoch;
+        if (!assets.some((a) => a.symbol === selectedSymbol)) {
+          await request(
+            "/api/research/assets/" + encodeURIComponent(selectedSymbol),
+            "PUT",
+            {
+              name: selectedSymbol,
+              automatic: false,
+              intervalHours: 24,
+            },
+          );
+          assets = (await request("/api/research/assets")).assets;
+        }
+        if (!live() || operation !== navigationEpoch) return;
+        memory.symbol = selectedSymbol;
+        memory.aiJobId = b.dataset.aiChart;
+        memory.aiEventKey = b.dataset.eventKey || null;
+        memory.jobId = null;
+        await loadAsset();
+        if (!live() || operation !== navigationEpoch) return;
+        memory.tab = "research";
+        render();
+        root
+          .querySelector("#research-chart")
+          ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      });
     if (b.dataset.checkSet)
       action(b, async () => {
         await request(
@@ -646,7 +748,9 @@ export function mountIntelligence(root, { model, navigate }) {
       return;
     try {
       const previous = JSON.stringify(jobs);
-      jobs = (await request("/api/research/jobs")).jobs;
+      jobs = (await request("/api/research/jobs")).jobs.filter(
+        (j) => j.kind !== "chart-analysis",
+      );
       if (
         previous !== JSON.stringify(jobs) &&
         !root.querySelector("#research-search")?.value

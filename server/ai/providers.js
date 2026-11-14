@@ -74,7 +74,14 @@ export function claudeUsage(u) {
   };
 }
 export function createProviders({ fetcher = fetch } = {}) {
-  return async function generate({ provider, model, key, prompt, signal }) {
+  return async function generate({
+    provider,
+    model,
+    key,
+    prompt,
+    signal,
+    schema = resultSchema,
+  }) {
     if (!models.some((m) => m.id === model && m.provider === provider))
       throw new ProviderError("Unsupported model or provider.", false);
     let response;
@@ -89,7 +96,7 @@ export function createProviders({ fetcher = fetch } = {}) {
             maxOutputTokens: MAX_OUTPUT,
             thinkingConfig: { thinkingLevel: "low" },
             responseMimeType: "application/json",
-            responseJsonSchema: resultSchema,
+            responseJsonSchema: schema,
           },
         }
       : {
@@ -97,7 +104,7 @@ export function createProviders({ fetcher = fetch } = {}) {
           max_tokens: MAX_OUTPUT,
           messages: [{ role: "user", content: prompt }],
           output_config: {
-            format: { type: "json_schema", schema: resultSchema },
+            format: { type: "json_schema", schema },
           },
         };
     try {

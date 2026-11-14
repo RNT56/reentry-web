@@ -9,6 +9,7 @@ import { createProviders } from "../ai/providers.js";
 import { createConnectors } from "../intelligence/connectors.js";
 import { createEngine } from "../ai/engine.js";
 import { registerAIRoutes } from "../ai/routes.js";
+import { registerChartAnalysisRoutes } from "../ai/chart-routes.js";
 import { registerIntelligenceRoutes } from "../intelligence/routes.js";
 import { registerJournalRoutes } from "../journal/routes.js";
 export function registerPlatform(app, db, market, options = {}) {
@@ -49,6 +50,7 @@ export function registerPlatform(app, db, market, options = {}) {
   };
   if (options.controls) registerAdminRoutes(app, services);
   registerAIRoutes(app, services);
+  registerChartAnalysisRoutes(app, services);
   registerIntelligenceRoutes(app, services);
   registerJournalRoutes(app, services);
   app.decorate("intelligenceEngine", engine);

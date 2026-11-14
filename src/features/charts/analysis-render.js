@@ -294,7 +294,14 @@ function renderPane(id, series, g) {
   }
   return `<svg viewBox="0 0 ${w} ${h}" class="ta-pane" aria-label="${indicatorLabels[id]}"><text x="${l}" y="12" class="ta-pane-label">${indicatorLabels[id]}</text><text x="${r + 7}" y="${top + 7}" class="ta-axis">${id === "volume" ? compact(hi) : hi.toFixed(id === "rsi" ? 0 : 2)}</text><text x="${r + 7}" y="${bottom}" class="ta-axis">${id === "volume" ? "0" : lo.toFixed(id === "rsi" ? 0 : 2)}</text>${content}</svg>`;
 }
-export function renderAnalysisPlot(data, state, indicators, g, selected) {
+export function renderAnalysisPlot(
+  data,
+  state,
+  indicators,
+  g,
+  selected,
+  aiLayer = "",
+) {
   const latest = g.points.at(-1),
     up = latest.price >= g.points[0].price,
     color = up ? "#b9edb1" : "#e3a295";
@@ -347,7 +354,7 @@ export function renderAnalysisPlot(data, state, indicators, g, selected) {
     )
     .join("");
   const gradientId = "ta-fill-" + data.symbol.replace(/[^a-z0-9]/gi, "");
-  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs><clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : priceLine}${overlays}<g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${dates}</svg>`;
+  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs><clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : priceLine}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${dates}</svg>`;
   const panes = state.indicators
     .filter((id) => ["rsi", "macd", "volume"].includes(id))
     .map((id) => renderPane(id, indicators[id], g))

@@ -185,6 +185,9 @@ export function registerIntelligenceRoutes(
       .all(req.auth.user_id)
       .map((s) => setView(db, s)),
   }));
+  app.get("/api/scenarios/:id", auth, async (req) =>
+    setView(db, ownedSet(db, req.auth.user_id, req.params.id)),
+  );
   app.post("/api/scenarios", auth, async (req) => {
     const b = req.body || {},
       user = req.auth.user_id;
