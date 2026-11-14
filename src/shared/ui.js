@@ -33,9 +33,9 @@ export function bindLogos() {
 export function associateLabels(root) {
   root.querySelectorAll("label").forEach((label, i) => {
     if (label.htmlFor) return;
-    const input = label.nextElementSibling?.matches("input,select")
+    const input = label.nextElementSibling?.matches("input,select,textarea")
       ? label.nextElementSibling
-      : label.nextElementSibling?.querySelector("input,select");
+      : label.nextElementSibling?.querySelector("input,select,textarea");
     if (input) {
       input.id ||= "field-" + i + "-" + root.id;
       label.htmlFor = input.id;

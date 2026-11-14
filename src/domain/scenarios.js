@@ -11,16 +11,12 @@ export function evaluateBranch(branch, observations, asOf) {
       o.recordedAt <= asOf &&
       o.occurredAt >= branch.publishedAt,
   );
-  const events = eligible.filter((o) => o.kind === "event");
+  const events = eligible
+    .filter((o) => o.kind === "event" && o.occurredAt <= branch.deadline)
+    .sort((a, b) => a.occurredAt - b.occurredAt);
   const invalidation = events.find((o) =>
     branch.invalidatedBy?.includes(o.key),
   );
-  if (invalidation)
-    return {
-      status: "invalidated",
-      evidence: [invalidation.id],
-      outcome: false,
-    };
   const matches = branch.requires.map((key) =>
     events.find((o) => o.key === key),
   );
@@ -28,29 +24,37 @@ export function evaluateBranch(branch, observations, asOf) {
   const triggerTime = triggered
     ? Math.max(branch.publishedAt, ...matches.map((o) => o.occurredAt))
     : Infinity;
-  const hit = eligible.find(
-    (o) =>
-      o.kind === "price" &&
-      o.currency === branch.currency &&
-      Number.isFinite(o.value) &&
-      o.occurredAt >= triggerTime &&
-      o.occurredAt <= branch.deadline &&
-      o.value >= branch.target[0] &&
-      o.value <= branch.target[1],
-  );
+  const hit = eligible
+    .filter(
+      (o) =>
+        o.kind === "price" &&
+        o.currency === branch.currency &&
+        Number.isFinite(o.value) &&
+        o.occurredAt >= triggerTime &&
+        o.occurredAt <= branch.deadline &&
+        (!invalidation || o.occurredAt < invalidation.occurredAt) &&
+        o.value >= branch.target[0] &&
+        o.value <= branch.target[1],
+    )
+    .sort((a, b) => a.occurredAt - b.occurredAt)[0];
+  // A later invalidation does not erase an outcome that was already observed.
   return {
     status: hit
       ? "observed"
-      : asOf > branch.deadline
-        ? "review"
-        : triggered
-          ? "triggered"
-          : "watching",
+      : invalidation
+        ? "invalidated"
+        : asOf > branch.deadline
+          ? "review"
+          : triggered
+            ? "triggered"
+            : "watching",
     evidence: [
       ...matches.filter(Boolean).map((o) => o.id),
       ...(hit ? [hit.id] : []),
+      ...(invalidation ? [invalidation.id] : []),
     ],
     outcome: !!hit,
+    invalidatedAfterOutcome: !!(hit && invalidation),
   };
 }
 

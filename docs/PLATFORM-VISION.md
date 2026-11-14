@@ -2,9 +2,9 @@
 
 Reentry connects what you own, what you think could happen, and what actually happens. The buyback calculator is the first decision tool inside that workspace. The wider product is a visual research and personal-finance platform with a public, accountable investment journal.
 
-**Shipped now:** private portfolios, acquisition lots, after-tax planning, price history with live buy-in/target overlays, trade records, accounts/passkeys, modular application infrastructure, and an interactive platform preview under **Explore**.
+**Shipped now:** private portfolios, acquisition lots, after-tax planning, price history with live buy-in/target overlays, trade records, accounts/passkeys, private asset research, source collection, BYOC Gemini/Claude jobs with cost controls, sentiment samples, conditional scenario maps, author editing and immutable public journal editions. See [the implementation contract](INTELLIGENCE.md) for ownership boundaries, coverage, and operational limits.
 
-**Preview, not a live service:** the Intel articles, scenario ranges, research radar, and events in Explore are fictional examples. They are never saved into a user's portfolio. The deterministic scenario evaluator is implemented and tested, but there is no live event ingestion, AI research pipeline, article editor, publishing system, or autonomous trading. This document specifies those next products.
+**Next products:** historical replay, corporate-action adjustment, composite condition graphs, alerts, wider licensed data coverage and portfolio performance attribution. The shipped scenario evaluator uses sampled prices and human-verified events; AI proposes event matches for review. There is no autonomous trading. The former fictional Explore preview has been removed.
 
 ## The experience
 
@@ -24,9 +24,9 @@ The chart is the common visual language: price is a solid line; conditional futu
 
 ## Navigation, now and as the platform grows
 
-Today: **Portfolio · Buybacks · Explore · Settings**. Hash routes and holding IDs support reloads, browser back/forward, and direct links. Explore is plainly labeled a platform preview. Working portfolio tools stay immediately accessible.
+Today: **Portfolio · Buybacks · Research · Settings**. Research contains asset briefs, scenario maps, the RNT journal, and an author-only studio. The public journal also has independent, server-rendered `/journal` pages. Hash routes and holding IDs support reloads, browser back/forward, and direct links; the existing `#/explore` route now opens Research.
 
-When live research and publishing ship, use four primary destinations:
+As activity and finance features expand, evolve toward four primary destinations:
 
 - **Portfolio** — private overview, depots, holdings, cash and allocation. Open a holding to its asset workspace; the Reentry planner lives in Position. Grow into net worth, contributions, dividends, tax lots, performance and concentration here rather than adding unrelated top-level tabs.
 - **Explore** — universal asset search, watchlists, research and catalyst radar. Open any asset, even if you do not own it. Scenarios are an asset view, not a second disconnected asset database.
@@ -46,7 +46,7 @@ Suggested canonical URLs once server-rendered public pages ship: `/assets/:listi
 5. Write a follow-up: a verified design win **and** available capacity would enable another range. That adds a dated branch or a superseding revision; it does not rewrite the earlier thesis into a successful forecast.
 6. Drag the **knowledge-time replay** to a prior date. See only what had been published or ingested then, with the contemporaneous price path. Compare the original hypothesis, later revisions, and observed outcomes.
 
-The preview demonstrates this journey with fictional $18–22, $26–30 and $38–44 ranges. It shows a ghost of the later revision to explain the interaction; a real historical replay must hide unpublished revisions entirely.
+The current implementation covers writing, explicit mapping review, immutable publication and present-day evidence evaluation. A future historical replay must hide unpublished revisions entirely and preserve the distinction between event time and knowledge time.
 
 ## Distinctive controls worth building
 
@@ -94,13 +94,13 @@ The public blog is **your** publication, not a publishing privilege automaticall
 
 Publish a deliberately projected article/scenario DTO, not a serialized user or portfolio object. Public readers may see thesis ranges and public evidence; they never receive quantities, acquisition lots, account identifiers, private notes, or private planner targets. Public pages need server rendering, canonical URLs and metadata; private responses remain authenticated and `no-store`. Markdown needs a restricted renderer, URL policy and server-side sanitation before accepting user-authored rich content.
 
-## Delivery order
+## Product progression
 
-1. **Foundation — this release:** chart overlays, feature modules, pure financial commands, safe saves, injectable market adapter, numbered migrations, navigation and interactive concept.
-2. **Asset hub + journal:** canonical asset/listing records, watchlists, author roles, draft editor, source links, immutable revisions, public reading pages. No AI needed to make the core publishing loop useful.
-3. **Scenario authoring:** structured conditional editor, passage anchors, revisioned DAGs, public graph projection, evaluation records, manual evidence review and replay.
-4. **Observation worker:** durable job table with retries/idempotency, licensed feed adapters, corporate actions, event deduplication, explicit coverage, alerts and source corrections. Observe price conditions automatically; event claims require well-defined verification.
-5. **AI research + sentiment:** citation-backed drafts, provider/model adapters, budgets and cancellation, evaluations for extraction accuracy, approval before publication. AI is a replaceable research contributor, never the authority that silently edits published claims.
+1. **Foundation — shipped:** chart overlays, feature modules, pure financial commands, safe saves, injectable market adapter, numbered migrations and navigation.
+2. **Asset hub + journal — shipped foundation:** canonical asset/listing records, watchlists, author roles, draft editor, source links, immutable revisions, public reading pages. No AI needed to make the core publishing loop useful.
+3. **Scenario authoring — shipped conditional branches, composite DAGs and replay to come:** structured conditional editor, passage anchors, revisioned DAGs, public graph projection, evaluation records, manual evidence review and replay.
+4. **Observation worker — shipped bounded jobs and sampled prices:** durable idempotent job table without automatic retries after billable dispatch; future work includes licensed feed adapters, corporate actions, event deduplication, explicit coverage, alerts and source corrections. Observe price conditions automatically; event claims require well-defined verification.
+5. **AI research + sentiment — shipped:** citation-backed drafts, provider/model adapters, budgets and cancellation, evaluations for extraction accuracy, approval before publication. AI is a replaceable research contributor, never the authority that silently edits published claims.
 6. **Finance platform:** cash ledger, dividends, contributions, portfolio return decomposition, exposure and risk views, imports and exports, additional private decision tools. Do not derive audited performance from the current holdings snapshot alone.
 
 Start as one modular application and one durable worker on the existing VPS. Extract services only when measured workloads or operational isolation justify them. Research jobs must not run inside HTTP request handlers or block sign-in, saves, or the calculator.

@@ -9,6 +9,8 @@ export function referenceLevels({
   quote,
   now = Date.now(),
 }) {
+  if (!Number.isFinite(buyIn) && !Number.isFinite(target))
+    return { levels: [], note: "", converted: false };
   let rate = 1;
   if (currency !== "EUR") {
     const sameListing = quote?.symbol === symbol;

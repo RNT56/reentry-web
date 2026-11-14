@@ -40,6 +40,32 @@ class DeploymentTests(unittest.TestCase):
             self.assertNotEqual(original, auto.database_fingerprint(dbfile))
             db.close()
 
+    def test_protects_research_keys_costs_and_publications_across_additive_migrations(self):
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / 'platform.sqlite'
+            db = sqlite3.connect(file)
+            db.executescript("""CREATE TABLE users(id TEXT); CREATE TABLE portfolios(id TEXT); CREATE TABLE passkeys(id TEXT);
+                CREATE TABLE ai_credentials(user_id TEXT, provider TEXT, encrypted TEXT);
+                CREATE TABLE ai_ledger(id TEXT, cost INTEGER); CREATE TABLE article_revisions(id TEXT, body TEXT);
+                INSERT INTO ai_credentials VALUES('alice','gemini','encrypted-secret');
+                INSERT INTO ai_ledger VALUES('call',123); INSERT INTO article_revisions VALUES('article','published original');""")
+            db.commit()
+            manifest = auto.preservation_manifest(file)
+            before = auto.database_fingerprint(file, manifest)
+            db.execute('CREATE TABLE new_module(id TEXT)')
+            db.execute('ALTER TABLE ai_ledger ADD COLUMN new_metadata TEXT')
+            db.commit()
+            self.assertEqual(before, auto.database_fingerprint(file, manifest))
+            for table in ('ai_credentials', 'ai_ledger', 'article_revisions'):
+                saved = list(db.execute(f'SELECT * FROM {table}'))
+                db.execute(f'DELETE FROM {table}')
+                db.commit()
+                self.assertNotEqual(before, auto.database_fingerprint(file, manifest))
+                for row in saved: db.execute(f'INSERT INTO {table} VALUES(' + ','.join('?' for _ in row) + ')', row)
+                db.commit()
+                self.assertEqual(before, auto.database_fingerprint(file, manifest))
+            db.close()
+
     def test_wrong_volume_is_rejected(self):
         with patch.object(auto, 'inspect', return_value={'Mounts':[{'Destination':'/data','Name':'brand-new-empty-volume'}]}):
             with self.assertRaises(auto.DeploymentError):

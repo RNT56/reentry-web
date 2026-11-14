@@ -7,7 +7,7 @@ Push to `main` in https://github.com/RNT56/reentry-web. GitHub Actions runs the 
 1. Runs JavaScript/authentication/calculation tests, deployment guard tests, and the browser build on GitHub.
 2. Connects with a dedicated restricted SSH key. It can request `deploy <commit SHA>` only; interactive shells, port forwarding and arbitrary commands are disabled. The server's SSH host keys are pinned.
 3. Takes a deployment lock, confirms the requested commit is the latest `main`, confirms the production container uses `reentry_reentry-data`, and builds the candidate while the existing app remains live.
-4. Makes a consistent SQLite backup. Starts the candidate with a private copy of that backup, no network, and no published port. Checks health, SQLite integrity, and unchanged users, portfolios and passkeys. Startup changes to those data structures require a separately reviewed migration; they are not silently accepted.
+4. Makes a consistent SQLite backup. Starts the candidate with a private copy of that backup, no network, and no published port. Checks health, SQLite integrity, and unchanged existing durable data, including users, portfolios, passkeys, encrypted API keys, research, costs and published articles. Additive tables and columns are allowed; changing existing field values requires a separately reviewed migration.
 5. Takes another backup immediately before replacement. Recreates only the Reentry container using the **same external volume**, environment file, hostname and passkey origin. There is a brief restart window.
 6. Checks container health, mounted volume, and the live HTTPS endpoint's commit. If activation fails, reactivates the previous image. It **does not restore an older database automatically**, which would discard newer user writes.
 
@@ -15,11 +15,11 @@ GitHub serializes `main` workflows and the server also locks deployments. Supers
 
 ## Data and backups
 
-Accounts, passwords, recovery-key hashes, sessions, passkeys and portfolios remain in the existing `reentry_reentry-data` volume. It is declared **external**, with an explicit fixed name. The automation does not run `compose down`, delete/prune volumes, replace `.env`, or initialize a new production database.
+Accounts, passwords, recovery-key hashes, sessions, passkeys, portfolios and intelligence data remain in the existing `reentry_reentry-data` volume. It is declared **external**, with an explicit fixed name. The automation does not run `compose down`, delete/prune volumes, replace `.env`, or initialize a new production database.
 
 Backups are retained both under `/data/backups` in the volume and `/home/deploy/reentry/backups` on the host, with private file permissions. There is no automatic deletion or off-server backup schedule. Copy backups off the VPS as part of your normal backup routine. Deployment refuses to start with less than 3 GiB free. Release images and backups accumulate; review disk space periodically, retaining the current and previous images and useful backups.
 
-The safeguards protect ordinary code deployments, but no deploy system can make arbitrary application changes or destructive schema migrations lossless. Use backward-compatible schema migrations and tests. A startup migration that changes existing account/portfolio/passkey structures or data will fail preflight for manual review.
+The safeguards protect ordinary code deployments, but no deploy system can make arbitrary application changes or destructive schema migrations lossless. Use backward-compatible schema migrations and tests. A startup migration that removes existing durable fields or changes their contents will fail preflight for manual review. The separate AI master key must also be backed up securely; it is not part of a SQLite backup. See [AI operations](../docs/INTELLIGENCE.md).
 
 ## Installed control files
 

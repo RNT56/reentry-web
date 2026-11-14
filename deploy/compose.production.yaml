@@ -5,6 +5,7 @@ services:
     user: "1000:1000"
     restart: unless-stopped
     init: true
+    stop_grace_period: 60s
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -13,6 +14,11 @@ services:
       APP_ORIGIN: ${APP_ORIGIN:?Set the HTTPS origin}
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
       TRUST_PROXY: "1"
+      AI_MASTER_KEY: ${AI_MASTER_KEY:-}
+      ENABLE_BACKGROUND_JOBS: ${ENABLE_BACKGROUND_JOBS:-false}
+      AUTHOR_USERNAMES: ${AUTHOR_USERNAMES:-}
+      AUTHOR_PUBLIC_NAME: ${AUTHOR_PUBLIC_NAME:-RNT}
+      SEC_USER_AGENT: ${SEC_USER_AGENT:-}
       REENTRY_REVISION: ${REENTRY_REVISION:-unknown}
     ports:
       - "127.0.0.1:${APP_PORT:-4173}:4173"

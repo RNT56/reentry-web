@@ -4,6 +4,12 @@ A mobile-first portfolio and after-tax buyback planner. Enter purchases once, ch
 
 Username/password accounts, optional passkeys, independent portfolios, automatic saves, real asset search and logos, indicative EUR quotes, FIFO purchase lots, sale/buyback records, and JSON export/import. No broker login, email server, or paid API key is required for the default setup.
 
+## Intelligence and public journal
+
+Reentry also provides private, source-backed AI research with user-owned Gemini/Claude keys, encrypted credential storage, opt-in scheduled briefs, sentiment, editable private scenarios, evidence tracking and an estimated API-cost ledger. RNT’s author studio maps article passages to scenarios and publishes immutable editions at `/journal`. Public content is separated from every user’s portfolio, keys, research and billing.
+
+AI starts **off** for every account, with a **US$5/month** and **US$0.25/run** default cap. Connect a key and approve research-data sharing in Settings, then add research assets. Free quotes, sources and public reading do not require an AI key. See [Intelligence operations and contracts](docs/INTELLIGENCE.md) for setup, security boundaries, provider coverage and cost limitations.
+
 ## Hostinger Ubuntu VPS: Docker + existing Caddy
 
 Use a dedicated domain or subdomain, such as `stocks.yourdomain.com`. Point its DNS A record to the VPS (and AAAA only if IPv6 is configured). Keep your existing Caddy installation and other sites.
@@ -58,7 +64,7 @@ Use `reverse_proxy reentry:4173` in the Caddy block instead of `127.0.0.1:4173`,
 
 ### Registration and accounts
 
-Registration is open by default and rate-limited. To close new signups after everyone has joined, set `REGISTRATION_OPEN=false` in `.env` and run `docker compose up -d`. Existing accounts still work. There is no email verification, admin account, invitation service, or email recovery. Each account has a one-time recovery key; using it rotates the key and revokes all sessions and passkeys. Without a password, usable passkey, or saved recovery key, there is no self-service recovery.
+Registration is open by default and rate-limited. To close new signups after everyone has joined, set `REGISTRATION_OPEN=false` in `.env` and run `docker compose up -d`. Existing accounts still work. There is no email verification, invitation service, or email recovery. Publishing access is separately restricted by the operator’s `AUTHOR_USERNAMES` allowlist; registration never grants it. Each account has a one-time recovery key; using it rotates the key and revokes all sessions and passkeys. Without a password, usable passkey, or saved recovery key, there is no self-service recovery.
 
 Passwords must contain 12–128 characters. Usernames contain 3–32 letters, numbers, or underscores and are case-insensitive. Passkeys are optional; passwords remain available. Settings supports adding/removing passkeys, changing passwords, and signing out all devices.
 

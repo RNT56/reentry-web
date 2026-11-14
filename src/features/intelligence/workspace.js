@@ -1,0 +1,603 @@
+import { request } from "../../shared/http.js";
+import { esc } from "../../shared/format.js";
+import {
+  modal,
+  close,
+  toast,
+  monogram,
+  bindLogos,
+  associateLabels,
+} from "../../shared/ui.js";
+import { mountPriceChart } from "../charts/price-chart.js";
+import { editPrivateScenario } from "./scenario-editor.js";
+import { createStudio } from "./studio.js";
+import {
+  usd,
+  when,
+  empty,
+  loading,
+  download,
+  action,
+  sourceLinks,
+  scenarioCards,
+} from "./shared.js";
+export const intelligenceView = () =>
+  '<section class="intelligence-page" id="intelligence"></section>';
+export function mountIntelligence(root, { model, navigate }) {
+  const memory =
+    model.intelligence ||
+    (model.intelligence = { tab: "research", symbol: null, jobId: null });
+  let alive = true,
+    info,
+    assets = [],
+    jobs = [],
+    sets = [],
+    journal = [],
+    sources = [],
+    coverage = [],
+    job = null,
+    chart = null,
+    studio = null,
+    poll,
+    searchTimer,
+    searchEpoch = 0;
+  root.innerHTML = loading();
+  const active = () => assets.find((a) => a.symbol === memory.symbol);
+  const live = () => alive && root.isConnected;
+  const canLeave = () => {
+    if (studio?.isDirty()) {
+      toast("Save the article draft before leaving the studio.");
+      return false;
+    }
+    return true;
+  };
+  function destroyChildren() {
+    chart?.destroy();
+    chart = null;
+    studio?.destroy();
+    studio = null;
+  }
+  async function load() {
+    const data = await Promise.all([
+      request("/api/intelligence"),
+      request("/api/research/assets"),
+      request("/api/research/jobs"),
+      request("/api/scenarios"),
+      request("/api/public/journal"),
+    ]);
+    if (!live()) return;
+    [info] = data;
+    assets = data[1].assets;
+    jobs = data[2].jobs;
+    sets = data[3].sets;
+    journal = data[4].articles;
+    if (!assets.some((a) => a.symbol === memory.symbol))
+      memory.symbol = assets[0]?.symbol || null;
+    await loadAsset();
+    if (live()) render();
+  }
+  async function loadAsset() {
+    if (!active()) {
+      sources = [];
+      job = null;
+      return;
+    }
+    const selected = memory.symbol;
+    const data = await request(
+      "/api/research/sources?" + new URLSearchParams({ symbol: selected }),
+    );
+    const wanted =
+      jobs.find((j) => j.id === memory.jobId && j.symbol === selected) ||
+      jobs.find(
+        (j) =>
+          j.symbol === selected &&
+          j.kind === "research" &&
+          j.status === "completed",
+      );
+    const detail = wanted
+      ? await request("/api/research/jobs/" + wanted.id)
+      : null;
+    if (!live() || selected !== memory.symbol) return;
+    sources = data.sources;
+    job = detail;
+  }
+  function sourcePanel() {
+    return `<section class="panel source-panel"><div class="section-line"><div><span class="eyebrow">EVIDENCE LIBRARY</span><h3>Know the source.</h3></div><button class="link" data-add-source>＋ Add text</button></div><div class="connector-strip">${info.connectors
+      .map((c) => {
+        const status = coverage.find((s) => s.connector === c.id);
+        return `<span class="connector-chip ${status?.status === "available" ? "available" : ""}" title="${esc(c.label)}">${esc(c.id.toUpperCase())}<i></i>${status ? esc(status.status) : c.configured ? "Ready" : "Setup needed"}</span>`;
+      })
+      .join("")}</div>${
+      sources.length
+        ? `<div class="source-list">${sources
+            .slice(0, 12)
+            .map(
+              (s) =>
+                `<details class="source-row"><summary><span class="source-kind">${esc(s.kind)}</span><b>${esc(s.title)}</b><span>↗</span></summary><p class="small">${esc(s.content)}</p><div class="source-meta"><span>${esc(s.connector)} · retrieved ${esc(when(s.fetched_at || s.fetchedAt))}${s.published_at || s.publishedAt ? " · published " + esc(when(s.published_at || s.publishedAt)) : ""}</span>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ""}${s.connector === "manual" ? `<button class="link" data-delete-source="${esc(s.id)}">Delete</button>` : ""}</div></details>`,
+            )
+            .join("")}</div>`
+        : '<p class="small">Collect free market data and headlines, or add your own source text. Coverage varies by asset.</p>'
+    }</section>`;
+  }
+  function resultPanel() {
+    if (!job)
+      return empty(
+        "A clearer view starts with evidence.",
+        "Collect sources, then run a brief with your own Gemini or Claude key.",
+      );
+    if (!job.result)
+      return empty(
+        job.status === "failed"
+          ? "This run paused."
+          : job.status === "completed"
+            ? "Research complete."
+            : "Research in progress.",
+        job.error || "Sources → model → evidence checks → private brief",
+      );
+    const r = job.result,
+      counts = { positive: 0, neutral: 0, negative: 0, mixed: 0 };
+    r.sentiment.forEach((s) => counts[s.label]++);
+    const total = r.sentiment.length;
+    return `<section class="panel brief-panel"><div class="section-line"><div><span class="eyebrow">${job.kind === "map-article" ? "ARTICLE MAPPING" : "AI RESEARCH"} / PRIVATE</span><h2>${job.kind === "map-article" ? "Your thesis, mapped." : "The current picture."}</h2></div><span class="small">${esc(job.model)}<br>${esc(when(job.createdAt))}</span></div><p class="brief-summary">${esc(r.summary)}</p>${
+      total
+        ? `<div class="sentiment-block"><div class="section-line"><span class="eyebrow">SOURCE SENTIMENT</span><span class="small">${total} sources · this sample only</span></div><div class="sentiment-bar" role="img" aria-label="${Object.entries(
+            counts,
+          )
+            .map(([k, n]) => n + " " + k)
+            .join(", ")}">${Object.entries(counts)
+            .map(([k, n]) =>
+              n
+                ? `<span class="${k}" style="flex:${n}" title="${k}: ${n}"></span>`
+                : "",
+            )
+            .join("")}</div><div class="sentiment-key">${Object.entries(counts)
+            .map(
+              ([k, n]) => `<span class="${k}"><i></i>${k} <b>${n}</b></span>`,
+            )
+            .join(
+              "",
+            )}</div><details><summary>Inspect sentiment evidence</summary>${r.sentiment.map((s) => `<p class="small"><b>${esc(s.label)}</b> · ${esc(s.rationale)} ${sourceLinks([s.sourceId], job.sources)}</p>`).join("")}</details></div>`
+        : ""
+    }<div class="claim-grid">${r.claims.map((c) => `<article class="claim"><span class="eyebrow">${c.kind === "fact" ? "SOURCE-BASED CLAIM" : "INTERPRETATION"}</span><p>${esc(c.text)}</p>${sourceLinks(c.sourceIds, job.sources)}</article>`).join("")}</div>${r.eventMatches?.length ? `<div class="event-suggestions"><span class="eyebrow">POSSIBLE CONDITION MATCHES / REVIEW REQUIRED</span>${r.eventMatches.map((m, i) => `<div><p>${esc(m.rationale)}</p>${sourceLinks(m.sourceIds, job.sources)} <button class="secondary small-button" data-match="${i}">Review event ↗</button></div>`).join("")}</div>` : ""}${job.kind === "map-article" && info.author ? `<div class="inline-notice">${r.scenarios.length} branches mapped to article passages.<button class="primary small-button" data-apply-map>Review in studio ↗</button></div>` : r.scenarios.length ? `<button class="secondary" data-tab="scenarios">View ${r.scenarios.length} scenario branches ↗</button>` : ""}<details class="brief-limitations"><summary>Coverage & limitations</summary>${r.limitations.map((t) => `<p class="small">${esc(t)}</p>`).join("")}<p class="small">AI claims and scenario ranges require review. Source links establish provenance; they do not guarantee a claim is correct.</p>${job.coverage.map((c) => `<p class="small">${esc(c.label)} · ${esc(c.status)} · ${c.count} sources</p>`).join("")}</details></section>`;
+  }
+  function metricsPanel() {
+    const source = sources.find((s) => s.kind === "fundamentals");
+    if (!source) return "";
+    let metrics;
+    try {
+      metrics = JSON.parse(source.content).metrics;
+    } catch {
+      return "";
+    }
+    if (!metrics || !Object.keys(metrics).length) return "";
+    const names = {
+      Assets: "Total assets",
+      CashAndCashEquivalentsAtCarryingValue: "Cash & equivalents",
+      Revenues: "Revenue",
+      NetIncomeLoss: "Net income",
+    };
+    return `<section class="fundamentals-strip" aria-label="Reported financial metrics">${Object.entries(
+      metrics,
+    )
+      .filter(([key, m]) => names[key] && Number.isFinite(m.val))
+      .map(
+        ([key, m]) =>
+          `<div><span class="eyebrow">${esc(names[key])}</span><strong>${esc(new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 }).format(m.val))}</strong><small>${m.start ? esc(m.start) + " → " : "As of "}${esc(m.end)}<br>Filed ${esc(m.filed)} · ${esc(m.form)}</small></div>`,
+      )
+      .join(
+        "",
+      )}<span class="small">SEC-reported periods · not normalized TTM</span></section>`;
+  }
+  function research() {
+    if (!active())
+      return empty(
+        "Choose what to understand.",
+        "Add a ticker to build a private research workspace. Your portfolio stays separate.",
+        model.state.holdings.length
+          ? '<button class="primary" data-add-holdings>Use my portfolio tickers ↗</button>'
+          : '<button class="primary" data-focus-search>Find an asset ↗</button>',
+      );
+    const a = active(),
+      pending = jobs.find(
+        (j) =>
+          j.symbol === a.symbol && ["queued", "running"].includes(j.status),
+      );
+    return `<section class="research-command"><div class="row">${monogram(a)}<div><h2>${esc(a.name)}</h2><span class="small">${esc(a.symbol)} · Private research</span></div></div><div class="research-controls"><label class="automation-control"><span>Auto brief</span><select id="research-schedule" aria-label="Automatic research frequency"><option value="0" ${!a.automatic ? "selected" : ""}>Off</option>${[
+      [6, "Every 6 hours"],
+      [24, "Daily"],
+      [168, "Weekly"],
+    ]
+      .map(
+        ([h, l]) =>
+          `<option value="${h}" ${a.automatic && a.interval_hours === h ? "selected" : ""}>${l}</option>`,
+      )
+      .join(
+        "",
+      )}</select></label><button class="secondary" data-collect>Collect sources</button><button class="primary" data-run ${pending ? "disabled" : ""}>${pending ? (pending.status === "running" ? "✦ Researching…" : "Queued…") : "✦ Run research"}</button></div></section>${a.automatic ? `<div class="automation-note small">${info.preferences.enabled ? "Next automatic brief: " + esc(when(a.next_run)) : "Automation paused · enable AI in settings"} · uses your key and spending limits.</div>` : ""}<div id="research-chart" class="research-chart"></div>${pending ? `<div class="job-progress" role="status"><i></i><span>${pending.status === "running" ? "Gathering evidence and generating a private brief…" : "Waiting for the background worker…"}</span>${pending.status === "queued" ? `<button class="link" data-cancel-job="${esc(pending.id)}">Cancel</button>` : ""}</div>` : ""}${metricsPanel()}<div class="research-main">${resultPanel()}${sourcePanel()}</div><details class="run-history"><summary>Research history · ${jobs.filter((j) => j.symbol === a.symbol).length}</summary>${jobs
+      .filter((j) => j.symbol === a.symbol)
+      .slice(0, 20)
+      .map(
+        (j) =>
+          `<button class="run-row" data-job="${esc(j.id)}"><span>${esc(j.kind)}<small>${esc(when(j.created_at))}</small></span><span>${esc(j.status)} ↗</span></button>`,
+      )
+      .join("")}</details>`;
+  }
+  function scenarios() {
+    const visible = sets.filter(
+      (s) => !memory.symbol || s.symbol === memory.symbol,
+    );
+    return visible.length
+      ? `<div class="section-line"><div><span class="eyebrow">CONDITIONS → OUTCOMES → EVIDENCE</span><h2>Watch the thesis unfold.</h2></div><span class="small">Price samples every ~15 min</span></div>${visible
+          .map(
+            (s) =>
+              `<section class="panel live-scenario"><div class="scenario-set-meta"><span class="privacy-chip">${s.provenance?.kind === "published-article" ? "RNT · published edition " + s.provenance.revision : s.provenance?.kind === "public-fork" ? "Private copy of RNT · edition " + s.provenance.revision : s.provenance?.kind === "private-revision" ? "Private · your revision" : s.provenance?.kind === "ai-research" ? "Private · AI proposal" : "Private · your scenario"}</span><div class="scenario-set-tools">${s.provenance?.kind !== "published-article" ? `<button class="link" data-revise-set="${esc(s.id)}">Revise privately ↗</button>` : ""}<button class="link" data-check-set="${esc(s.id)}">Refresh price ↻</button></div></div>${scenarioCards(s)}<div class="scenario-foot"><span>Created ${esc(when(s.createdAt))}</span><span>${s.counts.prices} price samples · ${s.counts.events} verified events</span></div>${
+                s.observations.some((o) => o.kind === "event" && o.verified)
+                  ? `<details><summary>Verified events</summary>${s.observations
+                      .filter((o) => o.kind === "event" && o.verified)
+                      .map(
+                        (o) =>
+                          `<p class="small">${esc(o.source)} · ${esc(when(o.occurredAt))} <button class="link" data-retract="${esc(o.id)}" data-set="${esc(s.id)}">Retract verification</button></p>`,
+                      )
+                      .join("")}</details>`
+                  : ""
+              }</section>`,
+          )
+          .join(
+            "",
+          )}<p class="small">A price touch records a sampled quote, not causality. Unverified news cannot activate a branch. Scheduled checks may miss intraday moves.</p>`
+      : empty(
+          "A thesis you can follow.",
+          "AI research proposes conditional ranges. RNT’s public scenarios can also be copied into your private workspace.",
+          '<button class="secondary" data-tab="journal">Explore the journal ↗</button>',
+        );
+  }
+  function journalView() {
+    return `<div class="section-line"><div><span class="eyebrow">PUBLIC WRITING / RNT</span><h2>Conviction. With a record.</h2></div><a class="link" href="/journal" target="_blank" rel="noopener">Open public journal ↗</a></div>${journal.length ? `<div class="public-articles">${journal.map((a) => `<article class="journal-public-card"><span class="eyebrow">${esc(a.symbol)} / EDITION ${a.revision}</span><h2>${esc(a.title)}</h2><p>${esc(a.excerpt)}</p><div class="actions"><a class="link" href="/journal/${esc(a.slug)}" target="_blank" rel="noopener">Read article ↗</a><button class="secondary small-button" data-fork="${esc(a.slug)}" data-revision="${a.revision}">Copy scenarios privately</button></div><small>${esc(when(a.publishedAt))} · RNT</small></article>`).join("")}</div>` : empty("The first thesis is ahead.", "RNT’s published articles and scenario maps will appear here. Private drafts stay in the studio.")}`;
+  }
+  function render() {
+    if (!live()) return;
+    destroyChildren();
+    root.innerHTML = `<div class="intelligence-heading"><div><span class="eyebrow">REENTRY INTELLIGENCE</span><h1>Your edge.<br><em>In focus.</em></h1></div><button class="intelligence-meter" data-ai-settings><span>YOUR AI BUDGET</span><strong>${usd(info.spending.spent)}<small> / ${usd(info.preferences.monthlyLimit)}</small></strong><span><i class="${info.preferences.enabled ? "on" : ""}"></i>${info.preferences.enabled ? "Private AI enabled" : "Connect your own AI"} ↗</span></button></div><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[["research", "Research"], ["scenarios", "Scenarios"], ["journal", "RNT journal"], ...(info.author ? [["studio", "Author studio"]] : [])].map(([id, label]) => `<button data-tab="${id}" aria-current="${memory.tab === id ? "page" : "false"}">${label}</button>`).join("")}</nav><div class="research-asset-bar" ${["journal", "studio"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assets.map((a) => `<button class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}">${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button>`).join("")}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button><span class="small">Public ideas. Private decisions.</span>${active() && memory.tab === "research" ? '<button class="link muted" data-remove-asset>Remove from research</button>' : ""}</div>`;
+    if (memory.tab === "research" && active())
+      chart = mountPriceChart(root.querySelector("#research-chart"), active());
+    if (memory.tab === "studio" && info.author)
+      studio = createStudio({
+        root: root.querySelector("#author-studio"),
+        onMapped: async (id) => {
+          memory.jobId = id;
+          memory.tab = "research";
+          const detail = await request("/api/research/jobs/" + id);
+          memory.symbol = detail.symbol;
+          await load();
+        },
+        refreshJournal: async () => {
+          journal = (await request("/api/public/journal")).articles;
+        },
+      });
+    associateLabels(root);
+    bindLogos();
+    const input = root.querySelector("#research-search");
+    if (input)
+      input.oninput = () => {
+        clearTimeout(searchTimer);
+        const epoch = ++searchEpoch,
+          q = input.value.trim();
+        const list = root.querySelector("#research-search-results");
+        if (q.length < 2) {
+          list.innerHTML = "";
+          return;
+        }
+        searchTimer = setTimeout(async () => {
+          try {
+            const r = await request(
+              "/api/search?" + new URLSearchParams({ q }),
+            );
+            if (!live() || epoch !== searchEpoch || !list.isConnected) return;
+            list.innerHTML =
+              r.results
+                .slice(0, 8)
+                .map(
+                  (a) =>
+                    `<button data-add-asset="${esc(a.symbol)}" data-name="${esc(a.name)}" data-asset-type="${esc(a.assetType || "EQUITY")}" data-isin="${esc(a.isin || "")}">${monogram(a)}<span><b>${esc(a.symbol)}</b><small>${esc(a.name)}</small></span></button>`,
+                )
+                .join("") || '<p class="small">No matching assets.</p>';
+            bindLogos();
+          } catch (e) {
+            if (list.isConnected) list.textContent = e.message;
+          }
+        }, 250);
+      };
+    const schedule = root.querySelector("#research-schedule");
+    if (schedule)
+      schedule.onchange = () =>
+        action(schedule, async () => {
+          const a = active(),
+            hours = Number(schedule.value);
+          await request(
+            "/api/research/assets/" + encodeURIComponent(a.symbol),
+            "PUT",
+            { name: a.name, automatic: hours > 0, intervalHours: hours || 24 },
+          );
+          await load();
+          toast(
+            hours
+              ? "Automatic research scheduled."
+              : "Automatic research paused.",
+          );
+        });
+  }
+  async function verify(setId, eventKey, suggestion = null) {
+    const set = sets.find((s) => s.id === setId);
+    if (!set) throw Error("Scenario not found. Refresh the workspace.");
+    const branch = set.branches.find(
+        (b) =>
+          eventKey === b.eventKey || eventKey === b.eventKey + "-invalidated",
+      ),
+      evidence = suggestion
+        ? job.sources.find((s) => suggestion.sourceIds.includes(s.id) && s.url)
+        : null;
+    modal(
+      `<span class="eyebrow">HUMAN VERIFICATION / ${esc(set.symbol)}</span><h2>${eventKey.endsWith("-invalidated") ? "Invalidate this branch" : "Verify this condition"}</h2><p class="sub">${esc(eventKey.endsWith("-invalidated") ? branch.invalidation : branch.condition)}</p>${suggestion ? `<p class="inline-notice">AI suggestion: ${esc(suggestion.rationale)} Check the original source before confirming.</p>` : ""}<form id="verify-event"><div class="field"><label for="event-title">What confirms it?</label><input id="event-title" name="title" maxlength="300" value="${esc(evidence?.title || "")}" required></div><div class="field"><label for="event-url">Evidence link · HTTPS</label><input id="event-url" name="url" type="url" maxlength="2000" value="${esc(evidence?.url || "")}" required></div><div class="field"><label for="event-when">When did it happen? · your local time</label><input id="event-when" name="occurred" type="datetime-local" required></div><label class="consent-line"><input name="verified" type="checkbox" required> I checked this evidence against the exact condition.</label><button class="primary">Record verified event</button></form>`,
+    );
+    document.querySelector("#verify-event").onsubmit = (e) => {
+      e.preventDefault();
+      const f = e.target;
+      action(f.querySelector("button"), async () => {
+        await request("/api/scenarios/" + setId + "/events", "POST", {
+          eventKey,
+          title: f.elements.namedItem("title").value,
+          url: f.elements.namedItem("url").value,
+          occurredAt: new Date(
+            f.elements.namedItem("occurred").value,
+          ).getTime(),
+          verified: f.elements.namedItem("verified").checked,
+        });
+        close();
+        sets = (await request("/api/scenarios")).sets;
+        render();
+        toast("Event verified and recorded.");
+      });
+    };
+  }
+  root.onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b || b.disabled) return;
+    if (b.dataset.tab) {
+      if (!canLeave()) return;
+      memory.tab = b.dataset.tab;
+      render();
+    }
+    if (b.hasAttribute("data-ai-settings")) {
+      if (canLeave()) {
+        navigate("settings");
+        document
+          .querySelector("#ai-settings")
+          ?.scrollIntoView({ block: "start" });
+      }
+    }
+    if (b.hasAttribute("data-focus-search"))
+      root.querySelector("#research-search").focus();
+    if (b.dataset.addAsset)
+      action(b, async () => {
+        await request(
+          "/api/research/assets/" + encodeURIComponent(b.dataset.addAsset),
+          "PUT",
+          {
+            name: b.dataset.name,
+            assetType: b.dataset.assetType,
+            isin: b.dataset.isin,
+            automatic: false,
+            intervalHours: 24,
+          },
+        );
+        memory.symbol = b.dataset.addAsset;
+        memory.jobId = null;
+        await load();
+      });
+    if (b.hasAttribute("data-add-holdings"))
+      action(b, async () => {
+        for (const h of model.state.holdings.slice(0, 50))
+          if (!h.demo && !assets.some((a) => a.symbol === h.symbol))
+            await request(
+              "/api/research/assets/" + encodeURIComponent(h.symbol),
+              "PUT",
+              {
+                name: h.name,
+                assetType: h.assetType,
+                isin: h.isin,
+                automatic: false,
+                intervalHours: 24,
+              },
+            );
+        await load();
+      });
+    if (b.dataset.researchAsset)
+      action(b, async () => {
+        memory.symbol = b.dataset.researchAsset;
+        memory.jobId = null;
+        coverage = [];
+        await loadAsset();
+        render();
+      });
+    if (b.hasAttribute("data-collect"))
+      action(b, async () => {
+        const r = await request(
+          "/api/research/collect",
+          "POST",
+          { symbol: memory.symbol },
+          { timeout: 45000 },
+        );
+        if (!live()) return;
+        sources = r.sources;
+        coverage = r.coverage;
+        render();
+        toast("Available evidence collected.");
+      });
+    if (b.hasAttribute("data-run"))
+      action(b, async () => {
+        const r = await request("/api/research/jobs", "POST", {
+          symbol: memory.symbol,
+          requestKey: crypto.randomUUID(),
+        });
+        memory.jobId = r.id;
+        await load();
+        toast("Research queued.");
+      });
+    if (b.dataset.job)
+      action(b, async () => {
+        memory.jobId = b.dataset.job;
+        job = await request("/api/research/jobs/" + b.dataset.job);
+        render();
+      });
+    if (b.dataset.cancelJob)
+      action(b, async () => {
+        await request("/api/research/jobs/" + b.dataset.cancelJob, "DELETE");
+        await load();
+      });
+    if (b.hasAttribute("data-add-source")) {
+      modal(
+        '<span class="eyebrow">PRIVATE EVIDENCE</span><h2>Add a source.</h2><form id="add-research-source"><div class="field"><label for="source-title">Title</label><input id="source-title" name="title" maxlength="300" required></div><div class="field"><label for="source-url">Source link · optional</label><input id="source-url" name="url" type="url" placeholder="https://…" maxlength="2000"></div><div class="field"><label for="source-content">Source text / your notes</label><textarea id="source-content" name="content" maxlength="15000" rows="8" required></textarea></div><p class="small">Paste the relevant text. Links are stored as references; arbitrary pages are not downloaded. Long text is excerpted for AI processing.</p><button class="primary">Save private source</button></form>',
+      );
+      document.querySelector("#add-research-source").onsubmit = (e) => {
+        e.preventDefault();
+        const f = e.target;
+        action(f.querySelector("button"), async () => {
+          await request("/api/research/sources", "POST", {
+            symbol: memory.symbol,
+            title: f.elements.namedItem("title").value,
+            url: f.elements.namedItem("url").value,
+            content: f.elements.namedItem("content").value,
+          });
+          close();
+          await loadAsset();
+          render();
+        });
+      };
+    }
+    if (b.dataset.deleteSource)
+      action(b, async () => {
+        await request(
+          "/api/research/sources/" + b.dataset.deleteSource,
+          "DELETE",
+        );
+        await loadAsset();
+        render();
+      });
+    if (b.dataset.reviseSet)
+      editPrivateScenario(
+        sets.find((s) => s.id === b.dataset.reviseSet),
+        async () => {
+          sets = (await request("/api/scenarios")).sets;
+          render();
+          toast("Private revision saved.");
+        },
+      );
+    if (b.dataset.checkSet)
+      action(b, async () => {
+        await request(
+          "/api/scenarios/" + b.dataset.checkSet + "/check",
+          "POST",
+          {},
+        );
+        sets = (await request("/api/scenarios")).sets;
+        render();
+      });
+    if (b.dataset.verify)
+      verify(b.dataset.verify, b.dataset.key).catch((e) => toast(e.message));
+    if (b.dataset.match !== undefined) {
+      const m = job.result.eventMatches[Number(b.dataset.match)];
+      verify(m.setId, m.eventKey, m).catch((e) => toast(e.message));
+    }
+    if (b.dataset.retract)
+      action(b, async () => {
+        await request(
+          "/api/scenarios/" + b.dataset.set + "/events/" + b.dataset.retract,
+          "DELETE",
+        );
+        sets = (await request("/api/scenarios")).sets;
+        render();
+      });
+    if (b.dataset.fork)
+      action(b, async () => {
+        await request(
+          "/api/public/journal/" + b.dataset.fork + "/fork",
+          "POST",
+          { revision: Number(b.dataset.revision) },
+        );
+        memory.tab = "scenarios";
+        memory.symbol = null;
+        sets = (await request("/api/scenarios")).sets;
+        render();
+        toast("Independent private scenario copy created.");
+      });
+    if (b.hasAttribute("data-apply-map"))
+      action(b, async () => {
+        const mapped = job;
+        memory.tab = "studio";
+        render();
+        await studio.apply(mapped);
+      });
+    if (b.hasAttribute("data-remove-asset"))
+      action(b, async () => {
+        await request(
+          "/api/research/assets/" + encodeURIComponent(memory.symbol),
+          "DELETE",
+        );
+        await load();
+        toast("Removed from automation. Existing research is retained.");
+      });
+    if (b.hasAttribute("data-export-research"))
+      action(b, async () =>
+        download(
+          await request("/api/research/export"),
+          "reentry-private-research.json",
+        ),
+      );
+    if (b.hasAttribute("data-retry-intelligence"))
+      load().catch((e) => toast(e.message));
+  };
+  load().catch((e) => {
+    if (live())
+      root.innerHTML = empty(
+        "Research is temporarily unavailable.",
+        e.message,
+        '<button class="secondary" data-retry-intelligence>Retry</button>',
+      );
+  });
+  poll = setInterval(async () => {
+    if (
+      !live() ||
+      document.hidden ||
+      memory.tab !== "research" ||
+      !jobs.some((j) => ["queued", "running"].includes(j.status))
+    )
+      return;
+    try {
+      const previous = JSON.stringify(jobs);
+      jobs = (await request("/api/research/jobs")).jobs;
+      if (
+        previous !== JSON.stringify(jobs) &&
+        !root.querySelector("#research-search")?.value
+      ) {
+        await loadAsset();
+        if (memory.tab === "research" && live()) {
+          info = await request("/api/intelligence");
+          sets = (await request("/api/scenarios")).sets;
+          render();
+        }
+      }
+    } catch {
+      /* A failed poll leaves the last known state visible. */
+    }
+  }, 5000);
+  return {
+    canLeave,
+    destroy() {
+      alive = false;
+      clearInterval(poll);
+      clearTimeout(searchTimer);
+      destroyChildren();
+      root.onclick = null;
+    },
+  };
+}

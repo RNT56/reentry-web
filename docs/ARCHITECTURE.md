@@ -1,6 +1,6 @@
 # Reentry engineering boundaries
 
-This release refactors the existing application in place. Portfolio JSON remains **version 1**, SQLite remains **schema 1**, and existing API/account contracts are preserved. There is no data rewrite, account reset, ticker remapping or change of persistent volume.
+This release refactors the existing application in place. Portfolio JSON remains **version 1**, the SQLite core remains **schema 1** with additive, independently versioned intelligence tables, and existing API/account contracts are preserved. There is no data rewrite, account reset, ticker remapping or change of persistent volume.
 
 ## Module map
 
@@ -8,7 +8,7 @@ This release refactors the existing application in place. Portfolio JSON remains
 | --- | --- | --- |
 | Composition | `src/app.js`, `src/app/` | Boot, authenticated workspace, feature wiring, routes, selection, quote refresh |
 | Domain | `src/domain/` | FIFO/tax/targets, validated immutable trade commands, portfolio contract, assets, currencies, reference levels, scenario evaluation |
-| Features | `src/features/` | Portfolio/purchases, planner, activity, identity, settings, charts, platform preview |
+| Features | `src/features/` | Portfolio/purchases, planner, activity, identity, settings, charts, intelligence workspace and author studio |
 | Shared browser infrastructure | `src/shared/` | Bounded-time HTTP, serialized save queue, formatting, dialog and icon primitives |
 | Visual system | `src/styles/` | Component foundations, responsive rules, identity/workspace, charts, Explore; bundled by esbuild |
 | HTTP composition | `server/app.js` | Origin/CSRF boundary, auth, feature route registration, static assets, errors, health |
@@ -20,7 +20,7 @@ This release refactors the existing application in place. Portfolio JSON remains
 
 Dependency direction is composition → features → domain/shared. Domain modules must not import features, HTTP servers, browser APIs, or fetch; ESLint enforces those restrictions. Feature controllers receive workspace state and named services explicitly. They do not import another feature's controller or reach into its DOM to make calculations. The chart accepts `{buyIn,target,quote}` through `setLevels()`; it never reads planner input controls. Cross-feature composition belongs in the workspace.
 
-The app remains framework-light and bundled. A feature can be replaced without requiring a new SPA framework, changing the finance engine or migrating user data. The current account module remains cohesive; split it further when adding author roles rather than wrapping every route in a speculative abstraction.
+The app remains framework-light and bundled. A feature can be replaced without requiring a new SPA framework, changing the finance engine or migrating user data. The current account module remains cohesive; publishing authorization is composed separately from identity in `server/platform/register.js`.
 
 ## Chart contract
 
@@ -54,9 +54,9 @@ Only the Yahoo adapter knows Yahoo URLs or payloads. The service applies caching
 
 ## Database and deployment invariants
 
-Never edit a released migration. Append consecutive versions; each upgrade runs in a transaction. On failure, rollback the schema transaction and close the database. A binary that sees a newer database fails startup instead of silently rewriting `user_version`.
+Never edit a released migration. Append consecutive versions; each upgrade runs in a transaction. On failure, rollback the schema transaction and close the database. A binary that sees a newer core schema fails startup instead of silently rewriting `user_version`. Intelligence modules separately declare a compatible-writer floor: additive upgrades can retain compatibility with older images; an unknown or incompatible floor fails startup.
 
-For future schema changes, prefer additive, backward-compatible expansion first. The deployment runner compares users, portfolios and passkeys before/after startup against a copied production database. A migration intentionally changing those records needs a separately reviewed migration and updated canary assertions. Do not simply weaken the guard. Rollback replaces the image, **not** the live database; destructively incompatible migrations need a planned maintenance/recovery path.
+For future schema changes, prefer additive, backward-compatible expansion first. The deployment runner snapshots all existing durable tables and columns (including portfolios, credentials, costs, research and published revisions), then compares them before/after startup against a copied production database. Session/challenge/throttle and module-version bookkeeping are excluded. New tables and columns may be added; existing durable fields must remain intact. The canary explicitly disables background jobs and has no network. A migration intentionally changing those records needs a separately reviewed migration and updated canary assertions. Do not simply weaken the guard. Rollback replaces the image, **not** the live database; destructively incompatible migrations need a planned maintenance/recovery path.
 
 The installed runner stays outside the Git checkout. Keep its external volume name `reentry_reentry-data`, existing origin, credentials, Caddy configuration and restricted deploy key. Do not run `compose down -v`, delete credentials, restore an old database over newer writes, or include `.env`/data in Git. On-server backups do not replace off-server backups.
 
@@ -70,7 +70,7 @@ The installed runner stays outside the Git checkout. Keep its external volume na
 6. Register navigation deliberately. Do not add a top-level tab for every new tool.
 7. Run `npm run check`, `npm test`, `npm run build`, deployment tests, and relevant desktop/mobile browser checks. The deployment pipeline repeats the checks and verifies the exact live revision.
 
-Future modules should include `journal`, `research`, `scenarios`, `observations`, and `jobs`, with their own persisted records. Do not append those growing datasets to the private version-1 portfolio JSON blob. Canonical instrument/listing identities and a public projection are prerequisites for cross-asset research and publishing. See [the platform vision](PLATFORM-VISION.md) for the product and navigation plan.
+The `server/ai`, `server/intelligence`, `server/journal` and `server/platform` modules now own credentials, billing, research, observations, published revisions and durable jobs. [Their contracts and operational requirements](INTELLIGENCE.md) are documented separately. Do not append those growing datasets to the private version-1 portfolio JSON blob. Canonical instrument/listing identities and a public projection are prerequisites for cross-asset research and publishing. See [the platform vision](PLATFORM-VISION.md) for the product and navigation plan.
 
 ## Deliberate limits
 

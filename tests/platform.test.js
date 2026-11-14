@@ -407,3 +407,53 @@ test("trade commands are atomic, retain FIFO lots and reject duplicate or unaffo
   assert.throws(() => recordBuyback(done, input));
   assert.throws(() => recordBuyback(sale, { ...input, date: "2024-01-01" }));
 });
+
+test("scenario chronology preserves observed outcomes and ignores events beyond the thesis horizon", () => {
+  const b = {
+    asset: "INTC",
+    publishedAt: 0,
+    deadline: 100,
+    requires: ["launch"],
+    invalidatedBy: ["cancel"],
+    target: [20, 30],
+    currency: "USD",
+  };
+  const event = (id, key, time) => ({
+    id,
+    key,
+    asset: "INTC",
+    kind: "event",
+    occurredAt: time,
+    recordedAt: time,
+    verified: true,
+  });
+  const price = {
+    id: "hit",
+    asset: "INTC",
+    kind: "price",
+    value: 25,
+    currency: "USD",
+    occurredAt: 20,
+    recordedAt: 20,
+    verified: true,
+  };
+  const result = evaluateBranch(
+    b,
+    [event("launch", "launch", 10), price, event("cancel", "cancel", 30)],
+    40,
+  );
+  assert.equal(result.status, "observed");
+  assert.equal(result.invalidatedAfterOutcome, true);
+  assert.equal(
+    evaluateBranch(
+      b,
+      [event("launch", "launch", 10), price, event("cancel", "cancel", 15)],
+      40,
+    ).status,
+    "invalidated",
+  );
+  assert.equal(
+    evaluateBranch(b, [event("late", "cancel", 110)], 120).status,
+    "review",
+  );
+});

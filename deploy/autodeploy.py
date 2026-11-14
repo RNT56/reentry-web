@@ -45,20 +45,42 @@ def inspect(container):
     return json.loads(run('docker', 'inspect', container, capture=True))[0]
 
 
-def database_fingerprint(filename):
-    """Compare all persistent account/portfolio/passkey fields without logging their values."""
+# Session/challenge/throttle rows are ephemeral; every other app table is durable.
+EPHEMERAL_TABLES = {'sessions', 'challenges', 'throttle', 'module_migrations', 'module_compatibility'}
+
+
+def preservation_manifest(filename):
     db = sqlite3.connect(Path(filename).resolve().as_uri() + '?mode=ro', uri=True)
+    try:
+        tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                  if not r[0].startswith('sqlite_') and r[0] not in EPHEMERAL_TABLES]
+        if not {'users', 'portfolios', 'passkeys'}.issubset(tables):
+            raise DeploymentError('Required account tables are missing')
+        return {table: [r[1] for r in db.execute('PRAGMA table_info("' + table.replace('"', '""') + '")')]
+                for table in tables}
+    finally:
+        db.close()
+
+
+def database_fingerprint(filename, manifest=None):
+    """Hash every existing durable field without logging private data or key ciphertext."""
+    manifest = manifest if manifest is not None else preservation_manifest(filename)
+    db = sqlite3.connect(Path(filename).resolve().as_uri() + '?mode=ro', uri=True)
+    quote = lambda s: '"' + s.replace('"', '""') + '"'
     try:
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise DeploymentError('Database integrity check failed')
         digest = hashlib.sha256()
-        for table in ('users', 'portfolios', 'passkeys'):
-            columns = [row[1] for row in db.execute(f'PRAGMA table_info({table})')]
-            digest.update(json.dumps(columns).encode())
-            for row in db.execute(f'SELECT * FROM {table} ORDER BY 1'):
+        for table, columns in sorted(manifest.items()):
+            digest.update(json.dumps([table, columns]).encode())
+            selected = ','.join(quote(c) for c in columns)
+            # Composite owner/provider keys need deterministic ordering too.
+            for row in db.execute(f'SELECT {selected} FROM {quote(table)} ORDER BY {selected}'):
                 encoded = [value.hex() if isinstance(value, bytes) else value for value in row]
                 digest.update(json.dumps(encoded, ensure_ascii=True).encode())
         return digest.hexdigest()
+    except sqlite3.DatabaseError as exc:
+        raise DeploymentError('Durable database fields changed incompatibly') from exc
     finally:
         db.close()
 
@@ -85,14 +107,15 @@ def canary(image, snapshot, origin, revision, runtime):
     name = 'reentry-canary-' + directory.name.split('-')[-1]
     try:
         shutil.copy2(snapshot, directory / 'reentry.sqlite')
-        before = database_fingerprint(directory / 'reentry.sqlite')
+        manifest = preservation_manifest(directory / 'reentry.sqlite')
+        before = database_fingerprint(directory / 'reentry.sqlite', manifest)
         run('docker', 'run', '-d', '--name', name, '--user', '1000:1000',
             '--network', 'none', '--read-only', '--cap-drop=ALL',
             '--security-opt=no-new-privileges:true', '--memory=768m', '--cpus=2',
             '--pids-limit=128', '--tmpfs', '/tmp:size=32m,mode=1777',
             '-e', 'NODE_ENV=production', '-e', 'HOST=0.0.0.0', '-e', 'PORT=4173',
             '-e', 'DATABASE_PATH=/data/reentry.sqlite', '-e', 'APP_ORIGIN=' + origin,
-            '-e', 'REENTRY_REVISION=' + revision,
+            '-e', 'REENTRY_REVISION=' + revision, '-e', 'ENABLE_BACKGROUND_JOBS=false',
             '-v', str(directory) + ':/data', image, capture=True)
         for _ in range(30):
             state = inspect(name)['State']
@@ -107,8 +130,8 @@ def canary(image, snapshot, origin, revision, runtime):
         run('docker', 'exec', name, 'node', '-e',
             "fetch('http://127.0.0.1:4173/healthz').then(async r=>{if(!r.ok||!(await r.json()).ok)process.exit(1)}).catch(()=>process.exit(1))")
         run('docker', 'stop', '-t', '20', name, capture=True)
-        if database_fingerprint(directory / 'reentry.sqlite') != before:
-            raise DeploymentError('Candidate changed stored account/portfolio/passkey data during startup; manual migration review required')
+        if database_fingerprint(directory / 'reentry.sqlite', manifest) != before:
+            raise DeploymentError('Candidate changed existing durable data during startup; manual migration review required')
         print('Candidate passed health and database-preservation checks.', flush=True)
     finally:
         subprocess.run(['docker', 'rm', '-f', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

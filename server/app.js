@@ -10,6 +10,7 @@ import { registerAuth } from "./identity/auth.js";
 import { registerPortfolioRoutes } from "./portfolio/routes.js";
 import { registerMarketRoutes } from "./market/routes.js";
 import { createMarketService } from "./market/service.js";
+import { registerPlatform } from "./platform/register.js";
 export async function createApp(options = {}) {
   const origin =
     options.origin || process.env.APP_ORIGIN || "http://localhost:4173";
@@ -32,7 +33,12 @@ export async function createApp(options = {}) {
       options.registration ?? process.env.REGISTRATION_OPEN !== "false",
   };
   const db =
-    options.db || openStore(process.env.DATABASE_PATH || "data/reentry.sqlite");
+    options.db ||
+    openStore(
+      options.databasePath ||
+        process.env.DATABASE_PATH ||
+        "data/reentry.sqlite",
+    );
   const app = Fastify({
     logger: options.logger ?? {
       level: "info",
@@ -92,7 +98,12 @@ export async function createApp(options = {}) {
   });
   await registerAuth(app, db, config);
   registerPortfolioRoutes(app, db);
-  registerMarketRoutes(app, options.marketService || createMarketService());
+  const market = options.marketService || createMarketService();
+  registerMarketRoutes(app, market);
+  app.addHook("onClose", async () => {
+    if (!options.db) db.close();
+  });
+  registerPlatform(app, db, market, options.platform);
   app.get("/healthz", async () => {
     db.prepare("SELECT 1").get();
     return { ok: true, revision: process.env.REENTRY_REVISION || null };
@@ -115,9 +126,6 @@ export async function createApp(options = {}) {
       error:
         status >= 500 ? "Something went wrong. Please try again." : err.message,
     });
-  });
-  app.addHook("onClose", async () => {
-    if (!options.db) db.close();
   });
   return app;
 }

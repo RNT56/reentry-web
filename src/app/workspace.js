@@ -1,4 +1,5 @@
-import { mountExplore } from "../features/explore/view.js";
+import { mountIntelligence } from "../features/intelligence/workspace.js";
+import { mountAISettings } from "../features/intelligence/settings.js";
 import { createSaveQueue } from "../shared/save-queue.js";
 import { parseRoute, routeURL } from "./router.js";
 import { createWorkspaceModel } from "./model.js";
@@ -50,7 +51,9 @@ export function startWorkspace() {
     render,
     logout,
   });
-  let priceChart = null;
+  let priceChart = null,
+    intelligence = null,
+    aiSettings = null;
   const queue = createSaveQueue({
     write: (state, revision) =>
       request("/api/portfolio", "PUT", { state, revision }),
@@ -76,6 +79,10 @@ export function startWorkspace() {
   window.addEventListener("online", () => queue.flush());
   window.addEventListener("hashchange", () => {
     if (!model.currentUser) return;
+    if (intelligence && !intelligence.canLeave()) {
+      history.replaceState(null, "", routeURL(model.page, model.selected));
+      return;
+    }
     const previousPage = model.page;
     const route = parseRoute(location.hash);
     model.page = route.page;
@@ -85,6 +92,7 @@ export function startWorkspace() {
       window.scrollTo({ top: 0, behavior: "instant" });
   });
   function navigate(page, selected = model.selected) {
+    if (intelligence && !intelligence.canLeave()) return;
     const pageChanged = model.page !== page;
     model.page = page;
     model.selected = selected;
@@ -103,6 +111,7 @@ export function startWorkspace() {
   async function signedIn(user, newAccount = false) {
     refreshEpoch++;
     model.busy = false;
+    model.intelligence = null;
     model.currentUser = user;
     try {
       const p = await request("/api/portfolio");
@@ -136,6 +145,7 @@ export function startWorkspace() {
     }
   }
   async function logout(all) {
+    if (intelligence && !intelligence.canLeave()) return;
     await flushSave();
     if (queue.status.pendingSave || queue.status.saving) {
       toast("Save or export your changes before signing out.");
@@ -212,6 +222,10 @@ export function startWorkspace() {
     }
   }
   function renderWorkspace() {
+    intelligence?.destroy();
+    intelligence = null;
+    aiSettings?.destroy();
+    aiSettings = null;
     const previousSelected = model.selected;
     if (model.page === "portfolio") model.selected = current()?.id || null;
     if (
@@ -253,7 +267,10 @@ export function startWorkspace() {
         }),
     );
     ["add", "add-second", "empty-add"].forEach((id) => {
-      if ($("#" + id)) $("#" + id).onclick = () => purchase();
+      if ($("#" + id))
+        $("#" + id).onclick = () => {
+          if (!intelligence || intelligence.canLeave()) purchase();
+        };
     });
     if ($("#demo")) $("#demo").onclick = demo;
     if ($("#refresh")) $("#refresh").onclick = refresh;
@@ -285,8 +302,12 @@ export function startWorkspace() {
       };
       update();
     }
-    if (model.page === "explore") mountExplore($("#explore"));
-    if (model.page === "settings") bindSettings();
+    if (model.page === "explore")
+      intelligence = mountIntelligence($("#intelligence"), { model, navigate });
+    if (model.page === "settings") {
+      bindSettings();
+      aiSettings = mountAISettings($("#ai-settings"));
+    }
     if (model.page === "activity")
       document
         .querySelectorAll("[data-rebuy]")

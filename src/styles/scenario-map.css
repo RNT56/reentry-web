@@ -1,0 +1,187 @@
+.concept-tag {
+  display: inline-flex;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  border: 1px solid #c1d3ac25;
+  border-radius: 20px;
+  padding: 6px 10px;
+  color: #b5c3ab;
+}
+.scenario-root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 0 32px;
+  position: relative;
+  font-size: 11px;
+  color: #93a38f;
+}
+.scenario-root:after {
+  content: "";
+  height: 20px;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  border-left: 1px solid #5a6857;
+}
+.scenario-root b {
+  font-weight: 450;
+  color: #d3ddce;
+}
+.root-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  background: var(--green);
+  border-radius: 50%;
+}
+.scenario-branches {
+  display: grid;
+  grid-template-columns: repeat(var(--branches, 3), minmax(0, 1fr));
+  gap: 16px;
+  padding: 24px 0 0;
+  position: relative;
+}
+.scenario-branches:before {
+  content: "";
+  position: absolute;
+  left: calc(100% / (2 * var(--branches, 3)));
+  right: calc(100% / (2 * var(--branches, 3)));
+  top: 0;
+  border-top: 1px solid #5a6857;
+}
+.scenario-node {
+  --tone: var(--green);
+  display: block;
+  min-width: 0;
+  text-align: left;
+  position: relative;
+  background: #111813;
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+  padding: 20px;
+  overflow-wrap: anywhere;
+}
+.scenario-node:before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  height: 24px;
+  bottom: 100%;
+  border-left: 1px solid #5a6857;
+}
+.scenario-node.downside {
+  --tone: var(--coral);
+}
+.scenario-node.base {
+  --tone: var(--blue);
+}
+.node-status {
+  color: var(--tone);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.node-status i {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+.scenario-node h3 {
+  font-weight: 450;
+  font-size: 13px;
+  margin: 15px 0 12px;
+}
+.node-range {
+  font-family: Manrope, sans-serif;
+  letter-spacing: -1.5px;
+}
+.node-range span {
+  color: #6d7c69;
+  padding: 0 2px;
+}
+.scenario-node p {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #97a391;
+  margin: 9px 0 20px;
+}
+.node-footer {
+  display: block;
+  font-size: 9px;
+  color: #85947d;
+}
+.journal-byline {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 45px;
+  font-size: 10px;
+  color: #85937e;
+}
+/* A vertical trunk keeps every branch connected on narrow screens and large maps. */
+@media (max-width: 1000px) {
+  .scenario-root {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .scenario-root:after {
+    left: 6px;
+  }
+  .scenario-branches {
+    grid-template-columns: 1fr;
+    padding: 0 0 0 18px;
+    gap: 14px;
+  }
+  .scenario-branches:before {
+    left: 6px;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    border-top: 0;
+    border-left: 1px solid #5a6857;
+  }
+  .scenario-node:before {
+    left: -13px;
+    top: 30px;
+    bottom: auto;
+    width: 12px;
+    height: 0;
+    border-left: 0;
+    border-top: 1px solid #5a6857;
+  }
+}
+.scenario-root:has(+ .many-branches) {
+  justify-content: flex-start;
+}
+.scenario-root:has(+ .many-branches):after {
+  left: 6px;
+}
+.many-branches {
+  grid-template-columns: 1fr;
+  padding: 0 0 0 18px;
+}
+.many-branches:before {
+  left: 6px;
+  right: auto;
+  top: 0;
+  bottom: 0;
+  border-top: 0;
+  border-left: 1px solid #5a6857;
+}
+.many-branches .scenario-node:before {
+  left: -13px;
+  top: 30px;
+  bottom: auto;
+  width: 12px;
+  height: 0;
+  border-left: 0;
+  border-top: 1px solid #5a6857;
+}

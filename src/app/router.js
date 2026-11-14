@@ -1,7 +1,7 @@
 export const navigation = Object.freeze([
   { id: "portfolio", label: "Portfolio" },
   { id: "activity", label: "Buybacks" },
-  { id: "explore", label: "Explore" },
+  { id: "explore", label: "Research" },
   { id: "settings", label: "Settings" },
 ]);
 export function parseRoute(hash) {
