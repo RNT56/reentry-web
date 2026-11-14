@@ -49,8 +49,12 @@
   gap: 0;
   min-width: 0;
   padding-top: calc(var(--chart-fs-header-height, 52px) + 8px);
-  padding-inline: 24px;
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  padding-inline: max(24px, env(safe-area-inset-left, 0px))
+    max(24px, env(safe-area-inset-right, 0px));
+  padding-bottom: max(
+    16px,
+    var(--chart-fs-bottom-inset, env(safe-area-inset-bottom, 0px))
+  );
   border: 0;
   overflow: hidden;
 }
@@ -246,7 +250,8 @@
   .macro-stage.chart-fullscreen,
   .strategy-comparison.chart-fullscreen,
   .strategy-structure.chart-fullscreen {
-    padding-inline: max(12px, env(safe-area-inset-left));
+    padding-inline: max(12px, env(safe-area-inset-left, 0px))
+      max(12px, env(safe-area-inset-right, 0px));
   }
   .macro-stage.chart-fullscreen .macro-focus {
     gap: 6px 10px;
@@ -277,7 +282,7 @@
   .macro-stage.chart-fullscreen,
   .strategy-comparison.chart-fullscreen,
   .strategy-structure.chart-fullscreen {
-    padding-bottom: 8px;
+    padding-bottom: max(8px, var(--chart-fs-bottom-inset, 0px));
     padding-top: calc(var(--chart-fs-header-height, 52px) + 2px);
   }
   .macro-stage.chart-fullscreen .macro-stage-tools {
@@ -291,7 +296,7 @@
   .macro-stage.chart-fullscreen .macro-focus {
     position: absolute;
     top: calc(var(--chart-fs-header-height, 52px) + 2px);
-    right: 24px;
+    right: max(24px, env(safe-area-inset-right, 0px));
     display: block;
     max-width: 40%;
   }

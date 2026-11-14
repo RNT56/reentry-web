@@ -27,3 +27,7 @@
 @import "./styles/chart-fullscreen-planner.css";
 @import "./styles/chart-fullscreen-scenarios.css";
 @import "./styles/symbols.css";
+
+@import "./styles/mobile-surfaces.css";
+@import "./styles/mobile-selects.css";
+@import "./styles/mobile-dialogs.css";

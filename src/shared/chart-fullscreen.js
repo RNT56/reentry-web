@@ -1,3 +1,5 @@
+import { acquireScrollLock } from "./scroll-lock.js";
+
 /* A chart keeps its DOM, delegation, drawings and saved state while expanded. */
 const activeCharts = new WeakMap();
 const nativeRequests = new WeakMap();
@@ -6,9 +8,9 @@ const focusSelector =
   'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 const safePortals = "#modal,#toast,[data-fullscreen-portal]";
 const expandIcon =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg>';
 const closeIcon =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg>';
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="m6 6 12 12M6 18 18 6"/></svg>';
 const attributes = ["popover", "role", "aria-modal", "aria-label", "tabindex"];
 const viewportProperties = [
   "--chart-fs-vw",
@@ -65,13 +67,12 @@ export function mountChartFullscreen(
   let snapshot = null,
     mode = null,
     savedFocus = null,
-    scroll = null,
+    releaseScrollLock = null,
     request = null,
     nativeOwned = false;
   let toastSnapshot = null;
   let inertNodes = new Map(),
-    ancestorStyles = [],
-    scrollStyles = [];
+    ancestorStyles = [];
   const button = doc.createElement("button");
   button.type = "button";
   button.className = "chart-fs-button";
@@ -151,38 +152,14 @@ export function mountChartFullscreen(
     visit(doc.body);
   }
   function unlock() {
-    for (const [element, styles] of scrollStyles)
-      restoreStyles(element, styles);
-    scrollStyles = [];
     for (const [element, styles] of ancestorStyles)
       restoreStyles(element, styles);
     ancestorStyles = [];
-    if (scroll)
-      win.scrollTo({ left: scroll.x, top: scroll.y, behavior: "instant" });
-    scroll = null;
+    releaseScrollLock?.();
+    releaseScrollLock = null;
   }
   function lock() {
-    scroll = { x: win.scrollX || 0, y: win.scrollY || 0 };
-    scrollStyles = [
-      [html, rememberStyles(html, ["overflow", "scroll-behavior"])],
-      [
-        doc.body,
-        rememberStyles(doc.body, [
-          "position",
-          "top",
-          "left",
-          "width",
-          "overflow",
-        ]),
-      ],
-    ];
-    html.style.setProperty("overflow", "hidden");
-    html.style.setProperty("scroll-behavior", "auto");
-    doc.body.style.setProperty("position", "fixed");
-    doc.body.style.setProperty("top", `${-scroll.y}px`);
-    doc.body.style.setProperty("left", `${-scroll.x}px`);
-    doc.body.style.setProperty("width", "100%");
-    doc.body.style.setProperty("overflow", "hidden");
+    releaseScrollLock = acquireScrollLock(doc);
   }
   function fallbackAncestors() {
     // Old engines lack top-layer popovers. Remove only ancestor containment and

@@ -41,6 +41,7 @@
 }
 .chart-fullscreen {
   --chart-fs-header-height: calc(52px + env(safe-area-inset-top, 0px));
+  --chart-fs-bottom-inset: env(safe-area-inset-bottom, 0px);
   position: fixed !important;
   z-index: 2147483000;
   inset: auto !important;
@@ -54,7 +55,7 @@
   min-height: 0 !important;
   margin: 0 !important;
   padding-top: var(--chart-fs-header-height);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--chart-fs-bottom-inset);
   border: 0 !important;
   border-radius: 0 !important;
   box-sizing: border-box !important;
@@ -126,4 +127,20 @@
   margin: 0;
   border: 0;
   overflow: visible;
+}
+/* A software keyboard already occupies the home-indicator region in Safari. */
+.keyboard-open .chart-fullscreen {
+  --chart-fs-bottom-inset: 0px;
+}
+@media (any-pointer: coarse) {
+  .chart-fs-button,
+  .chart-fs-exit {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+  .chart-fullscreen {
+    --chart-fs-header-height: calc(52px + env(safe-area-inset-top, 0px));
+  }
 }

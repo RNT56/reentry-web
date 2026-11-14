@@ -4,6 +4,7 @@
   gap: 8px;
   flex-shrink: 0;
 }
+
 .history-expand-host {
   display: inline-flex;
   flex: 0 0 auto;
@@ -35,7 +36,7 @@
   gap: 0;
   padding: max(14px, env(safe-area-inset-top, 0px))
     max(20px, env(safe-area-inset-right, 0px))
-    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, var(--chart-fs-bottom-inset, env(safe-area-inset-bottom, 0px)))
     max(20px, env(safe-area-inset-left, 0px));
   background: #101612;
   border: 0;
@@ -229,7 +230,7 @@
 @media (max-height: 500px) and (min-width: 601px) {
   .price-history.chart-fullscreen {
     padding-block: max(9px, env(safe-area-inset-top, 0px))
-      max(8px, env(safe-area-inset-bottom, 0px));
+      max(8px, var(--chart-fs-bottom-inset, env(safe-area-inset-bottom, 0px)));
   }
   .price-history.chart-fullscreen .price-history-top {
     margin-bottom: 5px;
@@ -254,5 +255,15 @@
   .price-history.chart-fullscreen .history-caption {
     margin-top: 5px;
     font-size: 9px;
+  }
+}
+
+@media (any-pointer: coarse) {
+  .history-expand-host .chart-fs-button,
+  .price-history.chart-fullscreen .history-ranges button,
+  .price-history.chart-fullscreen .history-currency-switch,
+  .price-history.chart-fullscreen .level-toggle {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

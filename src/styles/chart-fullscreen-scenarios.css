@@ -3,6 +3,7 @@
 .scenario-fs-layout {
   display: contents;
 }
+
 .scenario-set-tools > .chart-fs-button {
   width: 32px;
   min-width: 32px;
@@ -19,7 +20,8 @@
   display: flex;
   flex-direction: column;
   padding: var(--chart-fs-header-height)
-    max(22px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px)
+    max(22px, env(safe-area-inset-right, 0px))
+    var(--chart-fs-bottom-inset, env(safe-area-inset-bottom, 0px))
     max(22px, env(safe-area-inset-left, 0px));
   overflow: hidden;
 }
@@ -180,5 +182,16 @@
   }
   .journal-map.chart-fullscreen > .journal-scenarios {
     padding-top: 14px;
+  }
+}
+
+@media (any-pointer: coarse) {
+  .scenario-set-tools > .chart-fs-button,
+  .live-scenario.chart-fullscreen button,
+  .live-scenario.chart-fullscreen summary,
+  .journal-map.chart-fullscreen button,
+  .journal-map.chart-fullscreen summary {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

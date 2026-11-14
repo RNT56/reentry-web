@@ -172,7 +172,7 @@
   bottom: auto;
   min-height: 0;
   margin: 0 -8px;
-  padding: 0 14px max(3px, env(safe-area-inset-bottom, 0px));
+  padding: 0 14px max(3px, var(--chart-fs-bottom-inset));
   z-index: 6;
   border-block: 1px solid #aecaa715;
   background: #121b15f9;
@@ -202,7 +202,7 @@
 .chart-fullscreen .ta-tool-drawer {
   position: absolute;
   z-index: 8;
-  right: 8px;
+  right: max(8px, env(safe-area-inset-right, 0px));
   bottom: calc(100% + 8px);
   width: min(450px, calc(100% - 16px));
   max-height: calc(
@@ -273,7 +273,7 @@
   position: absolute;
   z-index: 7;
   top: calc(var(--chart-fs-header-height, 52px) + 7px);
-  right: 8px;
+  right: max(8px, env(safe-area-inset-right, 0px));
   bottom: calc(var(--ta-fs-toolbar-height, 54px) + 8px);
   width: min(400px, calc(100% - 16px));
   display: flex;
@@ -460,5 +460,81 @@
 @media (max-width: 520px) {
   .analysis-chart.chart-fullscreen > .chart-fs-header .chart-fs-title {
     max-width: 48px;
+  }
+}
+
+/* Controls remain reachable while a workspace name or note opens the keyboard. */
+.keyboard-open .analysis-chart.chart-fullscreen {
+  grid-template-rows: 18px minmax(0, 1fr) 18px auto;
+}
+@media (any-pointer: coarse) {
+  .analysis-chart.chart-fullscreen > .ta-heading {
+    right: calc(max(16px, env(safe-area-inset-right, 0px)) + 52px);
+  }
+  .chart-fullscreen .ta-fullscreen-settings,
+  .chart-fullscreen .ta-fullscreen-panel > header .icon-button,
+  .chart-fullscreen .ta-control-bar button,
+  .chart-fullscreen .ta-ai-rail button,
+  .chart-fullscreen .ta-active-row button,
+  .chart-fullscreen .ta-tool-drawer button,
+  .chart-fullscreen .ta-indicator-menu label,
+  .chart-fullscreen .ta-fullscreen-panel .ta-slots button,
+  .chart-fullscreen .ta-fullscreen-panel .ta-ranges button {
+    min-height: 44px;
+  }
+  .chart-fullscreen .ta-fullscreen-settings,
+  .chart-fullscreen .ta-view-tools button {
+    min-width: 44px;
+    width: 44px;
+  }
+  .chart-fullscreen .ta-control-bar {
+    min-height: 50px;
+    flex-wrap: wrap;
+  }
+  .chart-fullscreen .ta-tool-drawer .ta-tools button {
+    height: 44px;
+  }
+  .chart-fullscreen .ta-tool-drawer,
+  .chart-fullscreen > .ta-fullscreen-panel:not([hidden]) {
+    max-width: calc(
+      100% - max(8px, env(safe-area-inset-left, 0px)) -
+        max(8px, env(safe-area-inset-right, 0px))
+    );
+  }
+}
+/* Six full-size touch targets fit even a 320px phone without a second row. */
+@media (max-width: 400px) and (any-pointer: coarse) {
+  .chart-fullscreen .ta-control-bar {
+    gap: 4px;
+    justify-content: space-between;
+  }
+  .chart-fullscreen .ta-control-bar button {
+    min-width: 44px;
+    width: 44px;
+    padding-inline: 0;
+  }
+  .chart-fullscreen .ta-tools-toggle {
+    justify-content: center;
+  }
+  .chart-fullscreen .ta-tools-toggle > svg:first-child {
+    display: block;
+  }
+  .chart-fullscreen .ta-tools-toggle > svg:last-child {
+    display: none;
+  }
+  .chart-fullscreen .ta-tools-toggle > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .chart-fullscreen .ta-view-tools,
+  .chart-fullscreen .ta-display-compact {
+    margin-inline: 0;
+    padding-inline: 0;
+    border: 0;
+    gap: 0;
   }
 }

@@ -2,6 +2,11 @@ import { brandMark } from "./brand.js";
 import { assetInfo, logoURL } from "../domain/assets.js";
 import { $, esc } from "./format.js";
 import { icon } from "./icons.js";
+import {
+  beginDialogSession,
+  finishDialogSession,
+  dialogFocusTarget,
+} from "./dialog-session.js";
 export { icon } from "./icons.js";
 export function logo() {
   return brandMark();
@@ -31,6 +36,8 @@ export function associateLabels(root) {
 }
 export function modal(html) {
   const dialog = $("#modal");
+  beginDialogSession(dialog);
+  dialog.removeAttribute("aria-labelledby");
   dialog.innerHTML = `<button class="close icon-button" aria-label="Close dialog">${icon("close")}</button>${html}`;
   const header = document.createElement("header");
   header.className = "dialog-header";
@@ -65,17 +72,20 @@ export function modal(html) {
   associateLabels($("#modal"));
   bindLogos();
   $("#modal .close").onclick = close;
-  $("#modal").showModal();
-  document.documentElement.classList.add("dialog-open");
-  dialog.addEventListener(
-    "close",
-    () => document.documentElement.classList.remove("dialog-open"),
-    { once: true },
-  );
-  $("#modal").querySelector("input:not([type=hidden]),select")?.focus();
+  if (!dialog.open) {
+    try {
+      dialog.showModal();
+    } catch (error) {
+      finishDialogSession(dialog);
+      throw error;
+    }
+  }
+  dialogFocusTarget(dialog)?.focus({ preventScroll: true });
 }
 export function close() {
-  $("#modal").close();
+  const dialog = $("#modal");
+  dialog.close();
+  finishDialogSession(dialog);
 }
 let toastTimer,
   toastVersion = 0;

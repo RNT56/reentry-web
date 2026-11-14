@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { acquireScrollLock } from "../src/shared/scroll-lock.js";
 import {
   mountChartFullscreen,
   closeChartFullscreen,
@@ -351,6 +352,56 @@ function fixture({
   };
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test("closing a chart beneath an open modal keeps the page frozen until the modal closes", () => {
+  const h = fixture();
+  let releaseModal;
+  try {
+    h.controller.open();
+    releaseModal = acquireScrollLock(h.doc);
+    h.modal.setAttribute("open", "");
+    h.controller.close();
+    assert.equal(h.doc.body.style.getPropertyValue("position"), "fixed");
+    assert.equal(h.doc.body.style.getPropertyValue("top"), "-420px");
+    assert.equal(h.win.lastScroll, undefined);
+    h.modal.removeAttribute("open");
+    releaseModal();
+    assert.equal(h.doc.body.style.getPropertyValue("position"), "");
+    assert.deepEqual(h.win.lastScroll, {
+      left: 37,
+      top: 420,
+      behavior: "instant",
+    });
+  } finally {
+    releaseModal?.();
+    h.controller.destroy();
+  }
+});
+
+test("keyboard viewport resizing updates the same expanded chart without restoring page scroll", () => {
+  const h = fixture();
+  try {
+    h.controller.open();
+    h.win.visualViewport.height = 320;
+    h.win.visualViewport.offsetTop = 88;
+    h.emit(h.win.visualViewport, "resize");
+    h.emit(h.win.visualViewport, "scroll");
+    h.step();
+    assert.equal(h.controller.isActive(), true);
+    assert.equal(h.root.contains(h.field), true);
+    assert.equal(h.root.style.getPropertyValue("--chart-fs-vh"), "320px");
+    assert.equal(h.root.style.getPropertyValue("--chart-fs-top"), "88px");
+    assert.equal(h.win.lastScroll, undefined);
+    h.win.visualViewport.height = 744;
+    h.win.visualViewport.offsetTop = 0;
+    h.emit(h.win.visualViewport, "resize");
+    h.step();
+    assert.equal(h.root.style.getPropertyValue("--chart-fs-vh"), "744px");
+    assert.equal(h.transitions.length, 1);
+  } finally {
+    h.controller.destroy();
+  }
+});
 
 test("fullscreen preserves the chart DOM, original attributes, inert state, focus and scroll", () => {
   const h = fixture();

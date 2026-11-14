@@ -4,7 +4,56 @@ let sequence = 0;
 const controls = new Map();
 let opened = null;
 const chevron =
-  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+// All coordinates are CSS pixels in the layout viewport. The visual viewport
+// can move independently while Safari reveals the keyboard or the user zooms.
+export function selectMenuPlacement(rect, viewport, contentHeight, safe = {}) {
+  const margin = 8,
+    gap = 7;
+  const leftEdge = viewport.left + margin + (safe.left || 0);
+  const rightEdge = viewport.left + viewport.width - margin - (safe.right || 0);
+  const topEdge = viewport.top + margin + (safe.top || 0);
+  const bottomEdge =
+    viewport.top + viewport.height - margin - (safe.bottom || 0);
+  const width = Math.max(
+    0,
+    Math.min(Math.max(rect.width, 200), rightEdge - leftEdge),
+  );
+  const totalHeight = Math.max(0, bottomEdge - topEdge);
+  const below = Math.max(0, bottomEdge - rect.bottom - gap);
+  const above = Math.max(0, rect.top - topEdge - gap);
+  const desired = Math.min(360, Math.max(0, contentHeight));
+  const upwards = below < Math.min(desired, 220) && above > below;
+  // A very small keyboard viewport may need to overlap the anchor; it must
+  // never force an 80px box beyond the screen as the old minimum did.
+  const available =
+    Math.max(above, below) < 44 ? totalHeight : upwards ? above : below;
+  const height = Math.min(desired, available, totalHeight);
+  const top = upwards ? rect.top - gap - height : rect.bottom + gap;
+  return {
+    width,
+    height,
+    left: Math.max(leftEdge, Math.min(rect.left, rightEdge - width)),
+    top: Math.max(topEdge, Math.min(top, bottomEdge - height)),
+    visible:
+      width > 0 &&
+      height > 0 &&
+      rect.bottom > topEdge &&
+      rect.top < bottomEdge &&
+      rect.right > leftEdge &&
+      rect.left < rightEdge,
+  };
+}
+
+export function revealSelectOption(panel, row) {
+  const bounds = panel.getBoundingClientRect(),
+    item = row.getBoundingClientRect();
+  const top = bounds.top + panel.clientTop;
+  const bottom = top + panel.clientHeight;
+  if (item.top < top) panel.scrollTop += item.top - top;
+  else if (item.bottom > bottom) panel.scrollTop += item.bottom - bottom;
+}
 
 function fieldName(select) {
   if (select.getAttribute("aria-label"))
@@ -72,29 +121,47 @@ function enhance(select) {
       .map((o, i) => ({ o, i }))
       .filter(({ o }) => !o.disabled && !o.hidden && !o.parentElement.disabled)
       .map(({ i }) => i);
-  const state = { select, wrapper, trigger, close, sync };
+  const state = { select, wrapper, trigger, close, sync, position };
   controls.set(select, state);
 
   function position() {
+    if (opened !== state) return;
     const rect = trigger.getBoundingClientRect();
     const viewport = window.visualViewport;
-    const top = viewport?.offsetTop || 0,
-      left = viewport?.offsetLeft || 0;
-    const height = viewport?.height || innerHeight,
-      width = viewport?.width || innerWidth;
-    const below = top + height - rect.bottom - 16;
-    const above = rect.top - top - 16;
-    const upwards = below < Math.min(panel.scrollHeight, 220) && above > below;
-    const available = Math.max(80, upwards ? above : below);
-    panel.style.width = Math.min(Math.max(rect.width, 200), width - 24) + "px";
-    panel.style.maxHeight = Math.min(360, available) + "px";
-    panel.style.left =
-      Math.max(
-        left + 12,
-        Math.min(rect.left, left + width - panel.offsetWidth - 12),
-      ) + "px";
-    panel.style.top =
-      (upwards ? rect.top - panel.offsetHeight - 7 : rect.bottom + 7) + "px";
+    const style = getComputedStyle(panel);
+    const safe = Object.fromEntries(
+      ["top", "right", "bottom", "left"].map((side) => [
+        side,
+        parseFloat(style.getPropertyValue(`--select-safe-${side}`)) || 0,
+      ]),
+    );
+    const bounds = {
+      top: viewport?.offsetTop || 0,
+      left: viewport?.offsetLeft || 0,
+      height: viewport?.height || innerHeight,
+      width: viewport?.width || innerWidth,
+    };
+    // Measure wrapping at the final width before choosing above/below.
+    const width = selectMenuPlacement(
+      rect,
+      bounds,
+      panel.scrollHeight + 2,
+      safe,
+    ).width;
+    panel.style.width = `${width}px`;
+    const placement = selectMenuPlacement(
+      rect,
+      bounds,
+      panel.scrollHeight + 2,
+      safe,
+    );
+    if (!placement.visible) {
+      close(false);
+      return;
+    }
+    panel.style.maxHeight = `${placement.height}px`;
+    panel.style.left = `${placement.left}px`;
+    panel.style.top = `${placement.top}px`;
   }
   function paintActive(scroll = true) {
     for (const row of panel.querySelectorAll("[role=option]")) {
@@ -103,7 +170,7 @@ function enhance(select) {
       row.setAttribute("aria-selected", String(index === select.selectedIndex));
       if (index === active) {
         trigger.setAttribute("aria-activedescendant", row.id);
-        if (scroll) row.scrollIntoView({ block: "nearest" });
+        if (scroll) revealSelectOption(panel, row);
       }
     }
   }
@@ -132,8 +199,8 @@ function enhance(select) {
         String(option.disabled || option.parentElement.disabled || false),
       );
       row.textContent = option.label;
-      row.addEventListener("pointermove", () => {
-        if (enabled().includes(index)) {
+      row.addEventListener("pointermove", (event) => {
+        if (event.pointerType === "mouse" && enabled().includes(index)) {
           active = index;
           paintActive(false);
         }
@@ -144,11 +211,55 @@ function enhance(select) {
       row.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (e.detail && touchGesture?.moved) return;
         commit(index);
       });
       panel.append(row);
     });
   }
+  let touchGesture = null;
+  panel.addEventListener(
+    "pointerdown",
+    (event) => {
+      touchGesture =
+        event.pointerType === "touch"
+          ? {
+              id: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              scroll: panel.scrollTop,
+              moved: false,
+            }
+          : null;
+    },
+    true,
+  );
+  panel.addEventListener(
+    "pointermove",
+    (event) => {
+      if (
+        touchGesture?.id === event.pointerId &&
+        (Math.hypot(
+          event.clientX - touchGesture.x,
+          event.clientY - touchGesture.y,
+        ) > 8 ||
+          panel.scrollTop !== touchGesture.scroll)
+      )
+        touchGesture.moved = true;
+    },
+    true,
+  );
+  panel.addEventListener("pointercancel", () => {
+    if (touchGesture) touchGesture.moved = true;
+  });
+  panel.addEventListener(
+    "scroll",
+    () => {
+      if (touchGesture && panel.scrollTop !== touchGesture.scroll)
+        touchGesture.moved = true;
+    },
+    { passive: true },
+  );
   function sync() {
     if (!select.isConnected) {
       close(false);
@@ -212,6 +323,7 @@ function enhance(select) {
     panel.showPopover?.();
     trigger.setAttribute("aria-expanded", "true");
     position();
+    if (opened !== state) return;
     paintActive();
     trigger.focus({ preventScroll: true });
   }
@@ -286,7 +398,9 @@ function enhance(select) {
     }
   });
   select.addEventListener("change", sync);
-  select.addEventListener("focus", () => trigger.focus());
+  select.addEventListener("focus", () =>
+    trigger.focus({ preventScroll: true }),
+  );
   select.addEventListener("invalid", (e) => {
     e.preventDefault();
     select.setAttribute("aria-invalid", "true");
@@ -303,6 +417,9 @@ export function installControls() {
   let scheduled = false;
   function update() {
     scheduled = false;
+    document
+      .querySelectorAll('input[type="number"]:not([inputmode])')
+      .forEach((input) => input.setAttribute("inputmode", "decimal"));
     document.querySelectorAll("select").forEach(enhance);
     controls.forEach((c) => c.sync());
   }
@@ -336,15 +453,28 @@ export function installControls() {
   document.addEventListener("focusin", (e) => {
     if (opened && !opened.wrapper.contains(e.target)) opened.close();
   });
+  let frame = 0;
+  function positionOpenMenu() {
+    if (frame || !opened) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      opened?.position();
+    });
+  }
   document.addEventListener(
     "scroll",
-    (e) => {
-      if (opened && !e.target.closest?.(".select-menu")) opened.close();
+    (event) => {
+      if (!event.target.closest?.(".select-menu")) positionOpenMenu();
     },
     true,
   );
-  window.addEventListener("resize", () => opened?.close());
-  window.visualViewport?.addEventListener("resize", () => opened?.close());
+  window.addEventListener("resize", positionOpenMenu, { passive: true });
+  window.visualViewport?.addEventListener("resize", positionOpenMenu, {
+    passive: true,
+  });
+  window.visualViewport?.addEventListener("scroll", positionOpenMenu, {
+    passive: true,
+  });
   document.addEventListener("close", () => opened?.close(), true);
   update();
 }

@@ -1,0 +1,113 @@
+/* Match the legacy purchase-dialog specificity so its old bottom margin and
+   viewport cap cannot overconstrain Safari's auto-centred top-layer box. */
+dialog#modal {
+  --dialog-gap: 18px;
+  position: fixed;
+  inset: auto;
+  top: calc(
+    var(--visual-viewport-top, 0px) +
+      max(var(--dialog-gap), env(safe-area-inset-top, 0px))
+  );
+  bottom: calc(
+    100% - var(--visual-viewport-top, 0px) -
+      var(--visual-viewport-height, 100dvh) +
+      max(var(--dialog-gap), env(safe-area-inset-bottom, 0px))
+  );
+  left: calc(
+    var(--visual-viewport-left, 0px) + max(10px, env(safe-area-inset-left, 0px))
+  );
+  right: calc(
+    100% - var(--visual-viewport-left, 0px) -
+      var(--visual-viewport-width, 100vw) +
+      max(10px, env(safe-area-inset-right, 0px))
+  );
+  width: 490px;
+  height: fit-content;
+  max-width: calc(
+    var(--visual-viewport-width, 100vw) -
+      max(10px, env(safe-area-inset-left, 0px)) -
+      max(10px, env(safe-area-inset-right, 0px))
+  );
+  max-height: calc(
+    var(--visual-viewport-height, 100dvh) -
+      max(var(--dialog-gap), env(safe-area-inset-top, 0px)) -
+      max(var(--dialog-gap), env(safe-area-inset-bottom, 0px))
+  );
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  transform: none;
+  box-sizing: border-box;
+}
+#modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+#modal .dialog-header {
+  flex: 0 0 auto;
+}
+#modal .dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-block: 18px 110px;
+}
+#modal :is(input, textarea, .select-trigger, summary) {
+  scroll-margin-block: 18px 110px;
+}
+#modal .close {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+#modal .actions {
+  padding-bottom: 16px;
+  flex-wrap: wrap;
+}
+@media (max-width: 600px), (max-height: 500px) {
+  dialog#modal {
+    --dialog-gap: 10px;
+  }
+  #modal .dialog-header {
+    padding: 18px 20px 16px;
+  }
+  #modal .close {
+    top: 9px;
+    right: 9px;
+  }
+  #modal .dialog-header h2 {
+    font-size: 22px;
+    line-height: 1.25;
+    padding-right: 38px;
+  }
+  #modal .dialog-body {
+    padding: 18px 20px 0;
+  }
+  #modal .actions {
+    margin-top: 18px;
+    padding-top: 12px;
+    padding-bottom: 16px;
+  }
+}
+@media (max-height: 360px) {
+  #modal .dialog-header {
+    padding-block: 12px;
+  }
+  #modal .dialog-header .eyebrow,
+  #modal .dialog-header .sub {
+    display: none;
+  }
+  #modal .dialog-header h2 {
+    font-size: 19px;
+  }
+  #modal .close {
+    top: 2px;
+  }
+  #modal .dialog-body {
+    padding-top: 12px;
+  }
+}
