@@ -1,4 +1,0 @@
-import fs from 'node:fs';
-const files={'/':['src/index.html','text/html; charset=utf-8'],'/app.js':['src/app.js','text/javascript; charset=utf-8'],'/engine.js':['src/engine.js','text/javascript; charset=utf-8'],'/style.css':['src/style.css','text/css; charset=utf-8']};
-const assets=Object.fromEntries(Object.entries(files).map(([url,[file,type]])=>[url,{body:fs.readFileSync(file,'utf8'),type}]));
-fs.writeFileSync('worker/index.js',fs.readFileSync('src/server.js','utf8')+'\nconst assets='+JSON.stringify(assets)+';\nexport default {async fetch(request){const url=new URL(request.url);if(request.method!=="GET")return new Response("Method not allowed",{status:405});if(url.pathname.startsWith("/api/"))return api(url);const a=assets[url.pathname];return a?new Response(a.body,{headers:{"Content-Type":a.type,"X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","Cache-Control":"no-cache"}}):new Response("Not found",{status:404});}};');

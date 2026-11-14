@@ -1,0 +1,14 @@
+# Add ONE of these blocks to your EXISTING Caddy configuration.
+# Replace stocks.example.com with the domain used in APP_ORIGIN.
+
+# Caddy installed directly on the VPS:
+stocks.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:4173
+}
+
+# If Caddy is in Docker, use this instead, with compose.caddy-network.yaml:
+# stocks.example.com {
+#     encode zstd gzip
+#     reverse_proxy reentry:4173
+# }

@@ -1,0 +1,9 @@
+# Optional override when Caddy runs in Docker on an existing external network.
+services:
+  reentry:
+    networks:
+      - caddy
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:-caddy}

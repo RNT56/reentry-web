@@ -1,0 +1,5 @@
+# Append to the existing /home/deploy/pave/infra/Caddyfile.
+reentry.xn--pav-dma.tech {
+    encode zstd gzip
+    reverse_proxy reentry:4173
+}

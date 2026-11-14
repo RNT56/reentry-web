@@ -1,0 +1,30 @@
+services:
+  reentry:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN in .env to your HTTPS origin}
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      TRUST_PROXY: "1"
+    ports:
+      - "127.0.0.1:${APP_PORT:-4173}:4173"
+    volumes:
+      - reentry-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    cpus: 2
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  reentry-data:
