@@ -12,3 +12,7 @@ worker
 *.sqlite*
 *.png
 tests
+
+.github
+__pycache__
+*.pyc

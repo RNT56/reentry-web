@@ -1,0 +1,55 @@
+# Installed once on the VPS. App pushes do not replace this file or its volumes.
+services:
+  reentry:
+    image: ${REENTRY_IMAGE:?Deployment must specify an image}
+    user: "1000:1000"
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "4173"
+      DATABASE_PATH: /data/reentry.sqlite
+      APP_ORIGIN: ${APP_ORIGIN:?Set the HTTPS origin}
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      TRUST_PROXY: "1"
+      REENTRY_REVISION: ${REENTRY_REVISION:-unknown}
+    ports:
+      - "127.0.0.1:${APP_PORT:-4173}:4173"
+    volumes:
+      - reentry-data:/data
+    networks:
+      - caddy
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 2
+    pids_limit: 128
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:4173/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 6
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  reentry-data:
+    external: true
+    name: reentry_reentry-data
+networks:
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:-pave-company_default}

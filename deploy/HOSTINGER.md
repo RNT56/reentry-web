@@ -14,17 +14,11 @@ Live as of 14 November 2026. HTTPS, private API protection, and the existing ape
 
 DNS needs an A record named `reentry` in the `pavé.tech` zone pointing to `179.67.193.45`. The existing apex record and project stay in place.
 
-## Run or update
+## Automatic updates
 
-On the VPS:
+Push to `main` in the GitHub repository. Tests run before the server builds and checks the new image, backs up SQLite, and replaces only the application container. Accounts and portfolio data stay in the existing external volume. See [automatic deployment operations](AUTODEPLOY.md) for checks, backups, logs, and rollback.
 
-```sh
-cd /home/deploy/reentry
-git pull --ff-only
-# First install only: cp deploy/hostinger.env.example .env
-docker compose -p reentry -f compose.yaml -f compose.caddy-network.yaml up -d --build
-docker compose -p reentry -f compose.yaml -f compose.caddy-network.yaml ps
-```
+Production now uses the stable Compose file at `/home/deploy/.local/lib/reentry-deploy/compose.yaml`. Do not use the original build-based Compose command to bypass the deployment checks during routine updates.
 
 The Reentry block from `deploy/reentry.Caddyfile` must be appended once to the existing Caddyfile. Validate before a graceful reload:
 
@@ -49,4 +43,4 @@ chmod 600 ./backups/reentry.sqlite
 
 Copy the backup off the VPS. See the main README for restore procedures; use the same `-p reentry -f compose.yaml -f compose.caddy-network.yaml` options with each Compose command on this installation. Never remove the data volume during an update.
 
-Create your own account at the public URL and save the recovery key. No production account is pre-created. Enroll your passkey on this final domain. To close public signup later, set `REGISTRATION_OPEN=false` in `.env` and re-run `docker compose ... up -d`.
+Create your own account at the public URL and save the recovery key. No production account is pre-created. Enroll your passkey on this final domain. To close public signup later, set `REGISTRATION_OPEN=false` in `.env`, then rerun the deployment workflow on `main`.

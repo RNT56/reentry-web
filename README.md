@@ -62,6 +62,10 @@ Registration is open by default and rate-limited. To close new signups after eve
 
 Passwords must contain 12–128 characters. Usernames contain 3–32 letters, numbers, or underscores and are case-insensitive. Passkeys are optional; passwords remain available. Settings supports adding/removing passkeys, changing passwords, and signing out all devices.
 
+## This repository's automatic deployment
+
+Pushing to `main` runs GitHub Actions tests and deploys to the configured Hostinger VPS with backups, a database-copy preflight, and health-checked image rollback. Pull requests only run tests. See [automatic deployment operations](deploy/AUTODEPLOY.md) for details; this installation pins the existing data volume as external.
+
 ## Data, backups, and updates
 
 SQLite lives in the persistent `reentry-data` Docker volume. Container replacement preserves accounts, sessions, passkeys, and portfolios. **Do not run `docker compose down -v`** unless you intend to delete all data. Keep the same Compose project name/directory when upgrading so the same named volume is used.

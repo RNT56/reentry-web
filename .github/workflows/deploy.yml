@@ -1,0 +1,57 @@
+name: Test and deploy Reentry
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reentry-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Deploy the tested commit
+        env:
+          DEPLOY_KEY: ${{ secrets.REENTRY_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.REENTRY_SSH_KNOWN_HOSTS }}
+          DEPLOY_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          key_dir=$(mktemp -d)
+          trap 'rm -rf "$key_dir"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$key_dir/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$key_dir/known_hosts"
+          ssh -T -i "$key_dir/key" \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$key_dir/known_hosts" \
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+            deploy@179.67.193.45 "deploy $DEPLOY_SHA"

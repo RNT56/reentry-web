@@ -8,3 +8,6 @@ backups/
 *.sqlite*
 *.tar.gz
 site.tar.gz
+
+__pycache__/
+*.pyc

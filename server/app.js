@@ -109,12 +109,10 @@ export async function createApp(options = {}) {
         )
         .get(JSON.stringify(data), req.auth.user_id, revision);
       if (!row)
-        return reply
-          .code(409)
-          .send({
-            error:
-              "Your portfolio changed in another tab or device. Export your changes before reloading.",
-          });
+        return reply.code(409).send({
+          error:
+            "Your portfolio changed in another tab or device. Export your changes before reloading.",
+        });
       return row;
     },
   );
@@ -132,7 +130,7 @@ export async function createApp(options = {}) {
   });
   app.get("/healthz", async () => {
     db.prepare("SELECT 1").get();
-    return { ok: true };
+    return { ok: true, revision: process.env.REENTRY_REVISION || null };
   });
   const root =
     options.staticRoot ||
@@ -148,14 +146,10 @@ export async function createApp(options = {}) {
         { err: { name: err.name, message: err.message } },
         "Request failed",
       );
-    reply
-      .code(status)
-      .send({
-        error:
-          status >= 500
-            ? "Something went wrong. Please try again."
-            : err.message,
-      });
+    reply.code(status).send({
+      error:
+        status >= 500 ? "Something went wrong. Please try again." : err.message,
+    });
   });
   app.addHook("onClose", async () => {
     if (!options.db) db.close();
