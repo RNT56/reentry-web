@@ -1,3 +1,4 @@
+import { mountViewport } from "../shared/viewport.js";
 import { mountIntelligence } from "../features/intelligence/workspace.js";
 import { mountMacro } from "../features/macro/workspace.js";
 import { mountAISettings } from "../features/intelligence/settings.js";
@@ -24,6 +25,7 @@ import { createPurchases } from "../features/portfolio/purchases.js";
 import { createActivity } from "../features/activity/controller.js";
 import { createSettings } from "../features/settings/controller.js";
 export function startWorkspace() {
+  mountViewport($("#app"));
   const model = createWorkspaceModel();
   const current = () =>
     model.state.holdings.find((h) => h.id === model.selected) ||

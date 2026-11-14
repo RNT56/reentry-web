@@ -227,3 +227,127 @@
     font-size: 14px;
   }
 }
+
+.strategy-workspace > .section-line {
+  align-items: baseline;
+  margin-bottom: 20px;
+}
+.strategy-workspace > .section-line > span,
+.strategy-structure .section-line > span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.strategy-parameters {
+  border-block: 1px solid var(--line);
+  padding: 0;
+}
+.strategy-parameters > summary {
+  min-height: 52px;
+  align-items: center;
+  gap: 18px;
+  padding-block: 14px;
+}
+.strategy-parameters > summary:after {
+  content: "+";
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 300;
+}
+.strategy-parameters[open] > summary:after {
+  content: "−";
+}
+.strategy-parameters-summary {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.strategy-parameters .strategy-controls {
+  display: grid;
+  grid-template-columns: minmax(125px, 1.3fr) repeat(3, minmax(95px, 1fr)) auto;
+  gap: 16px;
+  margin: 8px 0 22px;
+  align-items: end;
+}
+.strategy-controls label {
+  min-width: 0;
+  margin: 0;
+  gap: 9px;
+  font-size: 11px;
+}
+.strategy-controls > button {
+  min-height: 46px;
+}
+.strategy-score {
+  padding: 18px 12px;
+  border-radius: 10px 10px 0 0;
+  transition:
+    background 0.18s,
+    border-color 0.18s;
+}
+.strategy-score:hover {
+  background: #ffffff04;
+}
+.strategy-score.selected {
+  background: color-mix(in srgb, var(--strategy-color) 4%, transparent);
+}
+.strategy-score strong,
+.strategy-metrics b {
+  font-variant-numeric: tabular-nums;
+}
+.strategy-score small {
+  margin-top: 10px;
+}
+.strategy-metrics > div,
+.strategy-lenses > section {
+  min-width: 0;
+}
+.strategy-metrics b,
+.strategy-lenses strong {
+  overflow-wrap: anywhere;
+}
+.strategy-method > summary {
+  min-height: 44px;
+}
+@media (max-width: 850px) {
+  .strategy-parameters .strategy-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .strategy-controls > button {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 600px) {
+  .strategy-parameters .strategy-controls {
+    gap: 16px 12px;
+  }
+  .strategy-scoreboard {
+    gap: 8px 12px;
+  }
+  .strategy-score {
+    padding: 17px 10px;
+  }
+  .strategy-score span {
+    line-height: 1.45;
+    min-height: 32px;
+  }
+  .strategy-score strong {
+    font-size: clamp(21px, 6vw, 27px);
+    margin-top: 8px;
+  }
+  .strategy-lenses {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+  .strategy-lenses section {
+    gap: 10px;
+    padding-left: 14px;
+    border-left: 1px solid #ffffff18;
+  }
+  .strategy-lenses strong {
+    font-size: 22px;
+  }
+  .strategy-dates {
+    gap: 10px;
+    flex-wrap: wrap;
+    line-height: 1.6;
+  }
+}

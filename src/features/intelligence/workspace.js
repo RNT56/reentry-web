@@ -258,7 +258,7 @@ export function mountIntelligence(root, { model, navigate }) {
   function render() {
     if (!live()) return;
     destroyChildren();
-    root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ↗</button></header><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
+    root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ↗</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
       ["research", "Overview"],
       ["strategies", "Strategies"],
       ["scenarios", "Scenarios"],
@@ -276,7 +276,7 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</nav><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assets.map((a) => `<button class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}">${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button>`).join("")}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button>${active() && memory.tab === "research" ? '<button class="link muted" data-remove-asset>Remove from research</button>' : ""}</div>`;
+      )}</nav>${active() && !["journal", "studio", "admin"].includes(memory.tab) ? `<span class="research-context" title="${esc(active().name)}">${monogram(active())}<b>${esc(memory.symbol)}</b></span>` : ""}</div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assets.map((a) => `<button class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}">${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button>`).join("")}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button>${active() && memory.tab === "research" ? '<button class="link muted" data-remove-asset>Remove from research</button>' : ""}</div>`;
     if (memory.tab === "strategies" && active())
       strategies = mountStrategies(root.querySelector("#strategy-workspace"), {
         symbol: memory.symbol,
@@ -308,6 +308,13 @@ export function mountIntelligence(root, { model, navigate }) {
       });
     associateLabels(root);
     bindLogos();
+    const tabs = root.querySelector(".intelligence-tabs"),
+      selectedTab = tabs.querySelector('[aria-current="page"]');
+    if (selectedTab)
+      tabs.scrollLeft = Math.max(
+        0,
+        selectedTab.offsetLeft - tabs.offsetLeft - 16,
+      );
     const input = root.querySelector("#research-search");
     if (input)
       input.oninput = () => {
@@ -374,21 +381,24 @@ export function mountIntelligence(root, { model, navigate }) {
     document.querySelector("#verify-event").onsubmit = (e) => {
       e.preventDefault();
       const f = e.target;
-      action(f.querySelector("button"), async () => {
-        await request("/api/scenarios/" + setId + "/events", "POST", {
-          eventKey,
-          title: f.elements.namedItem("title").value,
-          url: f.elements.namedItem("url").value,
-          occurredAt: new Date(
-            f.elements.namedItem("occurred").value,
-          ).getTime(),
-          verified: f.elements.namedItem("verified").checked,
-        });
-        close();
-        sets = (await request("/api/scenarios")).sets;
-        render();
-        toast("Event verified and recorded.");
-      });
+      action(
+        f.querySelector('button[type="submit"],button:not([type])'),
+        async () => {
+          await request("/api/scenarios/" + setId + "/events", "POST", {
+            eventKey,
+            title: f.elements.namedItem("title").value,
+            url: f.elements.namedItem("url").value,
+            occurredAt: new Date(
+              f.elements.namedItem("occurred").value,
+            ).getTime(),
+            verified: f.elements.namedItem("verified").checked,
+          });
+          close();
+          sets = (await request("/api/scenarios")).sets;
+          render();
+          toast("Event verified and recorded.");
+        },
+      );
     };
   }
   root.onclick = (e) => {
@@ -396,8 +406,13 @@ export function mountIntelligence(root, { model, navigate }) {
     if (!b || b.disabled) return;
     if (b.dataset.tab) {
       if (!canLeave()) return;
+      const wasScrolled = window.scrollY > root.offsetTop;
       memory.tab = b.dataset.tab;
       render();
+      if (wasScrolled)
+        root
+          .querySelector("#intelligence-content")
+          .scrollIntoView({ block: "start", behavior: "instant" });
     }
     if (b.hasAttribute("data-ai-settings")) {
       if (canLeave()) {
@@ -493,17 +508,20 @@ export function mountIntelligence(root, { model, navigate }) {
       document.querySelector("#add-research-source").onsubmit = (e) => {
         e.preventDefault();
         const f = e.target;
-        action(f.querySelector("button"), async () => {
-          await request("/api/research/sources", "POST", {
-            symbol: memory.symbol,
-            title: f.elements.namedItem("title").value,
-            url: f.elements.namedItem("url").value,
-            content: f.elements.namedItem("content").value,
-          });
-          close();
-          await loadAsset();
-          render();
-        });
+        action(
+          f.querySelector('button[type="submit"],button:not([type])'),
+          async () => {
+            await request("/api/research/sources", "POST", {
+              symbol: memory.symbol,
+              title: f.elements.namedItem("title").value,
+              url: f.elements.namedItem("url").value,
+              content: f.elements.namedItem("content").value,
+            });
+            close();
+            await loadAsset();
+            render();
+          },
+        );
       };
     }
     if (b.dataset.deleteSource)

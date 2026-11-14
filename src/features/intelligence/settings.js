@@ -74,21 +74,24 @@ export function mountAISettings(root) {
     root.querySelector("#ai-preferences").onsubmit = (e) => {
       e.preventDefault();
       const f = e.target;
-      action(f.querySelector("button"), async () => {
-        await request("/api/ai/preferences", "PUT", {
-          enabled: f.elements.namedItem("enabled").checked,
-          model: f.elements.namedItem("model").value,
-          monthlyLimit: Math.round(
-            Number(f.elements.namedItem("monthly").value) * 1000000,
-          ),
-          runLimit: Math.round(
-            Number(f.elements.namedItem("run").value) * 1000000,
-          ),
-          consent: !!f.elements.namedItem("consent")?.checked,
-        });
-        toast("AI settings saved.");
-        await load();
-      });
+      action(
+        f.querySelector('button[type="submit"],button:not([type])'),
+        async () => {
+          await request("/api/ai/preferences", "PUT", {
+            enabled: f.elements.namedItem("enabled").checked,
+            model: f.elements.namedItem("model").value,
+            monthlyLimit: Math.round(
+              Number(f.elements.namedItem("monthly").value) * 1000000,
+            ),
+            runLimit: Math.round(
+              Number(f.elements.namedItem("run").value) * 1000000,
+            ),
+            consent: !!f.elements.namedItem("consent")?.checked,
+          });
+          toast("AI settings saved.");
+          await load();
+        },
+      );
     };
   }
   root.onclick = (e) => {
@@ -103,14 +106,17 @@ export function mountAISettings(root) {
       document.querySelector("#provider-key-form").onsubmit = (e) => {
         e.preventDefault();
         const f = e.target;
-        action(f.querySelector("button"), async () => {
-          const key = f.elements.namedItem("key").value;
-          f.elements.namedItem("key").value = "";
-          await request("/api/ai/credentials/" + provider, "PUT", { key });
-          close();
-          toast("Key encrypted and stored.");
-          await load();
-        });
+        action(
+          f.querySelector('button[type="submit"],button:not([type])'),
+          async () => {
+            const key = f.elements.namedItem("key").value;
+            f.elements.namedItem("key").value = "";
+            await request("/api/ai/credentials/" + provider, "PUT", { key });
+            close();
+            toast("Key encrypted and stored.");
+            await load();
+          },
+        );
       };
     }
     if (b.dataset.disconnect)
@@ -128,20 +134,23 @@ export function mountAISettings(root) {
       document.querySelector("#reconcile-form").onsubmit = (e) => {
         e.preventDefault();
         const f = e.target;
-        action(f.querySelector("button"), async () => {
-          await request(
-            "/api/ai/costs/" + b.dataset.reconcile + "/reconcile",
-            "POST",
-            {
-              cost: Math.round(
-                Number(f.elements.namedItem("cost").value) * 1000000,
-              ),
-              note: f.elements.namedItem("note").value,
-            },
-          );
-          close();
-          await load();
-        });
+        action(
+          f.querySelector('button[type="submit"],button:not([type])'),
+          async () => {
+            await request(
+              "/api/ai/costs/" + b.dataset.reconcile + "/reconcile",
+              "POST",
+              {
+                cost: Math.round(
+                  Number(f.elements.namedItem("cost").value) * 1000000,
+                ),
+                note: f.elements.namedItem("note").value,
+              },
+            );
+            close();
+            await load();
+          },
+        );
       };
     }
   };

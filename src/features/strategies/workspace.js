@@ -80,7 +80,8 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
   async function load() {
     const id = ++epoch;
     const values = new FormData(form);
-    form.querySelector("button").disabled = true;
+    form.querySelector('button[type="submit"],button:not([type])').disabled =
+      true;
     try {
       const data = await request(
         "/api/strategies?" +
@@ -104,7 +105,9 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
       if (!disposed && id === epoch) output.textContent = e.message;
     } finally {
       if (!disposed && id === epoch)
-        form.querySelector("button").disabled = false;
+        form.querySelector(
+          'button[type="submit"],button:not([type])',
+        ).disabled = false;
     }
   }
   form.onsubmit = (e) => {

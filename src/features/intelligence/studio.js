@@ -59,11 +59,19 @@ export function createStudio({ root, onMapped, refreshJournal }) {
   }
   function editor() {
     if (!root.isConnected) return;
-    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>＋ New article</button>${items.map((a) => `<button class="studio-item ${draft?.id === a.id ? "selected" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : "Draft"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>`).join("")}</aside><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row">${field("Asset ticker", "article-symbol", draft.symbol, "text", 'maxlength="32" required')}${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div><label class="sr-only" for="article-body">Article text</label><textarea class="article-textarea" id="article-body" name="article-body" maxlength="40000" placeholder="Article" required>${esc(draft.body)}</textarea><div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-map-article>✦ Map with AI</button><button type="button" class="secondary" data-publish>Publish ↗</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ↗</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div><details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} branches</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>＋ Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>＋ Source link</button></details></form>` : empty("New article", "", '<button class="primary" data-new-article>Write an article ↗</button>')}</div></div>`;
+    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>＋ New article</button>${items.map((a) => `<button class="studio-item ${draft?.id === a.id ? "selected" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : "Draft"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>`).join("")}</aside><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row article-heading-fields">${field("Asset ticker", "article-symbol", draft.symbol, "text", 'maxlength="32" required')}${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div><div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-map-article>✦ Map with AI</button><button type="button" class="secondary" data-publish>Publish ↗</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ↗</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div><label class="sr-only" for="article-body">Article text</label><textarea class="article-textarea" id="article-body" name="article-body" maxlength="40000" placeholder="Article" required>${esc(draft.body)}</textarea><details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} branches</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>＋ Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>＋ Source link</button></details></form>` : empty("New article", "", '<button class="primary" data-new-article>Write an article ↗</button>')}</div></div>`;
     associateLabels(root);
     const form = root.querySelector("#article-form");
     if (form) {
-      form.oninput = () => {
+      const body = form.elements.namedItem("article-body");
+      const resizeBody = () => {
+        if (!body.isConnected) return;
+        body.style.height = "auto";
+        body.style.height = Math.max(380, body.scrollHeight) + "px";
+      };
+      requestAnimationFrame(resizeBody);
+      form.oninput = (event) => {
+        if (event.target === body) resizeBody();
         dirty = true;
         root.querySelector("#draft-status").textContent = "Unsaved changes";
       };
@@ -120,15 +128,18 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       document.querySelector("#new-article").onsubmit = (e) => {
         e.preventDefault();
         const f = e.target;
-        action(f.querySelector("button"), async () => {
-          const r = await request("/api/journal", "POST", {
-            symbol: f.elements.namedItem("symbol").value,
-            title: f.elements.namedItem("title").value,
-            body: "",
-          });
-          close();
-          await load(r.id);
-        });
+        action(
+          f.querySelector('button[type="submit"],button:not([type])'),
+          async () => {
+            const r = await request("/api/journal", "POST", {
+              symbol: f.elements.namedItem("symbol").value,
+              title: f.elements.namedItem("title").value,
+              body: "",
+            });
+            close();
+            await load(r.id);
+          },
+        );
       };
     }
     if (b.dataset.editArticle) {

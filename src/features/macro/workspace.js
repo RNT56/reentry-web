@@ -32,18 +32,24 @@ export function mountMacro(root) {
       points = active.points,
       low = points.length ? Math.min(...points.map((p) => p.value)) : 0,
       high = points.length ? Math.max(...points.map((p) => p.value)) : 0;
-    root.innerHTML = `<header class="macro-heading"><div><h1>Markets</h1></div><span class="macro-provenance">FRED ↗<br>${new Date(data.fetchedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span></header><nav class="macro-filters" aria-label="Macro categories">${["All", ...new Set(data.indicators.map((i) => i.group))].map((group) => `<button data-filter="${esc(group)}" aria-pressed="${filter === group}">${esc(group)}</button>`).join("")}</nav><div class="macro-stage"><div class="macro-focus"><span class="eyebrow">${esc(active.region)} / ${esc(active.group)}</span><h2>${esc(active.label)}</h2><div class="macro-large">${active.latest ? number(active.latest.value) : "—"}<small>${esc(active.unit)}</small></div><div class="macro-date"><a href="${active.source}" target="_blank" rel="noopener noreferrer">${active.id} ↗</a><span>${active.latest?.date || "Unavailable"}${active.status === "stale" ? " · stale" : ""}</span></div></div><div class="macro-chart">${points.length ? `<div class="macro-y-axis" aria-hidden="true"><span>${number(high)}</span><span>${number((low + high) / 2)}</span><span>${number(low)}</span></div>` : ""}${points.length ? `<svg viewBox="0 0 800 250" role="img" aria-label="${esc(active.label)} history"><path d="M0 234H800 M0 125H800 M0 16H800" class="macro-grid"/><path d="${line(points)}" class="macro-path"/></svg><div class="macro-axis"><span>${points[0].date}</span><span>${points.at(-1).date}</span></div>` : '<div class="macro-unavailable">No observations</div>'}</div></div><div class="macro-tape">${data.indicators
+    root.innerHTML = `<header class="macro-heading"><div><h1>Markets</h1></div><span class="macro-provenance">FRED ↗<br>${new Date(data.fetchedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span></header><nav class="macro-filters" aria-label="Macro categories">${["All", ...new Set(data.indicators.map((i) => i.group))].map((group) => `<button data-filter="${esc(group)}" aria-pressed="${filter === group}">${esc(group)}</button>`).join("")}</nav><div class="macro-board"><div class="macro-stage"><div class="macro-focus"><span class="eyebrow">${esc(active.region)} / ${esc(active.group)}</span><h2>${esc(active.label)}</h2><div class="macro-large">${active.latest ? number(active.latest.value) : "—"}<small>${esc(active.unit)}</small></div><div class="macro-date"><a href="${active.source}" target="_blank" rel="noopener noreferrer">${active.id} ↗</a><span>${active.latest?.date || "Unavailable"}${active.status === "stale" ? " · stale" : ""}</span></div></div><div class="macro-chart">${points.length ? `<div class="macro-y-axis" aria-hidden="true"><span>${number(high)}</span><span>${number((low + high) / 2)}</span><span>${number(low)}</span></div>` : ""}${points.length ? `<svg viewBox="0 0 800 250" role="img" aria-label="${esc(active.label)} history"><path d="M0 234H800 M0 125H800 M0 16H800" class="macro-grid"/><path d="${line(points)}" class="macro-path"/></svg><div class="macro-axis"><span>${points[0].date}</span><span>${points.at(-1).date}</span></div>` : '<div class="macro-unavailable">No observations</div>'}</div></div><div class="macro-tape">${data.indicators
       .filter((i) => filter === "All" || i.group === filter)
       .map(
         (i) =>
           `<button class="macro-row" data-series="${i.id}" aria-pressed="${selected === i.id}"><span class="macro-identity"><small>${esc(i.region)}</small><b>${esc(i.label)}</b></span><svg viewBox="0 0 800 250" aria-hidden="true"><path d="${line(i.points)}" class="macro-path"/></svg><span class="macro-reading"><strong>${i.latest ? number(i.latest.value) : "—"}</strong><small>${esc(i.unit)}</small></span><span class="macro-observed">${i.latest?.date || "Unavailable"}${i.status === "stale" ? " · stale" : ""}</span></button>`,
       )
-      .join("")}</div>`;
+      .join("")}</div></div>`;
     root.querySelectorAll("[data-filter]").forEach(
       (button) =>
         (button.onclick = () => {
+          const scroll = root.querySelector(".macro-filters").scrollLeft;
           filter = button.dataset.filter;
           render();
+          const rail = root.querySelector(".macro-filters");
+          rail.scrollLeft = scroll;
+          [...rail.querySelectorAll("button")]
+            .find((item) => item.dataset.filter === filter)
+            ?.focus({ preventScroll: true });
         }),
     );
     root.querySelectorAll("[data-series]").forEach(
@@ -52,8 +58,16 @@ export function mountMacro(root) {
           selected = button.dataset.series;
           render();
           root
-            .querySelector(".macro-stage")
-            .scrollIntoView({ behavior: "smooth", block: "nearest" });
+            .querySelector(`[data-series="${selected}"]`)
+            ?.focus({ preventScroll: true });
+          if (window.matchMedia("(max-width: 1099px)").matches)
+            root.querySelector(".macro-stage").scrollIntoView({
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "instant"
+                : "smooth",
+              block: "start",
+            });
         }),
     );
   }

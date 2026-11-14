@@ -224,3 +224,116 @@
   width: 35px;
   text-align: right;
 }
+
+.macro-filters {
+  position: sticky;
+  top: var(--app-header-height, 72px);
+  z-index: 22;
+  min-height: 54px;
+  margin-bottom: 24px;
+  padding-block: 3px;
+  background: #101212f5;
+  backdrop-filter: blur(20px);
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.macro-filters button {
+  flex-shrink: 0;
+  padding-inline: 2px;
+}
+.macro-stage,
+.macro-focus,
+.macro-tape,
+.macro-identity,
+.macro-reading {
+  min-width: 0;
+}
+.macro-row {
+  border-radius: 10px;
+}
+.macro-reading strong,
+.macro-large {
+  font-variant-numeric: tabular-nums;
+}
+.macro-identity b {
+  line-height: 1.45;
+}
+@media (min-width: 1100px) and (min-height: 700px) {
+  .macro-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: start;
+    gap: 48px;
+  }
+  .macro-stage {
+    position: sticky;
+    top: calc(var(--app-header-height, 72px) + 80px);
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+    padding: 24px 0 30px;
+  }
+  .macro-row {
+    grid-template-columns: minmax(0, 1fr) 60px 100px;
+    gap: 16px;
+    padding: 20px 12px;
+  }
+  .macro-observed {
+    grid-column: 1 / -1;
+    text-align: left;
+    margin-top: -8px;
+    font-size: 9px;
+  }
+  .macro-large {
+    font-size: 76px;
+  }
+  .macro-chart {
+    padding-left: 48px;
+  }
+  .macro-chart svg {
+    min-height: 180px;
+  }
+}
+@media (max-width: 680px) {
+  .macro-heading {
+    align-items: baseline;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  .macro-heading h1 {
+    font-size: 42px;
+  }
+  .macro-stage {
+    padding: 12px 0 30px;
+    scroll-margin-top: calc(var(--app-header-height, 64px) + 70px);
+  }
+  .macro-filters {
+    min-height: 50px;
+    margin-bottom: 20px;
+  }
+  .macro-row {
+    grid-template-columns: minmax(0, 1fr) 55px minmax(78px, auto);
+    gap: 12px;
+    padding-inline: 8px;
+    margin-inline: -8px;
+    width: calc(100% + 16px);
+  }
+  .macro-reading strong {
+    font-size: 21px;
+    letter-spacing: -0.03em;
+  }
+  .macro-reading small {
+    font-size: 9px;
+    max-width: 100px;
+    margin-left: auto;
+    line-height: 1.45;
+  }
+  .macro-identity b {
+    font-size: 12px;
+  }
+}
+@media (max-height: 600px) {
+  .macro-filters {
+    position: relative;
+    top: auto;
+  }
+}

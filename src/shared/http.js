@@ -1,3 +1,39 @@
+const genericClientErrors = new Set([
+  "Bad Request",
+  "Unauthorized",
+  "Forbidden",
+  "Not Found",
+  "Method Not Allowed",
+  "Not Acceptable",
+  "Request Timeout",
+  "Conflict",
+  "Gone",
+  "Length Required",
+  "Precondition Failed",
+  "Payload Too Large",
+  "URI Too Long",
+  "Unsupported Media Type",
+  "Range Not Satisfiable",
+  "Expectation Failed",
+  "Unprocessable Entity",
+  "Unprocessable Content",
+  "Too Many Requests",
+]);
+const unavailable = "The server is unavailable. Please try again.";
+
+function errorMessage(status, data) {
+  if (status >= 500) return unavailable;
+  const error = typeof data?.error === "string" ? data.error.trim() : "";
+  const message = typeof data?.message === "string" ? data.message.trim() : "";
+  if (
+    genericClientErrors.has(error) &&
+    message &&
+    !genericClientErrors.has(message)
+  )
+    return message;
+  return error || "Request failed.";
+}
+
 export async function request(
   path,
   method = "GET",
@@ -26,10 +62,10 @@ export async function request(
   try {
     data = await res.json();
   } catch {
-    throw Error("The server is unavailable. Please try again.");
+    throw Error(unavailable);
   }
   if (!res.ok)
-    throw Object.assign(Error(data.error || "Request failed."), {
+    throw Object.assign(Error(errorMessage(res.status, data)), {
       status: res.status,
     });
   return data;

@@ -43,12 +43,48 @@ export function associateLabels(root) {
   });
 }
 export function modal(html) {
-  $("#modal").innerHTML =
-    `<button class="close icon-button" aria-label="Close dialog">${icon("close")}</button>${html}`;
+  const dialog = $("#modal");
+  dialog.innerHTML = `<button class="close icon-button" aria-label="Close dialog">${icon("close")}</button>${html}`;
+  const header = document.createElement("header");
+  header.className = "dialog-header";
+  header.append(dialog.querySelector(".close"));
+  const title = dialog.querySelector(":scope > h2");
+  if (title) {
+    if (title.previousElementSibling?.matches(".eyebrow"))
+      header.append(title.previousElementSibling);
+    const subtitle = title.nextElementSibling?.matches(".sub")
+      ? title.nextElementSibling
+      : null;
+    title.id = "dialog-title";
+    header.append(title);
+    if (subtitle) header.append(subtitle);
+    dialog.setAttribute("aria-labelledby", title.id);
+  }
+  const body = document.createElement("div");
+  body.className = "dialog-body";
+  body.append(...dialog.childNodes);
+  for (const form of body.querySelectorAll("form")) {
+    const submit = form.querySelector(
+      ":scope > button.primary:not([type=button])",
+    );
+    if (submit && !form.querySelector(":scope > .actions")) {
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      submit.before(actions);
+      actions.append(submit);
+    }
+  }
+  dialog.append(header, body);
   associateLabels($("#modal"));
   bindLogos();
   $("#modal .close").onclick = close;
   $("#modal").showModal();
+  document.documentElement.classList.add("dialog-open");
+  dialog.addEventListener(
+    "close",
+    () => document.documentElement.classList.remove("dialog-open"),
+    { once: true },
+  );
   $("#modal").querySelector("input:not([type=hidden]),select")?.focus();
 }
 export function close() {

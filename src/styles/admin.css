@@ -242,3 +242,90 @@
     gap: 10px;
   }
 }
+
+.owner-heading > button,
+.owner-shortcuts > * {
+  min-height: 44px;
+}
+.owner-shortcuts {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.owner-shortcuts a {
+  display: inline-flex;
+  align-items: center;
+}
+.owner-census > *,
+.owner-split > * {
+  min-width: 0;
+}
+.owner-switches button {
+  min-width: 0;
+  padding: 12px 44px 14px 0;
+  min-height: 88px;
+}
+.owner-switches b {
+  display: block;
+  font-size: 17px;
+}
+.owner-switches i {
+  bottom: 18px;
+}
+.owner-runtime dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.owner-history > div {
+  align-items: baseline;
+  line-height: 1.6;
+}
+.owner-history time {
+  min-width: 120px;
+}
+@media (max-width: 680px) {
+  .owner-heading {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+  .owner-heading h1 {
+    margin-block: 10px;
+  }
+  .owner-heading > button {
+    margin: 0;
+  }
+  .owner-census {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px 12px;
+  }
+  .owner-census strong {
+    font-size: 31px;
+  }
+  .owner-switches {
+    gap: 20px;
+  }
+  .owner-switches button {
+    padding-right: 0;
+    padding-bottom: 40px;
+  }
+  .owner-switches i {
+    left: 0;
+    right: auto;
+    bottom: 8px;
+  }
+  .owner-queue {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px 14px;
+  }
+  .owner-history > div {
+    flex-direction: column;
+    gap: 5px;
+  }
+  .owner-models > div {
+    gap: 16px;
+    font-size: 11px;
+  }
+}
