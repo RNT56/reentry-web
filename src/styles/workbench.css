@@ -189,6 +189,12 @@
   align-items: flex-end;
   gap: 10px;
 }
+.research-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-block: 10px;
+}
 .automation-control {
   margin: 0;
   gap: 7px;
@@ -215,6 +221,107 @@
 .ai-settings-grid > *,
 .studio-layout > * {
   min-width: 0;
+}
+.research-main:not(.has-brief) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.source-heading > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.source-total {
+  margin-left: 7px;
+  color: var(--muted);
+  font: 11px var(--font-numbers);
+}
+.source-collection-state {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.source-collection-state.is-refreshing {
+  color: #a5c5ad;
+}
+.source-actions {
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.source-actions button {
+  min-height: 40px;
+  font-size: 11px;
+}
+.source-coverage {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 12px 0 16px;
+}
+.source-coverage > span {
+  display: inline-flex;
+  gap: 7px;
+  color: #7f9785;
+  font: 9px var(--font-numbers);
+}
+.source-coverage b {
+  font-weight: 450;
+  color: #bbcbbd;
+}
+.source-empty {
+  min-height: 138px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 26px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.source-empty i {
+  width: 76%;
+  max-width: 680px;
+  height: 1px;
+  background: #b5d3ad15;
+}
+.source-empty i:nth-child(2) {
+  width: 90%;
+}
+.source-empty i:nth-child(3) {
+  width: 58%;
+}
+.source-archive > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.source-archive > summary > span {
+  font-family: var(--font-numbers);
+}
+.source-archive > .source-list {
+  max-height: 520px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+@media (max-width: 600px) {
+  .source-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .source-heading > div:first-child {
+    gap: 4px;
+    flex-direction: column;
+  }
+  .source-actions {
+    gap: 12px;
+  }
+  .source-actions button {
+    font-size: 10px;
+  }
 }
 .source-row p {
   padding-right: 12px;

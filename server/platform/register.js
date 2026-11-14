@@ -12,6 +12,7 @@ import { registerAIRoutes } from "../ai/routes.js";
 import { registerChartAnalysisRoutes } from "../ai/chart-routes.js";
 import { registerIntelligenceRoutes } from "../intelligence/routes.js";
 import { registerJournalRoutes } from "../journal/routes.js";
+import { createPortfolioSources } from "../intelligence/portfolio-sources.js";
 export function registerPlatform(app, db, market, options = {}) {
   migratePlatform(db);
   const names = (options.authorUsernames ?? process.env.AUTHOR_USERNAMES ?? "")
@@ -28,6 +29,12 @@ export function registerPlatform(app, db, market, options = {}) {
   registerChartWorkspaceRoutes(app, db);
   const vault = options.vault || createVault(options.masterKey),
     connectors = options.connectors || createConnectors({ market, macro });
+  const portfolioSources = createPortfolioSources({
+    db,
+    connectors,
+    enabled:
+      options.workerEnabled ?? process.env.ENABLE_BACKGROUND_JOBS === "true",
+  });
   const engine = createEngine({
     db,
     vault,
@@ -44,6 +51,7 @@ export function registerPlatform(app, db, market, options = {}) {
     connectors,
     market,
     engine,
+    portfolioSources,
     isAuthor,
     authorName,
     controls: options.controls,
@@ -54,9 +62,16 @@ export function registerPlatform(app, db, market, options = {}) {
   registerIntelligenceRoutes(app, services);
   registerJournalRoutes(app, services);
   app.decorate("intelligenceEngine", engine);
+  app.decorate("portfolioSources", portfolioSources);
   app.addHook("onReady", async () => {
-    if (options.startWorker !== false) engine.start();
+    if (options.startWorker !== false) {
+      engine.start();
+      portfolioSources.start();
+    }
   });
-  app.addHook("onClose", async () => engine.stop());
+  app.addHook("onClose", async () => {
+    await portfolioSources.stop();
+    await engine.stop();
+  });
   return engine;
 }

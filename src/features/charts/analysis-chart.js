@@ -165,22 +165,29 @@ export function mountAnalysisChart(
   }
   const drawerId = "ta-tools-" + crypto.randomUUID();
   root.classList.add("analysis-chart");
-  root.innerHTML = `<div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-heading"><div class="ta-readout"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
+  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
     historyRanges,
   )
     .map(
       ([id, r]) =>
         `<button type="button" data-ta-range="${id}" aria-pressed="${state.range === id}">${r.label}</button>`,
     )
-    .join(
-      "",
-    )}</div></div>${chartControlsMarkup(state, drawerId)}<div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div>`;
+    .join("")}</div></div>${chartControlsMarkup(state, drawerId)}`;
   const plot = root.querySelector(".ta-plot");
   const aiRail = document.createElement("div");
   aiRail.className = "ta-ai-rail";
   aiRail.setAttribute("role", "group");
   aiRail.setAttribute("aria-label", "AI chart scenario focus");
   root.querySelector(".ta-toolbar").append(aiRail);
+  function revealPlot() {
+    plot.focus({ preventScroll: true });
+    plot.scrollIntoView({
+      block: "center",
+      behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+  }
   function updateAIRail() {
     const layer =
       aiLayer?.visible && aiLayer.currency === data?.currency ? aiLayer : null;
@@ -1138,7 +1145,7 @@ export function mountAnalysisChart(
       pendingAnchor = null;
       selected = null;
       draw();
-      plot.focus({ preventScroll: true });
+      revealPlot();
       return;
     }
     if (b.hasAttribute("data-ta-select-drawing")) {
@@ -1146,6 +1153,7 @@ export function mountAnalysisChart(
       tool = "inspect";
       pendingAnchor = null;
       draw();
+      revealPlot();
       return;
     }
     if (b.hasAttribute("data-ta-delete-drawing")) {

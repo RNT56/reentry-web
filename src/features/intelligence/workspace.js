@@ -15,6 +15,11 @@ import { mountStrategies } from "../strategies/workspace.js";
 import { mountAdmin } from "../admin/workspace.js";
 import { createStudio } from "./studio.js";
 import {
+  sourcePanelMarkup,
+  replaceSourcePanel,
+  sourceCollectionBusy,
+} from "./source-panel.js";
+import {
   when,
   empty,
   loading,
@@ -37,6 +42,12 @@ export function mountIntelligence(root, { model, navigate }) {
     journal = [],
     sources = [],
     coverage = [],
+    collection = null,
+    sourcePoll,
+    sourceRequest = null,
+    sourceGeneration = 0,
+    assetLoads = 0,
+    nextSourceCheck = 0,
     job = null,
     chart = null,
     aiAnalysis = null,
@@ -95,48 +106,92 @@ export function mountIntelligence(root, { model, navigate }) {
   async function loadAsset() {
     if (!active()) {
       sources = [];
+      coverage = [];
+      collection = null;
       job = null;
       return;
     }
-    const selected = memory.symbol;
-    const data = await request(
-      "/api/research/sources?" + new URLSearchParams({ symbol: selected }),
-    );
-    const wanted =
-      jobs.find((j) => j.id === memory.jobId && j.symbol === selected) ||
-      jobs.find(
-        (j) =>
-          j.symbol === selected &&
-          j.kind === "research" &&
-          j.status === "completed",
+    const selected = memory.symbol,
+      generation = ++sourceGeneration;
+    sourceRequest?.abort();
+    assetLoads++;
+    try {
+      const data = await request(
+        "/api/research/sources?" + new URLSearchParams({ symbol: selected }),
       );
-    const detail = wanted
-      ? await request("/api/research/jobs/" + wanted.id)
-      : null;
-    if (!live() || selected !== memory.symbol) return;
-    sources = data.sources;
-    job = detail;
+      const wanted =
+        jobs.find((j) => j.id === memory.jobId && j.symbol === selected) ||
+        jobs.find(
+          (j) =>
+            j.symbol === selected &&
+            j.kind === "research" &&
+            j.status === "completed",
+        );
+      const detail = wanted
+        ? await request("/api/research/jobs/" + wanted.id)
+        : null;
+      if (
+        !live() ||
+        selected !== memory.symbol ||
+        generation !== sourceGeneration
+      )
+        return;
+      applySources(data);
+      job = detail;
+    } finally {
+      assetLoads--;
+    }
+  }
+  function applySources(data) {
+    sources = data.sources || [];
+    collection = data.collection || null;
+    coverage = collection?.coverage || data.coverage || [];
+    nextSourceCheck =
+      Date.now() + (sourceCollectionBusy(collection) ? 5000 : 60000);
   }
   function sourcePanel() {
-    return `<section class="panel source-panel"><div class="section-line"><div><h3>Sources</h3></div><button class="link" data-add-source>＋ Add text</button></div><div class="connector-strip">${info.connectors
-      .map((c) => {
-        const status = coverage.find((s) => s.connector === c.id);
-        return `<span class="connector-chip ${status?.status === "available" ? "available" : ""}" title="${esc(c.label)}">${esc(c.id.toUpperCase())}<b>${status ? esc(status.count || status.status) : "—"}</b></span>`;
-      })
-      .join("")}</div>${
-      sources.length
-        ? `<div class="source-list">${sources
-            .slice(0, 12)
-            .map(
-              (s) =>
-                `<details class="source-row"><summary><span class="source-kind">${esc(s.kind)}</span><b>${esc(s.title)}</b><span>↗</span></summary><p class="small">${esc(s.content)}</p><div class="source-meta"><span>${esc(s.connector)} · retrieved ${esc(when(s.fetched_at || s.fetchedAt))}${s.published_at || s.publishedAt ? " · published " + esc(when(s.published_at || s.publishedAt)) : ""}</span>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>` : ""}${s.connector === "manual" ? `<button class="link" data-delete-source="${esc(s.id)}">Delete</button>` : ""}</div></details>`,
-            )
-            .join("")}</div>`
-        : '<p class="small">No sources</p>'
-    }</section>`;
+    return sourcePanelMarkup({
+      sources,
+      coverage,
+      collection,
+      connectors: info.connectors,
+    });
+  }
+  async function refreshSources() {
+    if (!live() || !active() || assetLoads || memory.tab !== "research") return;
+    const selected = memory.symbol,
+      generation = ++sourceGeneration;
+    sourceRequest?.abort();
+    const controller = new AbortController();
+    sourceRequest = controller;
+    try {
+      const data = await request(
+        "/api/research/sources?" + new URLSearchParams({ symbol: selected }),
+        "GET",
+        undefined,
+        { signal: controller.signal },
+      );
+      if (
+        !live() ||
+        selected !== memory.symbol ||
+        generation !== sourceGeneration ||
+        memory.tab !== "research"
+      )
+        return;
+      const previous = JSON.stringify({ sources, collection, coverage });
+      applySources(data);
+      if (previous !== JSON.stringify({ sources, collection, coverage })) {
+        const metrics = root.querySelector("[data-research-metrics]");
+        const markup = metricsPanel();
+        if (metrics && metrics.innerHTML !== markup) metrics.innerHTML = markup;
+        replaceSourcePanel(root.querySelector(".source-panel"), sourcePanel());
+      }
+    } finally {
+      if (sourceRequest === controller) sourceRequest = null;
+    }
   }
   function resultPanel() {
-    if (!job) return empty("No brief yet", "");
+    if (!job) return "";
     if (!job.result)
       return empty(
         job.status === "failed"
@@ -205,16 +260,14 @@ export function mountIntelligence(root, { model, navigate }) {
       return empty(
         "Select an asset",
         "",
-        model.state.holdings.length
-          ? '<button class="primary" data-add-holdings>Use my portfolio tickers ↗</button>'
-          : '<button class="primary" data-focus-search>Find an asset ↗</button>',
+        '<button class="primary" data-focus-search>Find an asset ↗</button>',
       );
     const a = active(),
       pending = jobs.find(
         (j) =>
           j.symbol === a.symbol && ["queued", "running"].includes(j.status),
       );
-    return `<section class="research-command"><div class="row">${monogram(a)}<div><h2>${esc(a.name)}</h2><span class="small">${esc(a.symbol)}</span></div></div><div class="research-controls"><label class="automation-control"><span>Auto brief</span><select id="research-schedule" aria-label="Automatic research frequency"><option value="0" ${!a.automatic ? "selected" : ""}>Off</option>${[
+    return `<section class="research-command"><div class="row">${monogram(a)}<div><h2>${esc(a.name)}</h2><span class="small">${esc(a.symbol)}</span></div></div></section><div id="research-chart" class="research-chart"></div><section class="research-actions"><div class="research-controls"><label class="automation-control"><span>Auto brief</span><select id="research-schedule" aria-label="Automatic research frequency"><option value="0" ${!a.automatic ? "selected" : ""}>Off</option>${[
       [6, "Every 6 hours"],
       [24, "Daily"],
       [168, "Weekly"],
@@ -225,7 +278,7 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</select></label><button class="secondary" data-collect>Collect sources</button><button class="primary" data-run ${pending ? "disabled" : ""}>${pending ? (pending.status === "running" ? "✦ Researching…" : "Queued…") : "✦ Run research"}</button></div></section>${a.automatic ? `<div class="automation-note small">${info.preferences.enabled ? "Next automatic brief: " + esc(when(a.next_run)) : "Automation paused · enable AI in settings"}</div>` : ""}<div id="research-chart" class="research-chart"></div>${pending ? `<div class="job-progress" role="status"><i></i><span>${pending.status === "running" ? "Researching…" : "Queued"}</span>${pending.status === "queued" ? `<button class="link" data-cancel-job="${esc(pending.id)}">Cancel</button>` : ""}</div>` : ""}${metricsPanel()}<div class="research-main">${resultPanel()}${sourcePanel()}</div><details class="run-history"><summary>Research history · ${jobs.filter((j) => j.symbol === a.symbol).length}</summary>${jobs
+      )}</select></label><button class="primary" data-run ${pending ? "disabled" : ""}>${pending ? (pending.status === "running" ? "✦ Researching…" : "Queued…") : "✦ Run research"}</button></div></section>${a.automatic ? `<div class="automation-note small">${info.preferences.enabled ? "Next automatic brief: " + esc(when(a.next_run)) : "Automation paused · enable AI in settings"}</div>` : ""}${pending ? `<div class="job-progress" role="status"><i></i><span>${pending.status === "running" ? "Researching…" : "Queued"}</span>${pending.status === "queued" ? `<button class="link" data-cancel-job="${esc(pending.id)}">Cancel</button>` : ""}</div>` : ""}<div data-research-metrics>${metricsPanel()}</div><div class="research-main ${job ? "has-brief" : ""}">${resultPanel()}${sourcePanel()}</div><details class="run-history"><summary>Research history · ${jobs.filter((j) => j.symbol === a.symbol).length}</summary>${jobs
       .filter((j) => j.symbol === a.symbol)
       .slice(0, 20)
       .map(
@@ -292,7 +345,7 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assets.map((a) => `<button class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}">${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button>`).join("")}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button>${active() && memory.tab === "research" ? '<button class="link muted" data-remove-asset>Remove from research</button>' : ""}</div>`;
+      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assets.map((a) => `<button class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}">${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button>`).join("")}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button>${active() && !active().inPortfolio && memory.tab === "research" ? '<button class="link muted" data-remove-asset>Remove from research</button>' : ""}</div>`;
     if (memory.tab === "strategies" && active())
       strategies = mountStrategies(root.querySelector("#strategy-workspace"), {
         symbol: memory.symbol,
@@ -328,7 +381,7 @@ export function mountIntelligence(root, { model, navigate }) {
         aiBody.className = "ai-analysis-detail";
         aiBody.hidden = true;
         aiBody.setAttribute("aria-label", "AI chart evidence and scenarios");
-        root.querySelector(".ta-heading").before(aiRoot);
+        root.querySelector(".ta-toolbar").after(aiRoot);
         root.querySelector("#research-chart").append(aiBody);
         aiAnalysis = mountAIAnalysis(aiRoot, {
           asset: active(),
@@ -533,23 +586,6 @@ export function mountIntelligence(root, { model, navigate }) {
         memory.aiEventKey = null;
         await load();
       });
-    if (b.hasAttribute("data-add-holdings"))
-      action(b, async () => {
-        for (const h of model.state.holdings.slice(0, 50))
-          if (!h.demo && !assets.some((a) => a.symbol === h.symbol))
-            await request(
-              "/api/research/assets/" + encodeURIComponent(h.symbol),
-              "PUT",
-              {
-                name: h.name,
-                assetType: h.assetType,
-                isin: h.isin,
-                automatic: false,
-                intervalHours: 24,
-              },
-            );
-        await load();
-      });
     if (b.dataset.researchAsset)
       action(b, async () => {
         navigationEpoch++;
@@ -563,17 +599,23 @@ export function mountIntelligence(root, { model, navigate }) {
       });
     if (b.hasAttribute("data-collect"))
       action(b, async () => {
-        const r = await request(
+        if (assetLoads) return;
+        const selected = memory.symbol,
+          operation = navigationEpoch;
+        await request(
           "/api/research/collect",
           "POST",
-          { symbol: memory.symbol },
+          { symbol: selected },
           { timeout: 45000 },
         );
-        if (!live()) return;
-        sources = r.sources;
-        coverage = r.coverage;
-        render();
-        toast("Available evidence collected.");
+        if (
+          !live() ||
+          memory.symbol !== selected ||
+          operation !== navigationEpoch ||
+          memory.tab !== "research"
+        )
+          return;
+        await refreshSources();
       });
     if (b.hasAttribute("data-run"))
       action(b, async () => {
@@ -738,6 +780,24 @@ export function mountIntelligence(root, { model, navigate }) {
         '<button class="secondary" data-retry-intelligence>Retry</button>',
       );
   });
+  sourcePoll = setInterval(async () => {
+    if (
+      !live() ||
+      document.hidden ||
+      memory.tab !== "research" ||
+      !active() ||
+      sourceRequest ||
+      assetLoads ||
+      Date.now() < nextSourceCheck
+    )
+      return;
+    nextSourceCheck = Date.now() + 60000;
+    try {
+      await refreshSources();
+    } catch {
+      /* Retain cached evidence until the next check. */
+    }
+  }, 5000);
   poll = setInterval(async () => {
     if (
       !live() ||
@@ -771,6 +831,9 @@ export function mountIntelligence(root, { model, navigate }) {
     destroy() {
       alive = false;
       clearInterval(poll);
+      clearInterval(sourcePoll);
+      sourceGeneration++;
+      sourceRequest?.abort();
       clearTimeout(searchTimer);
       destroyChildren();
       root.onclick = null;

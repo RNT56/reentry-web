@@ -14,6 +14,61 @@ const link = (v) => {
     return null;
   }
 };
+const fiscalDate = (value) =>
+  typeof value === "string" &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value)) &&
+  new Date(value).toISOString().slice(0, 10) === value;
+
+export function selectSECMetrics(facts, recent = {}) {
+  const gaap = facts.facts?.["us-gaap"] || {};
+  const order = (a, b) =>
+    b.end.localeCompare(a.end) ||
+    b.filed.localeCompare(a.filed) ||
+    String(b.start || "").localeCompare(String(a.start || ""));
+  const rows = (concept) =>
+    (gaap[concept]?.units?.USD || []).filter(
+      (value) =>
+        ["10-K", "10-Q"].includes(value.form) &&
+        Number.isFinite(value.val) &&
+        fiscalDate(value.end) &&
+        fiscalDate(value.filed) &&
+        value.end <= value.filed &&
+        (!value.start || (fiscalDate(value.start) && value.start <= value.end)),
+    );
+  const chosen = {};
+  for (const concept of [
+    "Assets",
+    "CashAndCashEquivalentsAtCarryingValue",
+    "NetIncomeLoss",
+  ]) {
+    const value = rows(concept).sort(order)[0];
+    if (value) chosen[concept] = { ...value, unit: "USD" };
+  }
+  const latestPeriod = [
+    ...Object.values(chosen).map((value) => value.end),
+    ...(recent.reportDate || []).filter(
+      (end, index) =>
+        ["10-K", "10-Q"].includes(recent.form?.[index]) &&
+        fiscalDate(end) &&
+        fiscalDate(recent.filingDate?.[index]) &&
+        end <= recent.filingDate[index],
+    ),
+  ]
+    .sort()
+    .at(-1);
+  const revenue = [
+    "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "RevenueFromContractWithCustomerIncludingAssessedTax",
+    "SalesRevenueNet",
+    "Revenues",
+  ]
+    .flatMap((concept) => rows(concept).map((value) => ({ ...value, concept })))
+    .filter((value) => !latestPeriod || value.end >= latestPeriod)
+    .sort(order)[0];
+  if (revenue) chosen.Revenues = { ...revenue, unit: "USD" };
+  return chosen;
+}
 export function createConnectors({
   market,
   macro,
@@ -198,28 +253,7 @@ export function createConnectors({
             headers,
             18000000,
           );
-          const chosen = {};
-          for (const name of [
-            "Assets",
-            "CashAndCashEquivalentsAtCarryingValue",
-            "Revenues",
-            "NetIncomeLoss",
-          ]) {
-            const item = facts.facts?.["us-gaap"]?.[name],
-              rows = (item?.units?.USD || [])
-                .filter(
-                  (v) =>
-                    ["10-K", "10-Q"].includes(v.form) &&
-                    Number.isFinite(v.val) &&
-                    v.end,
-                )
-                .sort(
-                  (a, b) =>
-                    b.end.localeCompare(a.end) ||
-                    b.filed.localeCompare(a.filed),
-                );
-            if (rows[0]) chosen[name] = { ...rows[0], unit: "USD" };
-          }
+          const chosen = selectSECMetrics(facts, recent);
           if (Object.keys(chosen).length)
             sources.push(
               source(

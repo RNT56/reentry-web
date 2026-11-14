@@ -9,6 +9,7 @@ import {
   chartResultSchema,
 } from "./chart-contract.js";
 import { collectSources } from "../intelligence/sources.js";
+import { researchAsset } from "../intelligence/portfolio-sources.js";
 import { createSet, observePrice } from "../intelligence/scenarios.js";
 export function createEngine({
   db,
@@ -90,11 +91,7 @@ export function createEngine({
     )
       throw fail("Choose 1M, 3M or 1Y and EUR or USD.");
     const p = chartAccess(user),
-      asset = db
-        .prepare(
-          "SELECT symbol,name FROM research_assets WHERE user_id=? AND symbol=?",
-        )
-        .get(user, symbol);
+      asset = researchAsset(db, user, symbol);
     if (!asset) throw fail("Add this asset to your research list first.", 409);
     let chart;
     try {
@@ -242,11 +239,7 @@ export function createEngine({
         .get(user, Date.now() - 86400000).n >= 40
     )
       throw fail("Daily research limit reached. Try again tomorrow.", 429);
-    const asset = db
-      .prepare(
-        "SELECT symbol,name FROM research_assets WHERE user_id=? AND symbol=?",
-      )
-      .get(user, symbol);
+    const asset = researchAsset(db, user, symbol);
     if (!asset) throw fail("Add this asset to your research list first.", 409);
     const job = id();
     db.prepare(

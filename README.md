@@ -10,6 +10,8 @@ Reentry also provides private, source-backed AI research with user-owned Gemini/
 
 AI starts **off** for every account, with a **US$5/month** and **US$0.25/run** default cap. Connect a key and approve research-data sharing in Settings, then add research assets. Free quotes, sources and public reading do not require an AI key. See [Intelligence operations and contracts](docs/INTELLIGENCE.md) for setup, security boundaries, provider coverage and cost limitations.
 
+Holdings across all depots appear in Research automatically. With background jobs enabled, their available news, filings, fundamentals, and technical evidence refresh without an AI key. Chart tools, saved analyses, and AI controls sit below the full-width plot.
+
 ## Hostinger Ubuntu VPS: Docker + existing Caddy
 
 Use a dedicated domain or subdomain, such as `stocks.yourdomain.com`. Point its DNS A record to the VPS (and AAAA only if IPv6 is configured). Keep your existing Caddy installation and other sites.

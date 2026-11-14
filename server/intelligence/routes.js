@@ -8,26 +8,48 @@ import {
   audit,
   transaction,
 } from "../platform/util.js";
-import { putSource, collectSources } from "./sources.js";
+import { putSource } from "./sources.js";
+import { researchAsset } from "./portfolio-sources.js";
 import { createSet, ownedSet, setView, observePrice } from "./scenarios.js";
 import { validateBranches } from "../ai/contract.js";
 export function registerIntelligenceRoutes(
   app,
-  { db, engine, connectors, market },
+  { db, engine, market, portfolioSources },
 ) {
   const auth = { preHandler: app.requireUser },
     limited = {
       ...auth,
       config: { rateLimit: { max: 12, timeWindow: "1 minute" } },
     };
-  app.get("/api/research/assets", auth, async (req) => ({
-    assets: db
+  app.get("/api/research/assets", auth, async (req) => {
+    const user = req.auth.user_id;
+    const held = portfolioSources.sync(user);
+    const assets = new Map(
+      held.map((asset) => [
+        asset.symbol,
+        { ...asset, automatic: 0, interval_hours: 24, next_run: 0 },
+      ]),
+    );
+    for (const { metadata, ...asset } of db
       .prepare(
         "SELECT symbol,name,automatic,interval_hours,next_run,metadata FROM research_assets WHERE user_id=? ORDER BY symbol",
       )
-      .all(req.auth.user_id)
-      .map(({ metadata, ...a }) => ({ ...a, ...JSON.parse(metadata) })),
-  }));
+      .all(user)) {
+      assets.set(asset.symbol, {
+        ...assets.get(asset.symbol),
+        ...asset,
+        ...JSON.parse(metadata),
+      });
+    }
+    return {
+      assets: [...assets.values()]
+        .sort((a, b) => a.symbol.localeCompare(b.symbol))
+        .map((asset) => ({
+          ...asset,
+          sourceStatus: portfolioSources.state(user, asset.symbol),
+        })),
+    };
+  });
   app.put("/api/research/assets/:symbol", auth, async (req) => {
     const s = symbol(req.params.symbol),
       user = req.auth.user_id,
@@ -94,21 +116,29 @@ export function registerIntelligenceRoutes(
     return { ok: true };
   });
   app.post("/api/research/collect", limited, async (req) => {
-    const asset = db
-      .prepare(
-        "SELECT symbol,name FROM research_assets WHERE user_id=? AND symbol=?",
-      )
-      .get(req.auth.user_id, symbol(req.body?.symbol));
+    const asset = researchAsset(db, req.auth.user_id, symbol(req.body?.symbol));
     if (!asset) throw fail("Research asset not found.", 404);
-    return collectSources(db, connectors, req.auth.user_id, asset);
+    return (
+      (await portfolioSources.collect(req.auth.user_id, asset)) || {
+        sources: [],
+        coverage: [],
+        collection: portfolioSources.state(req.auth.user_id, asset.symbol),
+      }
+    );
   });
-  app.get("/api/research/sources", auth, async (req) => ({
-    sources: db
-      .prepare(
-        "SELECT id,symbol,kind,title,url,content,published_at,fetched_at,connector FROM research_sources WHERE user_id=? AND symbol=? ORDER BY fetched_at DESC LIMIT 60",
-      )
-      .all(req.auth.user_id, symbol(req.query.symbol)),
-  }));
+  app.get("/api/research/sources", auth, async (req) => {
+    const user = req.auth.user_id,
+      s = symbol(req.query.symbol);
+    portfolioSources.sync(user);
+    return {
+      sources: db
+        .prepare(
+          "SELECT id,symbol,kind,title,url,content,published_at,fetched_at,connector FROM research_sources WHERE user_id=? AND symbol=? ORDER BY fetched_at DESC LIMIT 60",
+        )
+        .all(user, s),
+      collection: portfolioSources.state(user, s),
+    };
+  });
   app.post("/api/research/sources", limited, async (req) => {
     const user = req.auth.user_id,
       b = req.body || {},

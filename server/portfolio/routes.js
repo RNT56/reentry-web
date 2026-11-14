@@ -19,6 +19,7 @@ export function registerPortfolioRoutes(app, db) {
           error:
             "Your portfolio changed in another tab or device. Export your changes before reloading.",
         });
+      app.portfolioSources?.sync(req.auth.user_id);
       return row;
     },
   );

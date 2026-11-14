@@ -38,6 +38,12 @@ The author allowlist grants publishing rights, not access to other users’ acco
 
 ## Data connectors
 
+Portfolio holdings are resolved across every depot and deduplicated by symbol, excluding demo holdings. They appear in the owner's Research list without creating a manual research preference or enabling scheduled AI. `server/intelligence/portfolio-sources.js` independently collects their public evidence when `ENABLE_BACKGROUND_JOBS=true`, including for accounts without a provider key and while paid AI is paused. Existing portfolios are scanned on worker startup; portfolio saves queue new holdings. Symbols and asset names go to the existing public connectors; quantities and buy-in prices do not.
+
+Collection state is persisted in the additive `source_refresh_states` table. Successful collections refresh after six hours; partial collections retry after thirty minutes; failures back off from five minutes to six hours. The worker processes two assets per tick with fair scheduling across owners. At most four unique upstream collections run together, with a bounded waiting queue and in-flight deduplication. Existing stored evidence survives connector failures. Removing a holding stops its automatic refresh while retaining its evidence and any independently saved research preference. Startup with background jobs disabled creates the additive table without changing existing durable rows, preserving deployment canary checks.
+
+Private source APIs include collection status and provider coverage. The Sources panel refreshes active collections without rebuilding the chart or closing an article the user is reading. No source refresh creates an AI job, reserves a budget, or invokes Gemini/Claude. Paid research remains an explicit action or an existing opted-in schedule.
+
 | Connector | Data | Coverage/limits |
 | --- | --- | --- |
 | Yahoo Finance | Exact listing search, quotes, FX, history, related-ticker headlines | Unofficial endpoints; may change, throttle or be delayed. Headline metadata is explicitly distinguished from full article text. Existing adapter is replaceable. |

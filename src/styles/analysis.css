@@ -13,36 +13,39 @@
 .analysis-chart > * {
   min-width: 0;
 }
-.analysis-chart > .ta-workspaces {
-  grid-row: 1;
-}
-.analysis-chart > .ai-analysis {
-  grid-row: 2;
-}
 .analysis-chart > .ta-heading {
-  grid-row: 3;
+  grid-row: 1;
   scroll-margin-top: calc(var(--app-header-height, 72px) + 64px);
 }
-.analysis-chart > .ta-toolbar {
-  grid-row: 4;
+.analysis-chart > .ta-ohlc {
+  grid-row: 2;
+}
+.analysis-chart > .ta-plot {
+  grid-row: 3;
+  grid-column: 1;
 }
 .analysis-chart > .ta-active-row {
-  grid-row: 7;
+  grid-row: 3;
   grid-column: 1;
   align-self: start;
   justify-self: end;
 }
-.analysis-chart > .ta-ohlc {
-  grid-row: 6;
-}
-.analysis-chart > .ta-plot {
-  grid-row: 7;
-  grid-column: 1;
-}
 .analysis-chart > .ta-caption {
-  grid-row: 8;
+  grid-row: 4;
 }
 .analysis-chart > .ta-message {
+  grid-row: 5;
+}
+.analysis-chart > .ta-workspaces {
+  grid-row: 6;
+}
+.analysis-chart > .ta-analysis-settings {
+  grid-row: 7;
+}
+.analysis-chart > .ta-toolbar {
+  grid-row: 8;
+}
+.analysis-chart > .ai-analysis {
   grid-row: 9;
 }
 .analysis-chart > .ai-analysis-detail {
@@ -52,81 +55,19 @@
   --aic-ink: #9bcfd4;
   --aic-line: #9bcfd426;
   scroll-margin-top: calc(var(--app-header-height, 72px) + 70px);
-  border-top: 1px solid #86c8df18;
   background: #0d181426;
+  border-radius: 0 0 16px 16px;
 }
 .ai-analysis-detail[hidden] {
   display: none;
 }
-@media (min-width: 1101px) {
-  .analysis-chart:has(> .ai-analysis-detail:not([hidden])) {
-    grid-template-columns: minmax(0, 1fr) 320px;
-  }
-  .analysis-chart > .ta-workspaces,
-  .analysis-chart > .ai-analysis {
-    grid-column: 1 / -1;
-  }
-  .analysis-chart > .ta-heading,
-  .analysis-chart > .ta-toolbar,
-  .analysis-chart > .ta-active-row,
-  .analysis-chart > .ta-ohlc,
-  .analysis-chart > .ta-plot,
-  .analysis-chart > .ta-caption,
-  .analysis-chart > .ta-message {
-    grid-column: 1;
-  }
-  .analysis-chart > .ai-analysis-detail:not([hidden]) {
-    grid-column: 2;
-    grid-row: 3 / 10;
-    align-self: start;
-    position: sticky;
-    top: calc(var(--app-header-height, 72px) + 54px);
-    max-height: calc(100dvh - var(--app-header-height, 72px) - 78px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    border-top: 0;
-    border-left: 1px solid #86c8df18;
-  }
-  .ai-analysis-detail .aic-history label {
-    display: grid;
-    gap: 7px;
-  }
-  .ai-analysis-detail .aic-history .select-control {
-    width: 100%;
-  }
-  .ai-analysis-detail .aic-history {
-    flex-wrap: wrap;
-  }
-  .ai-analysis-detail .aic-history label {
-    flex-basis: 100%;
-  }
-  .ai-analysis-detail .aic-run-budget {
-    gap: 15px;
-    justify-content: space-between;
-  }
-  .ai-analysis-detail .aic-run-budget > div {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .ai-analysis-detail .aic-quote {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .ai-analysis-detail .aic-evidence > div {
-    grid-template-columns: 1fr;
-  }
-  .ai-analysis-detail .aic-result-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .ai-analysis-detail .aic-periods button {
-    min-width: 32px;
-  }
-  .ai-analysis-detail .aic-compose-controls {
-    gap: 8px;
-  }
+.ta-analysis-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px 22px;
+  background: #0a100d20;
 }
 .ta-workspaces {
   display: flex;
@@ -135,7 +76,8 @@
   gap: 20px;
   padding: 0 22px;
   min-height: 64px;
-  border-bottom: 1px solid #ffffff0c;
+  border-block: 1px solid #ffffff0c;
+  background: #0a100d20;
 }
 .ta-slots {
   display: flex;
@@ -273,15 +215,13 @@
   background: #a7ce9710;
 }
 .ta-toolbar {
-  position: sticky;
-  top: calc(var(--app-header-height, 72px) + 54px);
-  z-index: 12;
+  position: relative;
+  z-index: 4;
   display: grid;
   gap: 0;
   border-block: 1px solid #ffffff0b;
   padding: 0 18px;
   background: #141c17f7;
-  backdrop-filter: blur(16px);
 }
 .ta-control-bar {
   display: flex;
@@ -1025,8 +965,17 @@
     font-size: 30px;
     min-height: 44px;
   }
+  .ta-analysis-settings {
+    display: grid;
+    gap: 10px;
+    padding: 10px 14px 13px;
+  }
+  .ta-analysis-settings .ta-name {
+    width: 100%;
+    max-width: 100%;
+  }
   .ta-ranges {
-    margin-top: 15px;
+    margin-top: 0;
     justify-content: space-between;
   }
   .ta-ranges button {
@@ -1035,7 +984,6 @@
     min-height: 38px;
   }
   .ta-toolbar {
-    top: calc(var(--app-header-height, 64px) + 50px);
     padding-inline: 10px;
   }
   .ta-control-bar {
