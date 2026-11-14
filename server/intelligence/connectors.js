@@ -19,7 +19,7 @@ export function createConnectors({
   secAgent = process.env.SEC_USER_AGENT || "",
 } = {}) {
   const cache = createRequestCache({ ttl: 300000, limit: 200 });
-  const paceSEC = createRequestPacer();
+  const paceSEC = createRequestPacer({ limit: 4 });
   const secJSON = (...args) => paceSEC(() => json(...args));
   async function json(url, headers = {}, limit = 3000000) {
     const r = await fetcher(url, {
@@ -161,8 +161,11 @@ export function createConnectors({
         if (!entry) return [];
         const cik = String(entry.cik_str).padStart(10, "0"),
           root = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/`;
-        const sub = await cache("sec:sub:" + cik, () =>
-          secJSON(`https://data.sec.gov/submissions/CIK${cik}.json`, headers),
+        // The outer cache retains only normalized sources. Full SEC payloads can be
+        // many megabytes; do not retain one historical filing/fact archive per asset.
+        const sub = await secJSON(
+          `https://data.sec.gov/submissions/CIK${cik}.json`,
+          headers,
         );
         const recent = sub.filings?.recent || {},
           sources = [];
@@ -188,12 +191,10 @@ export function createConnectors({
           );
         }
         try {
-          const facts = await cache("sec:facts:" + cik, () =>
-            secJSON(
-              `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
-              headers,
-              18000000,
-            ),
+          const facts = await secJSON(
+            `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
+            headers,
+            18000000,
           );
           const chosen = {};
           for (const name of [
@@ -254,8 +255,12 @@ export function createConnectors({
     async collect(asset) {
       const results = await Promise.allSettled(
         definitions.map((d) =>
-          cache(d.id + ":" + asset.symbol + ":" + asset.name, () =>
-            d.collect(asset),
+          cache(
+            d.id +
+              ":" +
+              asset.symbol +
+              (d.id === "gdelt" ? ":" + asset.name : ""),
+            () => d.collect(asset),
           ),
         ),
       );

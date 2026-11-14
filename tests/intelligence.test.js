@@ -732,6 +732,101 @@ test("source connectors use fixed hosts, bounded responses, exact ticker news ma
   );
 });
 
+test("SEC collection shares normalized results across asset names and keeps reported fact periods", async () => {
+  const calls = [];
+  const contact = "Reentry tests operator@example.com";
+  const connectors = createConnectors({
+    secAgent: contact,
+    market: {
+      quote: async () => {
+        throw Error("Not part of this fixture");
+      },
+    },
+    fetcher: async (url, options) => {
+      calls.push({ url, options });
+      let data = {};
+      if (url.endsWith("/company_tickers.json"))
+        data = { 0: { ticker: "INTC", cik_str: 50863 } };
+      if (url.includes("/submissions/"))
+        data = {
+          name: "Intel",
+          filings: {
+            recent: {
+              form: ["10-Q"],
+              accessionNumber: ["0000050863-26-000001"],
+              primaryDocument: ["intc.htm"],
+              filingDate: ["2026-10-23"],
+              reportDate: ["2026-09-30"],
+              items: [""],
+            },
+          },
+        };
+      if (url.includes("/companyfacts/"))
+        data = {
+          facts: {
+            "us-gaap": {
+              Assets: {
+                units: {
+                  USD: [
+                    {
+                      end: "2026-09-30",
+                      filed: "2026-10-23",
+                      val: 10,
+                      form: "10-Q",
+                    },
+                    {
+                      end: "2025-12-31",
+                      filed: "2026-02-10",
+                      val: 9,
+                      form: "10-K",
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        };
+      return new Response(JSON.stringify(data), { status: 200 });
+    },
+  });
+  const first = await connectors.collect({
+    symbol: "INTC",
+    name: "Intel Corporation",
+  });
+  const second = await connectors.collect({ symbol: "INTC", name: "Intel" });
+  const sources = first.sources.filter((s) => s.connector === "sec");
+  assert.equal(sources.length, 2);
+  assert.match(
+    sources.find((s) => s.kind === "filing").content,
+    /body has not been retrieved/,
+  );
+  const fact = JSON.parse(
+    sources.find((s) => s.kind === "fundamentals").content,
+  ).metrics.Assets;
+  assert.deepEqual(fact, {
+    end: "2026-09-30",
+    filed: "2026-10-23",
+    val: 10,
+    form: "10-Q",
+    unit: "USD",
+  });
+  assert.deepEqual(
+    second.sources.filter((s) => s.connector === "sec"),
+    sources,
+  );
+  assert.equal(
+    calls.filter((c) => new URL(c.url).hostname.endsWith("sec.gov")).length,
+    3,
+  );
+  assert.ok(
+    calls.every(
+      (c) =>
+        c.options.headers["User-Agent"] ===
+        (new URL(c.url).hostname.endsWith("sec.gov") ? contact : undefined),
+    ),
+  );
+});
+
 test("old price hits remain observable beyond the UI sample window; retractions preserve historical knowledge", async (t) => {
   const { db, a } = await fixture(t),
     start = Date.now() - 100000,
