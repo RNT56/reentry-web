@@ -13,6 +13,7 @@
 @import "./styles/workbench.css";
 @import "./styles/analysis.css";
 @import "./styles/ai-analysis.css";
+@import "./styles/source-monitor.css";
 @import "./styles/controls.css";
 @import "./styles/navigation.css";
 @import "./styles/motion.css";

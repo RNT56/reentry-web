@@ -10,6 +10,7 @@ import { createConnectors } from "../intelligence/connectors.js";
 import { createEngine } from "../ai/engine.js";
 import { registerAIRoutes } from "../ai/routes.js";
 import { registerChartAnalysisRoutes } from "../ai/chart-routes.js";
+import { registerSourceMonitorRoutes } from "../ai/source-monitor-routes.js";
 import { registerIntelligenceRoutes } from "../intelligence/routes.js";
 import { registerJournalRoutes } from "../journal/routes.js";
 import { createPortfolioSources } from "../intelligence/portfolio-sources.js";
@@ -59,6 +60,7 @@ export function registerPlatform(app, db, market, options = {}) {
   if (options.controls) registerAdminRoutes(app, services);
   registerAIRoutes(app, services);
   registerChartAnalysisRoutes(app, services);
+  registerSourceMonitorRoutes(app, services);
   registerIntelligenceRoutes(app, services);
   registerJournalRoutes(app, services);
   app.decorate("intelligenceEngine", engine);

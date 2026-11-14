@@ -10,6 +10,7 @@ import {
 } from "../../shared/ui.js";
 import { mountAnalysisChart } from "../charts/analysis-chart.js";
 import { mountAIAnalysis } from "../charts/ai-analysis.js";
+import { mountSourceMonitor, monitorMatches } from "./source-monitor.js";
 import { editPrivateScenario } from "./scenario-editor.js";
 import { mountStrategies } from "../strategies/workspace.js";
 import { mountAdmin } from "../admin/workspace.js";
@@ -51,6 +52,9 @@ export function mountIntelligence(root, { model, navigate }) {
     job = null,
     chart = null,
     aiAnalysis = null,
+    sourceMonitor = null,
+    sourceSignals = null,
+    sourceConnections = [],
     chartSymbol = null,
     studio = null,
     strategies = null,
@@ -75,6 +79,8 @@ export function mountIntelligence(root, { model, navigate }) {
     admin?.destroy();
     admin = null;
     if (!keepChart) {
+      sourceMonitor?.destroy();
+      sourceMonitor = null;
       aiAnalysis?.destroy();
       aiAnalysis = null;
       chart?.destroy();
@@ -95,7 +101,9 @@ export function mountIntelligence(root, { model, navigate }) {
     if (!live()) return;
     [info] = data;
     assets = data[1].assets;
-    jobs = data[2].jobs.filter((j) => j.kind !== "chart-analysis");
+    jobs = data[2].jobs.filter((j) =>
+      ["research", "map-article"].includes(j.kind),
+    );
     sets = data[3].sets;
     journal = data[4].articles;
     if (!assets.some((a) => a.symbol === memory.symbol))
@@ -116,9 +124,14 @@ export function mountIntelligence(root, { model, navigate }) {
     sourceRequest?.abort();
     assetLoads++;
     try {
-      const data = await request(
-        "/api/research/sources?" + new URLSearchParams({ symbol: selected }),
-      );
+      const [data, monitored] = await Promise.all([
+        request(
+          "/api/research/sources?" + new URLSearchParams({ symbol: selected }),
+        ),
+        request(
+          "/api/source-monitor?" + new URLSearchParams({ symbol: selected }),
+        ).catch(() => null),
+      ]);
       const wanted =
         jobs.find((j) => j.id === memory.jobId && j.symbol === selected) ||
         jobs.find(
@@ -137,6 +150,8 @@ export function mountIntelligence(root, { model, navigate }) {
       )
         return;
       applySources(data);
+      sourceSignals = monitored?.latest || null;
+      sourceConnections = monitored?.signals || [];
       job = detail;
     } finally {
       assetLoads--;
@@ -278,7 +293,7 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</select></label><button class="primary" data-run ${pending ? "disabled" : ""}>${pending ? (pending.status === "running" ? "✦ Researching…" : "Queued…") : "✦ Run research"}</button></div></section>${a.automatic ? `<div class="automation-note small">${info.preferences.enabled ? "Next automatic brief: " + esc(when(a.next_run)) : "Automation paused · enable AI in settings"}</div>` : ""}${pending ? `<div class="job-progress" role="status"><i></i><span>${pending.status === "running" ? "Researching…" : "Queued"}</span>${pending.status === "queued" ? `<button class="link" data-cancel-job="${esc(pending.id)}">Cancel</button>` : ""}</div>` : ""}<div data-research-metrics>${metricsPanel()}</div><div class="research-main ${job ? "has-brief" : ""}">${resultPanel()}${sourcePanel()}</div><details class="run-history"><summary>Research history · ${jobs.filter((j) => j.symbol === a.symbol).length}</summary>${jobs
+      )}</select></label><button class="primary" data-run ${pending ? "disabled" : ""}>${pending ? (pending.status === "running" ? "✦ Researching…" : "Queued…") : "✦ Run research"}</button></div></section>${a.automatic ? `<div class="automation-note small">${info.preferences.enabled ? "Next automatic brief: " + esc(when(a.next_run)) : "Automation paused · enable AI in settings"}</div>` : ""}${pending ? `<div class="job-progress" role="status"><i></i><span>${pending.status === "running" ? "Researching…" : "Queued"}</span>${pending.status === "queued" ? `<button class="link" data-cancel-job="${esc(pending.id)}">Cancel</button>` : ""}</div>` : ""}<section id="source-monitor"></section><div data-research-metrics>${metricsPanel()}</div><div class="research-main ${job ? "has-brief" : ""}">${resultPanel()}${sourcePanel()}</div><details class="run-history"><summary>Research history · ${jobs.filter((j) => j.symbol === a.symbol).length}</summary>${jobs
       .filter((j) => j.symbol === a.symbol)
       .slice(0, 20)
       .map(
@@ -323,9 +338,14 @@ export function mountIntelligence(root, { model, navigate }) {
       memory.tab === "research" && chartSymbol === memory.symbol
         ? root.querySelector("#research-chart")
         : null;
-    const focusedChartField = retainedChart?.contains(document.activeElement)
-      ? document.activeElement
+    const retainedMonitor = retainedChart
+      ? root.querySelector("#source-monitor")
       : null;
+    const focusedChartField =
+      retainedChart?.contains(document.activeElement) ||
+      retainedMonitor?.contains(document.activeElement)
+        ? document.activeElement
+        : null;
     destroyChildren(!!retainedChart);
     root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ↗</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
       ["research", "Overview"],
@@ -432,6 +452,66 @@ export function mountIntelligence(root, { model, navigate }) {
         });
       }
     }
+    if (memory.tab === "research" && active()) {
+      if (retainedMonitor)
+        root.querySelector("#source-monitor").replaceWith(retainedMonitor);
+      else {
+        const monitoredSymbol = memory.symbol;
+        sourceMonitor = mountSourceMonitor(
+          root.querySelector("#source-monitor"),
+          {
+            asset: active(),
+            initialJobId: memory.monitorJobId,
+            initialChange: memory.monitorChange ?? null,
+            onSettings: () => navigate("settings"),
+            onTree: openSourceTree,
+            onVerify: async ({
+              setId,
+              eventKey,
+              suggestion,
+              sources: evidenceSources,
+            }) => {
+              const operation = ++navigationEpoch;
+              try {
+                const selectedSet = await request(
+                  "/api/scenarios/" + encodeURIComponent(setId),
+                );
+                if (
+                  !live() ||
+                  operation !== navigationEpoch ||
+                  memory.symbol !== monitoredSymbol
+                )
+                  return;
+                sets = [selectedSet, ...sets.filter((s) => s.id !== setId)];
+                await verify(setId, eventKey, suggestion, evidenceSources);
+              } catch (e) {
+                if (live()) toast(e.message);
+              }
+            },
+            onSignals: (connections) => {
+              if (live() && memory.symbol === monitoredSymbol)
+                sourceConnections = connections;
+            },
+            onUpdate: (detail) => {
+              if (
+                !live() ||
+                memory.symbol !== monitoredSymbol ||
+                detail?.status !== "completed"
+              )
+                return;
+              if (
+                !sourceSignals ||
+                sourceSignals.symbol !== monitoredSymbol ||
+                detail.createdAt >= sourceSignals.createdAt
+              )
+                sourceSignals = detail;
+            },
+          },
+        );
+      }
+      focusedChartField?.focus({ preventScroll: true });
+    }
+    if (memory.tab === "scenarios") attachSourceSignals();
     if (memory.tab === "studio" && info.author)
       studio = createStudio({
         root: root.querySelector("#author-studio"),
@@ -505,7 +585,80 @@ export function mountIntelligence(root, { model, navigate }) {
           );
         });
   }
-  async function verify(setId, eventKey, suggestion = null) {
+  async function openSourceTree({ setId, eventKey }) {
+    const selectedSymbol = memory.symbol,
+      operation = ++navigationEpoch;
+    try {
+      const selectedSet = await request(
+        "/api/scenarios/" + encodeURIComponent(setId),
+      );
+      if (
+        !live() ||
+        operation !== navigationEpoch ||
+        memory.symbol !== selectedSymbol
+      )
+        return;
+      sets = [selectedSet, ...sets.filter((s) => s.id !== setId)];
+      memory.focusSetId = setId;
+      memory.aiEventKey = eventKey;
+      memory.aiJobId = null;
+      memory.tab = "scenarios";
+      render();
+      root
+        .querySelector(`[data-scenario-set="${CSS.escape(setId)}"]`)
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    } catch (e) {
+      if (live()) toast(e.message);
+    }
+  }
+  function attachSourceSignals() {
+    const connections = sourceConnections.length
+      ? sourceConnections
+      : sourceSignals?.symbol === memory.symbol
+        ? monitorMatches(sourceSignals).map((match) => ({
+            ...match,
+            jobId: sourceSignals.id,
+            createdAt: sourceSignals.createdAt,
+            title: sourceSignals.result?.changes?.[match.changeIndex]?.title,
+          }))
+        : [];
+    for (const match of connections) {
+      const node = root.querySelector(
+        `[data-scenario-set="${CSS.escape(match.setId)}"] [data-scenario-key="${CSS.escape(match.eventKey)}"]`,
+      );
+      if (!node || !match.title) continue;
+      let container = node.querySelector(".sm-branch-signals");
+      if (!container) {
+        container = document.createElement("div");
+        container.className = "sm-branch-signals";
+        node.append(container);
+      }
+      const row = document.createElement("div");
+      row.className = "sm-branch-signal signal-" + match.signal;
+      row.innerHTML = `<i></i><button data-monitor-open="${esc(match.jobId)}" data-monitor-change="${match.changeIndex}" title="${esc(when(match.createdAt))}"><small>AI · ${esc({ supports: "Supports", challenges: "Challenges", invalidates: "Invalidates", context: "Context" }[match.signal])}${match.createdAt ? " · " + esc(new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(match.createdAt)) : ""}</small>${esc(match.title)}</button>`;
+      if (container.querySelectorAll(":scope > .sm-branch-signal").length < 2)
+        container.append(row);
+      else {
+        let history = container.querySelector(".sm-branch-history");
+        if (!history) {
+          history = document.createElement("details");
+          history.className = "sm-branch-history";
+          history.innerHTML = "<summary></summary><div></div>";
+          container.append(history);
+        }
+        history.querySelector("div").append(row);
+        history.querySelector("summary").textContent =
+          "Earlier signals · " +
+          history.querySelectorAll(".sm-branch-signal").length;
+      }
+    }
+  }
+  async function verify(
+    setId,
+    eventKey,
+    suggestion = null,
+    evidenceSources = job?.sources || [],
+  ) {
     const set = sets.find((s) => s.id === setId);
     if (!set) throw Error("Scenario not found. Refresh the workspace.");
     const branch = set.branches.find(
@@ -513,8 +666,12 @@ export function mountIntelligence(root, { model, navigate }) {
           eventKey === b.eventKey || eventKey === b.eventKey + "-invalidated",
       ),
       evidence = suggestion
-        ? job.sources.find((s) => suggestion.sourceIds.includes(s.id) && s.url)
+        ? evidenceSources.find(
+            (s) => suggestion.sourceIds.includes(s.id) && s.url,
+          )
         : null;
+    if (!branch)
+      throw Error("This branch is unavailable. Refresh the workspace.");
     modal(
       `<span class="eyebrow">HUMAN VERIFICATION / ${esc(set.symbol)}</span><h2>${eventKey.endsWith("-invalidated") ? "Invalidate this branch" : "Verify this condition"}</h2><p class="sub">${esc(eventKey.endsWith("-invalidated") ? branch.invalidation : branch.condition)}</p>${suggestion ? `<p class="inline-notice">${esc(suggestion.rationale)}</p>` : ""}<form id="verify-event"><div class="field"><label for="event-title">What confirms it?</label><input id="event-title" name="title" maxlength="300" value="${esc(evidence?.title || "")}" required></div><div class="field"><label for="event-url">Evidence link · HTTPS</label><input id="event-url" name="url" type="url" maxlength="2000" value="${esc(evidence?.url || "")}" required></div><div class="field"><label for="event-when">When did it happen? · your local time</label><input id="event-when" name="occurred" type="datetime-local" required></div><label class="consent-line"><input name="verified" type="checkbox" required> I checked this evidence against the exact condition.</label><button class="primary">Record verified event</button></form>`,
     );
@@ -584,6 +741,8 @@ export function mountIntelligence(root, { model, navigate }) {
         memory.jobId = null;
         memory.aiJobId = null;
         memory.aiEventKey = null;
+        memory.monitorJobId = null;
+        memory.monitorChange = null;
         await load();
       });
     if (b.dataset.researchAsset)
@@ -593,6 +752,8 @@ export function mountIntelligence(root, { model, navigate }) {
         memory.jobId = null;
         memory.aiJobId = null;
         memory.aiEventKey = null;
+        memory.monitorJobId = null;
+        memory.monitorChange = null;
         coverage = [];
         await loadAsset();
         render();
@@ -708,6 +869,16 @@ export function mountIntelligence(root, { model, navigate }) {
           .querySelector("#research-chart")
           ?.scrollIntoView({ block: "start", behavior: "smooth" });
       });
+    if (b.dataset.monitorOpen) {
+      navigationEpoch++;
+      memory.monitorJobId = b.dataset.monitorOpen;
+      memory.monitorChange = Number(b.dataset.monitorChange);
+      memory.tab = "research";
+      render();
+      root
+        .querySelector("#source-monitor")
+        ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
     if (b.dataset.checkSet)
       action(b, async () => {
         await request(
@@ -808,8 +979,8 @@ export function mountIntelligence(root, { model, navigate }) {
       return;
     try {
       const previous = JSON.stringify(jobs);
-      jobs = (await request("/api/research/jobs")).jobs.filter(
-        (j) => j.kind !== "chart-analysis",
+      jobs = (await request("/api/research/jobs")).jobs.filter((j) =>
+        ["research", "map-article"].includes(j.kind),
       );
       if (
         previous !== JSON.stringify(jobs) &&

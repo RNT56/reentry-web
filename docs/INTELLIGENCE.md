@@ -1,4 +1,4 @@
-Current model IDs, rates and defaults: [model catalog](MODELS.md). Owner controls: [admin operations](ADMIN.md). Market data: [macro sources](MACRO.md). Strategy methods: [comparisons](STRATEGIES.md).
+Current model IDs, rates and defaults: [model catalog](MODELS.md). Owner controls: [admin operations](ADMIN.md). Market data: [macro sources](MACRO.md). Strategy methods: [comparisons](STRATEGIES.md). Private evidence changes: [source monitoring](SOURCE_MONITORING.md).
 
 # Intelligence: operation and boundaries
 
@@ -43,6 +43,8 @@ Portfolio holdings are resolved across every depot and deduplicated by symbol, e
 Collection state is persisted in the additive `source_refresh_states` table. Successful collections refresh after six hours; partial collections retry after thirty minutes; failures back off from five minutes to six hours. The worker processes two assets per tick with fair scheduling across owners. At most four unique upstream collections run together, with a bounded waiting queue and in-flight deduplication. Existing stored evidence survives connector failures. Removing a holding stops its automatic refresh while retaining its evidence and any independently saved research preference. Startup with background jobs disabled creates the additive table without changing existing durable rows, preserving deployment canary checks.
 
 Private source APIs include collection status and provider coverage. The Sources panel refreshes active collections without rebuilding the chart or closing an article the user is reading. No source refresh creates an AI job, reserves a budget, or invokes Gemini/Claude. Paid research remains an explicit action or an existing opted-in schedule.
+
+The separate source-monitor scheduler can review changed evidence when an owner enables **Watch sources** for that asset. It reads stored evidence, compares against a frozen prior review, and creates private, cited branch suggestions through the same budgeted AI queue. Free connector collection alone never enables this paid watch. Published article trees are excluded, and model suggestions do not create verified observations.
 
 | Connector | Data | Coverage/limits |
 | --- | --- | --- |

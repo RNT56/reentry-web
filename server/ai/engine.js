@@ -9,6 +9,12 @@ import {
   chartResultSchema,
 } from "./chart-contract.js";
 import { collectSources } from "../intelligence/sources.js";
+import { createSourceMonitor } from "./source-monitor.js";
+import {
+  makeSourceMonitorPrompt,
+  validateSourceMonitorResult,
+  sourceMonitorSchema,
+} from "./source-monitor-contract.js";
 import { researchAsset } from "../intelligence/portfolio-sources.js";
 import { createSet, observePrice } from "../intelligence/scenarios.js";
 export function createEngine({
@@ -26,6 +32,7 @@ export function createEngine({
     aborter;
   const chartQuotes = new Map();
   const chartSchemaInput = JSON.stringify(chartResultSchema);
+  const sourceMonitor = createSourceMonitor({ db, vault, enabled, paused });
   function chartAccess(user) {
     if (paused()) throw fail("AI is paused by the owner.", 503);
     const p = preferences(db, user);
@@ -261,25 +268,25 @@ export function createEngine({
   function recover() {
     const rows = db
       .prepare(
-        "SELECT id,dispatched_at FROM ai_jobs WHERE status='running' AND lease_until<?",
+        "SELECT id,kind,user_id,symbol,dispatched_at FROM ai_jobs WHERE status='running' AND lease_until<?",
       )
       .all(Date.now());
     for (const j of rows) {
       const ledger = db
         .prepare("SELECT state FROM ai_ledger WHERE job_id=?")
         .get(j.id);
-      release(db, j.id, !!j.dispatched_at);
-      db.prepare(
-        "UPDATE ai_jobs SET status='failed',error=?,finished_at=? WHERE id=? AND status='running'",
-      ).run(
-        j.dispatched_at
-          ? ledger?.state === "settled"
-            ? "Worker interrupted after usage was recorded. The response is unavailable."
-            : "Worker interrupted after dispatch. Usage needs reconciliation."
-          : "Worker interrupted before dispatch. No model call was sent.",
-        Date.now(),
-        j.id,
-      );
+      const error = j.dispatched_at
+        ? ledger?.state === "settled"
+          ? "Worker interrupted after usage was recorded. The response is unavailable."
+          : "Worker interrupted after dispatch. Usage needs reconciliation."
+        : "Worker interrupted before dispatch. No model call was sent.";
+      transaction(db, () => {
+        release(db, j.id, !!j.dispatched_at);
+        db.prepare(
+          "UPDATE ai_jobs SET status='failed',error=?,finished_at=? WHERE id=? AND status='running'",
+        ).run(error, Date.now(), j.id);
+        if (j.kind === "source-monitor") sourceMonitor.failed(j, error);
+      });
     }
   }
   async function execute(job) {
@@ -288,7 +295,10 @@ export function createEngine({
     try {
       if (paused()) throw fail("AI is paused by the owner.", 503);
       const resolvedModel = effectiveModel(job.provider, job.model);
-      if (job.kind === "chart-analysis" && resolvedModel !== job.model)
+      if (
+        ["chart-analysis", "source-monitor"].includes(job.kind) &&
+        resolvedModel !== job.model
+      )
         throw fail("Quoted model is no longer available. Preview again.", 409);
       if (resolvedModel !== job.model) {
         db.prepare("UPDATE ai_jobs SET model=? WHERE id=?").run(
@@ -299,9 +309,12 @@ export function createEngine({
       }
       const input = JSON.parse(job.input),
         chartJob = job.kind === "chart-analysis",
-        collected = chartJob
-          ? { sources: [], coverage: [] }
-          : await collectSources(db, connectors, job.user_id, input.asset);
+        sourceJob = job.kind === "source-monitor",
+        collected = sourceJob
+          ? { sources: input.sources, coverage: [] }
+          : chartJob
+            ? { sources: [], coverage: [] }
+            : await collectSources(db, connectors, job.user_id, input.asset);
       if (
         stopped ||
         db.prepare("SELECT status FROM ai_jobs WHERE id=?").get(job.id)
@@ -327,26 +340,33 @@ export function createEngine({
           fetchedAt: Date.now(),
         });
       }
-      const watched = chartJob
-        ? []
-        : db
-            .prepare(
-              "SELECT id,title,branches FROM scenario_sets WHERE user_id=? AND symbol=? ORDER BY created_at DESC LIMIT 4",
-            )
-            .all(job.user_id, job.symbol)
-            .map((s) => ({
-              id: s.id,
-              title: s.title,
-              branches: JSON.parse(s.branches).map((b) => ({
-                eventKey: b.eventKey,
-                condition: b.condition,
-                invalidation: b.invalidation,
-              })),
-            }));
-      const snapshot = chartJob
-          ? input
-          : { ...input, ...collected, watched, asOf: Date.now() },
-        prompt = chartJob ? makeChartPrompt(snapshot) : makePrompt(snapshot);
+      const watched = sourceJob
+        ? input.watched
+        : chartJob
+          ? []
+          : db
+              .prepare(
+                "SELECT id,title,branches FROM scenario_sets WHERE user_id=? AND symbol=? ORDER BY created_at DESC LIMIT 4",
+              )
+              .all(job.user_id, job.symbol)
+              .map((s) => ({
+                id: s.id,
+                title: s.title,
+                branches: JSON.parse(s.branches).map((b) => ({
+                  eventKey: b.eventKey,
+                  condition: b.condition,
+                  invalidation: b.invalidation,
+                })),
+              }));
+      const snapshot =
+          chartJob || sourceJob
+            ? input
+            : { ...input, ...collected, watched, asOf: Date.now() },
+        prompt = sourceJob
+          ? makeSourceMonitorPrompt(snapshot)
+          : chartJob
+            ? makeChartPrompt(snapshot)
+            : makePrompt(snapshot);
       db.prepare("UPDATE ai_jobs SET input=? WHERE id=?").run(
         JSON.stringify(snapshot),
         job.id,
@@ -378,13 +398,18 @@ export function createEngine({
           throw fail("Scenario limit reached. No AI request was sent.", 409);
         chartBudget(job.user_id, prompt, job.model, input.approvedMaximum);
       }
+      if (sourceJob) sourceMonitor.dispatch(job, input, prompt);
       const key = vault.open(job.user_id, job.provider, credential.encrypted);
       const { pricing } = reserve(
         db,
         job,
         prompt,
         Date.now(),
-        chartJob ? chartSchemaInput : "",
+        sourceJob
+          ? sourceMonitor.schemaInput
+          : chartJob
+            ? chartSchemaInput
+            : "",
       );
       db.prepare("UPDATE ai_jobs SET dispatched_at=? WHERE id=?").run(
         Date.now(),
@@ -396,7 +421,11 @@ export function createEngine({
         model: job.model,
         key,
         prompt,
-        ...(chartJob ? { schema: chartResultSchema } : {}),
+        ...(sourceJob
+          ? { schema: sourceMonitorSchema }
+          : chartJob
+            ? { schema: chartResultSchema }
+            : {}),
         signal: aborter.signal,
       });
       // Charge valid usage even if the response is refused, truncated or fails our content checks.
@@ -415,14 +444,16 @@ export function createEngine({
           409,
         );
       }
-      const result = chartJob
-        ? validateChartResult(parsed, snapshot)
-        : validateResult(parsed, snapshot);
+      const result = sourceJob
+        ? validateSourceMonitorResult(parsed, snapshot)
+        : chartJob
+          ? validateChartResult(parsed, snapshot)
+          : validateResult(parsed, snapshot);
       if (input.article?.truncated)
         result.limitations.push(
           "Only the first 18,000 characters of this article were mapped. Later passages were excluded.",
         );
-      if (collected.sources.some((s) => s.truncated))
+      if (!sourceJob && collected.sources.some((s) => s.truncated))
         result.limitations.push(
           "Long source text was excerpted to stay within the context and spending limits.",
         );
@@ -464,6 +495,7 @@ export function createEngine({
                 }
               : { kind: "ai-research", jobId: job.id },
           );
+        if (sourceJob) sourceMonitor.completed(job);
         db.prepare(
           "UPDATE ai_jobs SET status='completed',result=?,finished_at=?,lease_until=NULL WHERE id=?",
         ).run(JSON.stringify(result), Date.now(), job.id);
@@ -474,6 +506,7 @@ export function createEngine({
         error.statusCode || error.name === "ProviderError"
           ? error.message
           : "Research could not be completed. Any confirmed usage has been recorded.";
+      if (job.kind === "source-monitor") sourceMonitor.failed(job, safe);
       db.prepare(
         "UPDATE ai_jobs SET status='failed',error=?,finished_at=?,lease_until=NULL WHERE id=? AND status='running'",
       ).run(safe, Date.now(), job.id);
@@ -486,6 +519,7 @@ export function createEngine({
     running = (async () => {
       recover();
       if (!paused()) {
+        sourceMonitor.schedule();
         const now = Date.now();
         const due = db
           .prepare(
@@ -552,6 +586,7 @@ export function createEngine({
   }
   return {
     enabled,
+    sourceMonitor,
     enqueue,
     estimateChart,
     enqueueChart,

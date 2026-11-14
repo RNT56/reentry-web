@@ -335,6 +335,8 @@ export function registerIntelligenceRoutes(
       tables = [
         "research_assets",
         "research_sources",
+        "source_monitors",
+        "source_monitor_reviews",
         "ai_jobs",
         "ai_ledger",
         "ai_audit",

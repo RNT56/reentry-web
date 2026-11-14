@@ -12,6 +12,8 @@ AI starts **off** for every account, with a **US$5/month** and **US$0.25/run** d
 
 Holdings across all depots appear in Research automatically. With background jobs enabled, their available news, filings, fundamentals, and technical evidence refresh without an AI key. Chart tools, saved analyses, and AI controls sit below the full-width plot.
 
+**What changed** compares newly collected evidence with a previous AI review and links cited developments to selected private scenario branches. Preview a single review or enable **Watch sources** for an asset; both use your existing BYOC limits. AI suggestions remain separate from verified events and public articles. See [private source monitoring](docs/SOURCE_MONITORING.md).
+
 ## Hostinger Ubuntu VPS: Docker + existing Caddy
 
 Use a dedicated domain or subdomain, such as `stocks.yourdomain.com`. Point its DNS A record to the VPS (and AAAA only if IPv6 is configured). Keep your existing Caddy installation and other sites.
