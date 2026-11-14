@@ -56,7 +56,7 @@ export const surfaceMotionSelector = [
   "[data-surface-reveal]",
 ].join(",");
 const excluded =
-  '.reorder-is-active,.reorder-is-dragging,nav,.app-header,.research-dock,.mobile-target-dock,.loading-surface,[aria-busy="true"],[hidden],[data-motion-static],.ta-plot,.ta-toolbar,.ta-active-row,.ta-tool-drawer,.price-history,.strategy-curve,.structure-chart,.macro-chart,.ai-analysis,.ai-analysis-detail,.select-menu,[role="dialog"]';
+  '.chart-fullscreen,.reorder-is-active,.reorder-is-dragging,nav,.app-header,.research-dock,.mobile-target-dock,.loading-surface,[aria-busy="true"],[hidden],[data-motion-static],.ta-plot,.ta-toolbar,.ta-active-row,.ta-tool-drawer,.price-history,.strategy-curve,.structure-chart,.macro-chart,.ai-analysis,.ai-analysis-detail,.select-menu,[role="dialog"]';
 const staticDescendants =
   ".ta-plot,.price-history,.strategy-curve,.structure-chart,.macro-chart,.mobile-target-dock,thead,[data-motion-static]";
 const installed = new WeakMap();

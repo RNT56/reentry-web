@@ -49,7 +49,7 @@ const validCandle = (p) =>
   [p.open, p.high, p.low, p.close].every((v) => finite(v) && v > 0) &&
   p.low <= Math.min(p.open, p.close) &&
   p.high >= Math.max(p.open, p.close);
-export function chartGeometry(data, state, indicators, width) {
+export function chartGeometry(data, state, indicators, width, totalHeight) {
   const all = data.points;
   if (!Array.isArray(all) || all.length < 2)
     throw Error("At least two chart observations required.");
@@ -65,11 +65,23 @@ export function chartGeometry(data, state, indicators, width) {
   }
   const points = all.slice(from, to + 1),
     W = Math.max(280, width),
-    H =
-      (W < 600 ? 390 : 470) -
-      state.indicators.filter((id) => ["rsi", "macd", "volume"].includes(id))
-        .length *
-        82,
+    paneCount = state.indicators.filter((id) =>
+      ["rsi", "macd", "volume"].includes(id),
+    ).length,
+    fitted = Number.isFinite(totalHeight) && totalHeight > 0,
+    allocation = fitted
+      ? Math.max(64 + 24 * paneCount, Math.round(totalHeight))
+      : W < 600
+        ? 390
+        : 470,
+    paneHeight =
+      fitted && paneCount
+        ? Math.max(
+            24,
+            Math.min(82, Math.floor((allocation * 0.36) / paneCount)),
+          )
+        : 82,
+    H = allocation - paneCount * paneHeight,
     L = 10,
     R = W - (W < 600 ? 64 : 76),
     T = 16,
@@ -147,6 +159,8 @@ export function chartGeometry(data, state, indicators, width) {
   return {
     W,
     H,
+    paneHeight,
+    totalHeight: allocation,
     log,
     L,
     R,
@@ -236,12 +250,13 @@ export function renderDrawings(drawings, g, selected, preview = false) {
     .join("");
 }
 function renderPane(id, series, g) {
-  const h = 82,
+  const h = g.paneHeight ?? 82,
+    compactPane = h < 62,
     w = g.W,
     l = g.L,
     r = g.R,
-    top = 20,
-    bottom = 68,
+    top = compactPane ? Math.min(13, Math.floor(h * 0.32)) : 20,
+    bottom = h - (compactPane ? 5 : 14),
     values = (
       id === "macd"
         ? [...series.line, ...series.signal, ...series.histogram]
@@ -262,7 +277,7 @@ function renderPane(id, series, g) {
         : id === "rsi"
           ? "Needs 15 bars"
           : "Needs 34 bars";
-    return `<svg viewBox="0 0 ${w} ${h}" class="ta-pane" aria-label="${indicatorLabels[id]} · ${status}"><text x="${l}" y="12" class="ta-pane-label">${indicatorLabels[id]}</text><text x="${(l + r) / 2}" y="47" text-anchor="middle" class="ta-pane-label">${status}</text></svg>`;
+    return `<svg viewBox="0 0 ${w} ${h}" class="ta-pane ${compactPane ? "is-compact" : ""}" aria-label="${indicatorLabels[id]} · ${status}"><text x="${l}" y="${compactPane ? 9 : 12}" class="ta-pane-label">${indicatorLabels[id]}</text><text x="${(l + r) / 2}" y="${Math.max(15, (top + bottom) / 2)}" text-anchor="middle" class="ta-pane-label">${status}</text></svg>`;
   }
   let lo = id === "rsi" ? 0 : Math.min(0, ...relevant.filter(finite)),
     hi = id === "rsi" ? 100 : Math.max(0, ...relevant.filter(finite));
@@ -302,7 +317,7 @@ function renderPane(id, series, g) {
       if (finite(series[i]))
         content += `<rect x="${g.x(i) - bw / 2}" y="${y(series[i])}" width="${bw}" height="${Math.max(0.5, bottom - y(series[i]))}" fill="${g.all[i].price >= (g.all[i - 1]?.price || g.all[i].price) ? "#72b795" : "#c68e80"}" opacity=".5"/>`;
   }
-  return `<svg viewBox="0 0 ${w} ${h}" class="ta-pane" aria-label="${indicatorLabels[id]}"><text x="${l}" y="12" class="ta-pane-label">${indicatorLabels[id]}</text><text x="${r + 7}" y="${top + 7}" class="ta-axis">${id === "volume" ? compact(hi) : hi.toFixed(id === "rsi" ? 0 : 2)}</text><text x="${r + 7}" y="${bottom}" class="ta-axis">${id === "volume" ? "0" : lo.toFixed(id === "rsi" ? 0 : 2)}</text>${content}</svg>`;
+  return `<svg viewBox="0 0 ${w} ${h}" class="ta-pane ${compactPane ? "is-compact" : ""}" aria-label="${indicatorLabels[id]}"><text x="${l}" y="${compactPane ? 9 : 12}" class="ta-pane-label">${indicatorLabels[id]}</text>${compactPane ? "" : `<text x="${r + 7}" y="${top + 7}" class="ta-axis">${id === "volume" ? compact(hi) : hi.toFixed(id === "rsi" ? 0 : 2)}</text><text x="${r + 7}" y="${bottom}" class="ta-axis">${id === "volume" ? "0" : lo.toFixed(id === "rsi" ? 0 : 2)}</text>`}${content}</svg>`;
 }
 export function renderAnalysisPlot(
   data,

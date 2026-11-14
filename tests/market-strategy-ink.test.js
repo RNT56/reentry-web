@@ -100,3 +100,52 @@ test("structure chart stops observed ink at real last close and keeps fit gaps a
   );
   assert.ok(!/NaN|Infinity/.test(single));
 });
+
+test("expanded charts project into actual portrait dimensions without stretching observed times", () => {
+  const market = macroChartInk([{ value: 10 }, { value: 20 }], {
+    id: "portrait-market",
+    width: 340,
+    height: 520,
+  });
+  assert.equal(market.linePath, "M0 504L340 16");
+  const comparison = strategyCurveInk(
+    {
+      start: 100,
+      end: 300,
+      strategies: [
+        {
+          curve: [
+            { time: 100, value: 10 },
+            { time: 200, value: 12 },
+            { time: 300, value: 20 },
+          ],
+        },
+      ],
+    },
+    0,
+    "portrait-comparison",
+    { width: 340, height: 520 },
+  );
+  assert.match(comparison.markup, /L170 /);
+  assert.match(comparison.markup, /L328 /);
+  assert.ok(!/NaN|Infinity/.test(comparison.markup));
+  const structure = structureChart(
+    {
+      currency: "EUR",
+      source: "Fixture",
+      symbol: "TEST",
+      structure: [
+        { time: 100, price: 10, fit: 11 },
+        { time: 300, price: 20, fit: 19 },
+      ],
+      wave: { active: true, projected: [24, 28], pivots: [] },
+    },
+    String,
+    "portrait-structure",
+    { width: 340, height: 520 },
+  );
+  assert.match(structure, /viewBox="0 0 340 520"/);
+  assert.match(pathFor(structure, "structure-price-line"), /L265\.2 /);
+  assert.match(structure, /L300 /);
+  assert.ok(!/NaN|Infinity/.test(structure));
+});

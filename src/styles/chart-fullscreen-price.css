@@ -1,0 +1,258 @@
+.history-chart-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.history-expand-host {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.history-expand-host button {
+  width: 36px;
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  color: #93a993;
+  border: 1px solid #ffffff0c;
+  border-radius: 9px;
+}
+.history-expand-host button:hover {
+  background: #bddfb409;
+  color: #d7edd0;
+}
+.history-expand-host svg {
+  width: 17px;
+  height: 17px;
+}
+.history-asset-symbol {
+  display: none;
+}
+/* Fullscreen retains the live chart and its controls in the same DOM. */
+.price-history.chart-fullscreen {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 0;
+  padding: max(14px, env(safe-area-inset-top, 0px))
+    max(20px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(20px, env(safe-area-inset-left, 0px));
+  background: #101612;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+}
+/* The existing price readout becomes the fullscreen title bar. */
+.price-history.chart-fullscreen .chart-fs-header {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.price-history.chart-fullscreen .chart-fs-title {
+  display: none;
+}
+.price-history.chart-fullscreen .chart-fs-exit {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  top: max(12px, env(safe-area-inset-top, 0px));
+  pointer-events: auto;
+}
+.price-history.chart-fullscreen .price-history-top {
+  gap: 18px;
+  padding-right: 48px;
+  margin: 0 0 12px;
+  min-height: 0;
+  flex-wrap: nowrap;
+}
+.price-history.chart-fullscreen .history-readout {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 0 16px;
+}
+.price-history.chart-fullscreen .history-readout .eyebrow {
+  grid-column: 1 / -1;
+  gap: 12px;
+}
+.price-history.chart-fullscreen .history-asset-symbol {
+  display: inline;
+  font-size: 10px;
+  color: #9bad9c;
+  letter-spacing: 0.06em;
+}
+.price-history.chart-fullscreen .history-price {
+  font-size: 30px;
+  min-height: 36px;
+  margin: 0;
+}
+.price-history.chart-fullscreen .history-change {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.price-history.chart-fullscreen .history-currency-switch {
+  min-height: 24px;
+  padding-block: 0;
+}
+.price-history.chart-fullscreen .history-expand-host {
+  display: none;
+}
+.price-history.chart-fullscreen .history-chart-actions {
+  min-width: 0;
+}
+.price-history.chart-fullscreen .history-ranges {
+  width: auto;
+}
+.price-history.chart-fullscreen .history-ranges button {
+  min-width: 40px;
+  min-height: 38px;
+}
+.price-history.chart-fullscreen .history-body {
+  min-height: 0;
+  height: auto;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 22px;
+}
+.price-history.chart-fullscreen .history-plot {
+  height: auto;
+  min-height: 0;
+  padding-right: 72px;
+}
+.price-history.chart-fullscreen .history-axis {
+  max-width: 68px;
+  font-size: 10px;
+}
+.price-history.chart-fullscreen .level-target {
+  right: 74px;
+}
+.price-history.chart-fullscreen .history-dates {
+  padding-right: 72px;
+  margin-top: 6px;
+  font-size: 10px;
+}
+.price-history.chart-fullscreen .history-placeholder {
+  grid-row: 1 / -1;
+  min-height: 0;
+  height: 100%;
+}
+.price-history.chart-fullscreen .history-skeleton-grid {
+  height: 100%;
+}
+.price-history.chart-fullscreen .history-levels {
+  min-height: 0;
+  margin-top: 10px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.price-history.chart-fullscreen .history-levels:empty {
+  margin-top: 0;
+}
+.price-history.chart-fullscreen .level-toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 36px;
+}
+.price-history.chart-fullscreen .history-caption {
+  min-height: 16px;
+  margin-top: 8px;
+  gap: 6px 16px;
+  font-size: 10px;
+  flex-wrap: nowrap;
+}
+.price-history.chart-fullscreen .history-caption > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 600px) {
+  .history-chart-actions {
+    width: 100%;
+  }
+  .history-chart-actions .history-ranges {
+    flex: 1;
+    min-width: 0;
+  }
+  .history-expand-host button {
+    width: 40px;
+    min-height: 46px;
+  }
+  .price-history.chart-fullscreen {
+    padding-inline: max(14px, env(safe-area-inset-left, 0px))
+      max(14px, env(safe-area-inset-right, 0px));
+  }
+  .price-history.chart-fullscreen .price-history-top {
+    flex-wrap: wrap;
+    padding-right: 0;
+    gap: 12px;
+  }
+  .price-history.chart-fullscreen .history-readout {
+    padding-right: 46px;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+  }
+  .price-history.chart-fullscreen .history-chart-actions {
+    width: 100%;
+  }
+  .price-history.chart-fullscreen .history-ranges {
+    width: 100%;
+  }
+  .price-history.chart-fullscreen .history-ranges button {
+    min-width: 0;
+    min-height: 40px;
+  }
+  .price-history.chart-fullscreen .history-price {
+    font-size: 29px;
+  }
+  .price-history.chart-fullscreen .history-change {
+    font-size: 10px;
+  }
+  .price-history.chart-fullscreen .history-plot,
+  .price-history.chart-fullscreen .history-dates {
+    padding-right: 58px;
+  }
+  .price-history.chart-fullscreen .history-axis {
+    max-width: 54px;
+    font-size: 9px;
+  }
+  .price-history.chart-fullscreen .level-target {
+    right: 60px;
+  }
+  .price-history.chart-fullscreen .history-levels {
+    gap: 6px;
+  }
+}
+@media (max-height: 500px) and (min-width: 601px) {
+  .price-history.chart-fullscreen {
+    padding-block: max(9px, env(safe-area-inset-top, 0px))
+      max(8px, env(safe-area-inset-bottom, 0px));
+  }
+  .price-history.chart-fullscreen .price-history-top {
+    margin-bottom: 5px;
+  }
+  .price-history.chart-fullscreen .history-price {
+    min-height: 30px;
+    font-size: 25px;
+  }
+  .price-history.chart-fullscreen .history-change {
+    font-size: 10px;
+  }
+  .price-history.chart-fullscreen .history-ranges button {
+    min-height: 34px;
+  }
+  .price-history.chart-fullscreen .history-levels {
+    margin-top: 5px;
+  }
+  .price-history.chart-fullscreen .level-toggle {
+    min-height: 32px;
+    padding-block: 5px;
+  }
+  .price-history.chart-fullscreen .history-caption {
+    margin-top: 5px;
+    font-size: 9px;
+  }
+}

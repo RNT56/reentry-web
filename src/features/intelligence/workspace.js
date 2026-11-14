@@ -1,4 +1,5 @@
 import { request } from "../../shared/http.js";
+import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { esc } from "../../shared/format.js";
 import { mountReorder, reorderHandle } from "../../shared/reorder.js";
 import {
@@ -96,6 +97,7 @@ export function mountIntelligence(root, { model, navigate }) {
     orderStatusTimer,
     membershipBusy = 0,
     reorder = null,
+    scenarioFullscreens = [],
     orderDrain = null,
     orderUnsynced = false;
   const hiddenAssets = new Set(),
@@ -111,7 +113,11 @@ export function mountIntelligence(root, { model, navigate }) {
     }
     return chart?.canLeave?.() !== false;
   };
-  function destroyChildren(keepChart = false) {
+  function destroyChildren(keepChart = false, keepScenario = null) {
+    scenarioFullscreens.forEach((entry) => {
+      if (entry !== keepScenario) entry.fullscreen.destroy();
+    });
+    scenarioFullscreens = keepScenario ? [keepScenario] : [];
     strategies?.destroy();
     strategies = null;
     admin?.destroy();
@@ -780,6 +786,54 @@ export function mountIntelligence(root, { model, navigate }) {
           '<button class="secondary" data-tab="journal">Explore the journal ↗</button>',
         );
   }
+  function mountScenarioFullscreens() {
+    for (const panel of root.querySelectorAll(".live-scenario")) {
+      const retained = scenarioFullscreens.find(
+        (entry) => entry.panel === panel,
+      );
+      if (!panel.querySelector(":scope > .scenario-fs-canvas")) {
+        const canvas = document.createElement("div"),
+          layout = document.createElement("div"),
+          metadata = panel.querySelector(".scenario-set-meta");
+        canvas.className = "scenario-fs-canvas";
+        layout.className = "scenario-fs-layout";
+        for (const child of [...panel.children])
+          if (
+            child !== metadata &&
+            !child.classList.contains("chart-fs-header")
+          )
+            layout.append(child);
+        canvas.append(layout);
+        panel.append(canvas);
+      }
+      panel.style.setProperty(
+        "--scenario-fs-branches",
+        String(Math.max(1, panel.querySelectorAll(".scenario-node").length)),
+      );
+      if (retained) {
+        retained.fullscreen.refresh();
+        continue;
+      }
+      const fullscreen = mountChartFullscreen(panel, {
+        label: () => {
+          const scenario = sets.find(
+            (set) => set.id === panel.dataset.scenarioSet,
+          );
+          return `${scenario?.symbol || memory.symbol} · ${scenario?.title || "Scenarios"}`;
+        },
+        buttonHost: () => panel.querySelector(".scenario-set-tools"),
+        native: true,
+      });
+      panel.addEventListener(
+        "click",
+        (event) => {
+          if (event.target.closest("a[href]")) fullscreen.close();
+        },
+        true,
+      );
+      scenarioFullscreens.push({ panel, fullscreen });
+    }
+  }
   function journalView() {
     return `<div class="section-line"><div><span class="eyebrow">RNT</span><h2>Journal</h2></div><a class="link" href="/journal" target="_blank" rel="noopener">Open public journal ↗</a></div>${journal.length ? `<div class="public-articles">${journal.map((a) => `<article class="journal-public-card"><span class="eyebrow">${esc(a.symbol)} / EDITION ${a.revision}</span><h2>${esc(a.title)}</h2><p>${esc(a.excerpt)}</p><div class="actions"><a class="link" href="/journal/${esc(a.slug)}" target="_blank" rel="noopener">Read article ↗</a><button class="secondary small-button" data-fork="${esc(a.slug)}" data-revision="${a.revision}">Copy scenarios privately</button></div><small>${esc(when(a.publishedAt))} · RNT</small></article>`).join("")}</div>` : empty("No published articles", "")}`;
   }
@@ -787,6 +841,39 @@ export function mountIntelligence(root, { model, navigate }) {
     if (!live()) return;
     reorder?.destroy();
     reorder = null;
+    const retainedScenario =
+      memory.tab === "scenarios"
+        ? scenarioFullscreens.find(
+            (entry) =>
+              entry.fullscreen.isActive() &&
+              sets.some(
+                (set) =>
+                  set.id === entry.panel.dataset.scenarioSet &&
+                  (!memory.symbol || set.symbol === memory.symbol),
+              ),
+          )
+        : null;
+    const scenarioViewport = retainedScenario
+      ? {
+          top:
+            retainedScenario.panel.querySelector(".scenario-fs-canvas")
+              ?.scrollTop || 0,
+          left:
+            retainedScenario.panel.querySelector(".scenario-fs-canvas")
+              ?.scrollLeft || 0,
+          details: [
+            ...retainedScenario.panel.querySelectorAll(".scenario-node"),
+          ].map((node) => ({
+            key: node.dataset.scenarioKey,
+            open: [...node.querySelectorAll("details")].map(
+              (details) => details.open,
+            ),
+          })),
+          eventsOpen: !!retainedScenario.panel.querySelector(
+            ".scenario-fs-layout > details[open]",
+          ),
+        }
+      : null;
     const retainedChart =
       memory.tab === "research" && chartSymbol === memory.symbol
         ? root.querySelector("#research-chart")
@@ -799,7 +886,7 @@ export function mountIntelligence(root, { model, navigate }) {
       retainedMonitor?.contains(document.activeElement)
         ? document.activeElement
         : null;
-    destroyChildren(!!retainedChart);
+    destroyChildren(!!retainedChart, retainedScenario);
     root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ↗</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
       ["research", "Overview"],
       ["strategies", "Strategies"],
@@ -835,6 +922,7 @@ export function mountIntelligence(root, { model, navigate }) {
     if (memory.tab === "research" && active()) {
       if (retainedChart) {
         root.querySelector("#research-chart").replaceWith(retainedChart);
+        chart.refreshFullscreen?.();
         focusedChartField?.focus({ preventScroll: true });
       } else {
         chart = mountAnalysisChart(
@@ -964,7 +1052,37 @@ export function mountIntelligence(root, { model, navigate }) {
       }
       focusedChartField?.focus({ preventScroll: true });
     }
-    if (memory.tab === "scenarios") attachSourceSignals();
+    if (memory.tab === "scenarios") {
+      if (retainedScenario) {
+        const replacement = root.querySelector(
+          `[data-scenario-set="${CSS.escape(retainedScenario.panel.dataset.scenarioSet)}"]`,
+        );
+        retainedScenario.panel.classList.toggle(
+          "is-focused",
+          replacement.classList.contains("is-focused"),
+        );
+        retainedScenario.panel.replaceChildren(...replacement.childNodes);
+        replacement.replaceWith(retainedScenario.panel);
+      }
+      attachSourceSignals();
+      mountScenarioFullscreens();
+      if (retainedScenario && scenarioViewport) {
+        const panel = retainedScenario.panel,
+          canvas = panel.querySelector(".scenario-fs-canvas");
+        for (const saved of scenarioViewport.details) {
+          const node = panel.querySelector(
+            `[data-scenario-key="${CSS.escape(saved.key)}"]`,
+          );
+          node?.querySelectorAll("details").forEach((details, index) => {
+            details.open = saved.open[index] || false;
+          });
+        }
+        const events = panel.querySelector(".scenario-fs-layout > details");
+        if (events) events.open = scenarioViewport.eventsOpen;
+        canvas.scrollTop = scenarioViewport.top;
+        canvas.scrollLeft = scenarioViewport.left;
+      }
+    }
     if (memory.tab === "studio" && info.author)
       studio = createStudio({
         root: root.querySelector("#author-studio"),

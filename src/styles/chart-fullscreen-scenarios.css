@@ -1,0 +1,184 @@
+/* Expanded diagrams preserve their real branches, citations, and actions. */
+.scenario-fs-canvas,
+.scenario-fs-layout {
+  display: contents;
+}
+.scenario-set-tools > .chart-fs-button {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+}
+.journal-section-heading > .chart-fs-button {
+  margin-left: 12px;
+}
+.journal-section-heading:has(> .chart-fs-button) > span {
+  margin-left: auto;
+}
+.live-scenario.chart-fullscreen,
+.journal-map.chart-fullscreen {
+  display: flex;
+  flex-direction: column;
+  padding: var(--chart-fs-header-height)
+    max(22px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px)
+    max(22px, env(safe-area-inset-left, 0px));
+  overflow: hidden;
+}
+.live-scenario.chart-fullscreen > .scenario-set-meta {
+  flex: 0 0 auto;
+  gap: 16px;
+  min-height: 48px;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #adceb50c;
+}
+.live-scenario.chart-fullscreen .scenario-set-meta .privacy-chip,
+.live-scenario.chart-fullscreen .scenario-set-tools .link {
+  font-size: 10px;
+}
+.live-scenario.chart-fullscreen > .scenario-fs-canvas {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-block: 0 20px;
+  scrollbar-gutter: stable;
+}
+.live-scenario.chart-fullscreen .scenario-fs-layout {
+  display: block;
+  min-width: 0;
+}
+.live-scenario.chart-fullscreen .scenario-root {
+  padding: 24px 0 28px;
+}
+.live-scenario.chart-fullscreen .scenario-branches {
+  margin-bottom: 24px;
+}
+.live-scenario.chart-fullscreen .scenario-node {
+  padding: 22px;
+}
+.live-scenario.chart-fullscreen .scenario-foot {
+  margin-bottom: 18px;
+  padding-inline: 2px;
+}
+.journal-map.chart-fullscreen > .journal-section-heading {
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 65px;
+  margin: 0;
+  padding: 16px 0;
+  gap: 16px;
+  border-top: 0;
+  border-bottom: 1px solid var(--journal-rule, #adceb510);
+}
+.journal-map.chart-fullscreen > .journal-section-heading h2 {
+  font-size: 23px;
+}
+.journal-map.chart-fullscreen > .journal-scenarios {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  align-content: start;
+  align-items: start;
+  margin: 0;
+  padding: 24px 0 30px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.journal-map.chart-fullscreen .journal-scenario {
+  padding: 24px 0;
+}
+@media (orientation: landscape) {
+  .live-scenario.chart-fullscreen .scenario-fs-layout {
+    min-width: max(
+      100%,
+      calc(
+        var(--scenario-fs-branches, 1) * 280px +
+          (var(--scenario-fs-branches, 1) - 1) * 18px
+      )
+    );
+  }
+  .live-scenario.chart-fullscreen .scenario-root,
+  .live-scenario.chart-fullscreen .scenario-root:has(+ .many-branches) {
+    justify-content: center;
+  }
+  .live-scenario.chart-fullscreen .scenario-root:after,
+  .live-scenario.chart-fullscreen .scenario-root:has(+ .many-branches):after {
+    left: 50%;
+  }
+  .live-scenario.chart-fullscreen .scenario-branches,
+  .live-scenario.chart-fullscreen .many-branches {
+    grid-template-columns: repeat(
+      var(--scenario-fs-branches, 1),
+      minmax(260px, 1fr)
+    );
+    gap: 18px;
+    padding: 24px 0 0;
+  }
+  .live-scenario.chart-fullscreen .scenario-branches:before,
+  .live-scenario.chart-fullscreen .many-branches:before {
+    left: calc(100% / (2 * var(--scenario-fs-branches, 1)));
+    right: calc(100% / (2 * var(--scenario-fs-branches, 1)));
+    top: 0;
+    bottom: auto;
+    border-top: 1px solid #5a6857;
+    border-left: 0;
+  }
+  .live-scenario.chart-fullscreen .scenario-node:before,
+  .live-scenario.chart-fullscreen .many-branches .scenario-node:before {
+    left: 50%;
+    top: auto;
+    bottom: 100%;
+    width: 0;
+    height: 24px;
+    border-top: 0;
+    border-left: 1px solid #5a6857;
+  }
+  .journal-map.chart-fullscreen > .journal-scenarios {
+    grid-template-columns: repeat(
+      var(--scenario-fs-branches, 1),
+      minmax(270px, 1fr)
+    );
+    grid-template-rows: auto;
+    gap: 28px;
+  }
+}
+@media (max-width: 680px) {
+  .live-scenario.chart-fullscreen,
+  .journal-map.chart-fullscreen {
+    padding-inline: max(16px, env(safe-area-inset-left, 0px))
+      max(16px, env(safe-area-inset-right, 0px));
+  }
+  .live-scenario.chart-fullscreen > .scenario-set-meta {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 14px;
+  }
+  .live-scenario.chart-fullscreen .scenario-set-tools {
+    gap: 14px;
+  }
+  .live-scenario.chart-fullscreen .scenario-node {
+    padding: 18px;
+  }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .live-scenario.chart-fullscreen > .scenario-set-meta {
+    min-height: 38px;
+    padding-block: 3px;
+  }
+  .live-scenario.chart-fullscreen .scenario-root {
+    padding-block: 14px 23px;
+  }
+  .journal-map.chart-fullscreen > .journal-section-heading {
+    min-height: 44px;
+    padding-block: 8px;
+  }
+  .journal-map.chart-fullscreen > .journal-section-heading h2 {
+    font-size: 18px;
+  }
+  .journal-map.chart-fullscreen > .journal-scenarios {
+    padding-top: 14px;
+  }
+}

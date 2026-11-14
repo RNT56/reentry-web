@@ -2,6 +2,7 @@ import { referenceLevels, chartScale } from "../../domain/chart-levels.js";
 import { historyRanges } from "../../domain/market-history.js";
 import { setAnimatedText, revealChart } from "../../shared/motion.js";
 import { renderChartInk, newChartInkId } from "../../shared/chart-ink.js";
+import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 const inkIds = new WeakMap();
 const cache = new Map(),
   pending = new Map();
@@ -51,7 +52,7 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
     levels = initialLevels,
     disposed = false;
   const hidden = new Set();
-  root.innerHTML = `<div class="price-history-top"><div class="history-readout"><div class="eyebrow"><button class="history-currency-switch" type="button"></button><span class="history-currency"></span></div><div class="history-price" data-number>—</div><div class="history-change">${escape(holding.symbol)}</div></div><div class="history-ranges" role="group" aria-label="Price history range">${Object.entries(
+  root.innerHTML = `<div class="price-history-top"><div class="history-readout"><div class="eyebrow"><button class="history-currency-switch" type="button"></button><span class="history-currency"></span><span class="history-asset-symbol">${escape(holding.symbol)}</span></div><div class="history-price" data-number>—</div><div class="history-change">${escape(holding.symbol)}</div></div><div class="history-chart-actions"><div class="history-ranges" role="group" aria-label="Price history range">${Object.entries(
     historyRanges,
   )
     .map(
@@ -60,8 +61,14 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
     )
     .join(
       "",
-    )}</div></div><div class="history-body" aria-busy="true"><div class="history-placeholder loading-surface" role="status"><span class="sr-only">Loading price history</span><div class="history-skeleton-grid" aria-hidden="true"></div></div></div><div class="history-levels"></div><div class="history-caption"><span>Market price</span><span class="history-hover-hint"></span></div>`;
-  const currencyButton = root.querySelector(".history-currency-switch");
+    )}</div><span class="history-expand-host"></span></div></div><div class="history-body" aria-busy="true"><div class="history-placeholder loading-surface" role="status"><span class="sr-only">Loading price history</span><div class="history-skeleton-grid" aria-hidden="true"></div></div></div><div class="history-levels"></div><div class="history-caption"><span>Market price</span><span class="history-hover-hint"></span></div>`;
+  const currencyButton = root.querySelector(".history-currency-switch"),
+    fullscreen = mountChartFullscreen(root, {
+      label: () => `${holding.symbol} · Price history`,
+      buttonHost: root.querySelector(".history-expand-host"),
+      native: true,
+      onChange: (active) => root.classList.toggle("history-fullscreen", active),
+    });
   function controls(range, currency) {
     for (const button of root.querySelectorAll("[data-history-range]")) {
       const selected = range === button.dataset.historyRange;
@@ -94,6 +101,7 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
     destroy() {
       disposed = true;
       root.chartGeneration = null;
+      fullscreen.destroy();
     },
   };
   function load() {

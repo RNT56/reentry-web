@@ -1,0 +1,129 @@
+.chart-fs-button,
+.chart-fs-exit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 7px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #94ac9b;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
+}
+.chart-fs-button svg,
+.chart-fs-exit svg {
+  width: 19px;
+  height: 19px;
+  pointer-events: none;
+}
+.chart-fs-button:hover,
+.chart-fs-exit:hover {
+  color: #d9efda;
+  background: #b6d8b80b;
+  border-color: #b6d8b819;
+}
+.chart-fs-button:focus-visible,
+.chart-fs-exit:focus-visible {
+  outline: 1px solid #bceca580;
+  outline-offset: 2px;
+}
+.chart-fs-header[hidden] {
+  display: none !important;
+}
+.chart-fullscreen {
+  --chart-fs-header-height: calc(52px + env(safe-area-inset-top, 0px));
+  position: fixed !important;
+  z-index: 2147483000;
+  inset: auto !important;
+  top: var(--chart-fs-top, 0px) !important;
+  left: var(--chart-fs-left, 0px) !important;
+  width: var(--chart-fs-vw, 100vw) !important;
+  height: var(--chart-fs-vh, 100dvh) !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding-top: var(--chart-fs-header-height);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
+  background: #101713;
+  color: #dce7df;
+  overflow: auto;
+  overscroll-behavior: contain;
+  isolation: isolate;
+  transform: none !important;
+  animation: none !important;
+}
+.chart-fullscreen::backdrop {
+  background: #101713;
+}
+.chart-fullscreen > .chart-fs-header {
+  position: absolute;
+  z-index: 40;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: var(--chart-fs-header-height);
+  min-width: 0;
+  padding: env(safe-area-inset-top, 0px)
+    max(16px, env(safe-area-inset-right, 0px)) 0
+    max(20px, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+  border-bottom: 1px solid #adceb510;
+  background: #101713;
+}
+.chart-fs-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  color: #acc3b3;
+}
+.chart-fullscreen .chart-fs-button {
+  display: none;
+}
+.chart-fullscreen-open {
+  overscroll-behavior: none;
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  .chart-fullscreen {
+    --chart-fs-header-height: calc(42px + env(safe-area-inset-top, 0px));
+  }
+  .chart-fullscreen > .chart-fs-header {
+    padding-inline: max(12px, env(safe-area-inset-left, 0px))
+      max(12px, env(safe-area-inset-right, 0px));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-fs-button,
+  .chart-fs-exit {
+    transition: none;
+  }
+}
+/* Notifications remain actionable above a top-layer chart without reparenting. */
+.chart-fullscreen-open #toast {
+  z-index: 2147483645;
+}
+.chart-fullscreen-open #toast[popover] {
+  inset: auto auto max(20px, env(safe-area-inset-bottom, 0px)) 50%;
+  margin: 0;
+  border: 0;
+  overflow: visible;
+}

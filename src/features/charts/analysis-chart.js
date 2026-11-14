@@ -1,4 +1,5 @@
 import { request } from "../../shared/http.js";
+import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { esc } from "../../shared/format.js";
 import { modal, close, toast, icon } from "../../shared/ui.js";
 import { setAnimatedText, revealChart } from "../../shared/motion.js";
@@ -85,6 +86,9 @@ export function mountAnalysisChart(
     saving = false,
     managing = false,
     toolsOpen = false,
+    fullscreen = null,
+    fullscreenSettings = false,
+    fullscreenPlacements = [],
     gestureBefore = null,
     baseRevision = memo?.revision ?? 0,
     conflict = false,
@@ -164,8 +168,9 @@ export function mountAnalysisChart(
     redo = [];
   }
   const drawerId = "ta-tools-" + crypto.randomUUID();
+  const fullscreenPanelId = "ta-workspace-" + crypto.randomUUID();
   root.classList.add("analysis-chart");
-  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
+  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-heading-actions"><button type="button" class="ta-fullscreen-settings" data-ta-fullscreen-settings aria-label="Chart workspace settings" aria-controls="${fullscreenPanelId}" aria-expanded="false">${icon("sliders")}<span>Workspace</span></button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
     historyRanges,
   )
     .map(
@@ -174,6 +179,54 @@ export function mountAnalysisChart(
     )
     .join("")}</div></div>${chartControlsMarkup(state, drawerId)}`;
   const plot = root.querySelector(".ta-plot");
+  const fullscreenPanel = document.createElement("section");
+  fullscreenPanel.className = "ta-fullscreen-panel";
+  fullscreenPanel.id = fullscreenPanelId;
+  fullscreenPanel.hidden = true;
+  fullscreenPanel.setAttribute("role", "region");
+  fullscreenPanel.setAttribute("aria-label", "Chart workspace settings");
+  fullscreenPanel.innerHTML = `<header><span>Workspace</span><button type="button" class="icon-button" data-ta-fullscreen-settings-close aria-label="Close chart workspace settings">${icon("close")}</button></header><div class="ta-fullscreen-panel-body"></div>`;
+  root.append(fullscreenPanel);
+  function setFullscreenSettings(open) {
+    fullscreenSettings = !!(open && fullscreen?.isActive());
+    fullscreenPanel.hidden = !fullscreenSettings;
+    root
+      .querySelector("[data-ta-fullscreen-settings]")
+      .setAttribute("aria-expanded", String(fullscreenSettings));
+    if (fullscreenSettings) {
+      toolsOpen = false;
+      updateChrome();
+      fullscreenPanel
+        .querySelector("button:not(:disabled),input:not(:disabled),summary")
+        ?.focus({ preventScroll: true });
+    }
+  }
+  function placeFullscreenSettings(active) {
+    if (active && !fullscreenPlacements.length) {
+      const body = fullscreenPanel.querySelector(".ta-fullscreen-panel-body");
+      for (const node of root.querySelectorAll(
+        ":scope > .ta-workspaces,:scope > .ta-analysis-settings,:scope > .ai-analysis,:scope > .ai-analysis-detail",
+      )) {
+        const marker = document.createComment(
+          "Chart workspace control position",
+        );
+        node.before(marker);
+        fullscreenPlacements.push({ node, marker });
+        body.append(node);
+      }
+    } else if (!active) {
+      for (const { node, marker } of fullscreenPlacements) {
+        marker.replaceWith(node);
+      }
+      fullscreenPlacements = [];
+      fullscreenPanel.hidden = true;
+      fullscreenSettings = false;
+      root
+        .querySelector("[data-ta-fullscreen-settings]")
+        .setAttribute("aria-expanded", "false");
+    }
+  }
+
   const aiRail = document.createElement("div");
   aiRail.className = "ta-ai-rail";
   aiRail.setAttribute("role", "group");
@@ -181,6 +234,7 @@ export function mountAnalysisChart(
   root.querySelector(".ta-toolbar").append(aiRail);
   function revealPlot() {
     plot.focus({ preventScroll: true });
+    if (fullscreen?.isActive()) return;
     plot.scrollIntoView({
       block: "center",
       behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -368,6 +422,26 @@ export function mountAnalysisChart(
       draw();
     },
   });
+  fullscreen = mountChartFullscreen(root, {
+    label: () => asset.symbol,
+    buttonHost: root.querySelector(".ta-heading-actions"),
+    native: true,
+    beforeOpen: () => {
+      gestures.finish();
+      finishDrag();
+    },
+    onChange: (active) => {
+      gestures.finish();
+      finishDrag();
+      toolsOpen = false;
+      placeFullscreenSettings(active);
+      updateChrome();
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        if (live() && data && !busy) draw();
+      });
+    },
+  });
   function message(value = "") {
     if (live()) root.querySelector(".ta-message").textContent = value;
   }
@@ -383,7 +457,17 @@ export function mountAnalysisChart(
           drawings: [...state.drawings, ...aiOverlayDrawings(activeAI)],
         }
       : state;
-    geometry = chartGeometry(data, displayed, indicators, width);
+    geometry = chartGeometry(
+      data,
+      displayed,
+      indicators,
+      width,
+      fullscreen?.isActive() ? plot.clientHeight : undefined,
+    );
+    if (fullscreen?.isActive()) {
+      plot.style.setProperty("--ta-fs-main-height", geometry.H + "px");
+      plot.style.setProperty("--ta-fs-pane-height", geometry.paneHeight + "px");
+    }
     const result = renderAnalysisPlot(
       data,
       state,
@@ -1101,7 +1185,19 @@ export function mountAnalysisChart(
     const b = e.target.closest("button");
     if (!b || !root.contains(b)) return;
     gestures.finish();
+    if (b.hasAttribute("data-ta-fullscreen-settings")) {
+      setFullscreenSettings(!fullscreenSettings);
+      return;
+    }
+    if (b.hasAttribute("data-ta-fullscreen-settings-close")) {
+      setFullscreenSettings(false);
+      root
+        .querySelector("[data-ta-fullscreen-settings]")
+        .focus({ preventScroll: true });
+      return;
+    }
     if (b.hasAttribute("data-ta-tools-toggle")) {
+      if (fullscreenSettings) setFullscreenSettings(false);
       toolsOpen = !toolsOpen;
       if (!toolsOpen && tool !== "inspect") {
         tool = "inspect";
@@ -1260,12 +1356,18 @@ export function mountAnalysisChart(
     } else undo.pop();
   };
   const resize = new ResizeObserver(() => {
+    gestures.finish();
+    finishDrag();
+    const toolbarHeight = root.querySelector(".ta-toolbar").offsetHeight + "px";
+    if (root.style.getPropertyValue("--ta-fs-toolbar-height") !== toolbarHeight)
+      root.style.setProperty("--ta-fs-toolbar-height", toolbarHeight);
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => {
       if (live() && data && !busy) draw();
     });
   });
   resize.observe(plot);
+  resize.observe(root.querySelector(".ta-toolbar"));
   async function loadWorkspaces() {
     if (!live()) return;
     const generation = ++storageGeneration;
@@ -1316,6 +1418,7 @@ export function mountAnalysisChart(
   updateChrome();
   loadWorkspaces();
   return {
+    refreshFullscreen: () => fullscreen.refresh(),
     getContext: chartContext,
     setAILayer(layer) {
       if (!live()) return;
@@ -1328,6 +1431,7 @@ export function mountAnalysisChart(
     isDirty: () => dirty,
     canLeave: () => true,
     destroy() {
+      fullscreen?.destroy();
       gestures.finish();
       remember();
       gestures.destroy();

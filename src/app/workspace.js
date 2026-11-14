@@ -37,7 +37,11 @@ export function startWorkspace() {
   const current = () =>
     model.state.holdings.find((h) => h.id === model.selected) ||
     model.state.holdings[0];
-  const { update, getResult } = createPlanner(model, {
+  const {
+    update,
+    getResult,
+    destroyFullscreen: destroyPlannerFullscreen,
+  } = createPlanner(model, {
     current,
     getChart: () => priceChart,
     record: (...a) => record(...a),
@@ -140,6 +144,7 @@ export function startWorkspace() {
       if (newAccount) openPasskeys({ modal, close, toast });
     } catch (e) {
       model.currentUser = null;
+      destroyPlannerFullscreen();
       holdingReorder?.destroy();
       holdingReorder = null;
       setChartWorkspaceOwner(null);
@@ -183,6 +188,7 @@ export function startWorkspace() {
       refreshEpoch++;
       model.busy = false;
       model.currentUser = null;
+      destroyPlannerFullscreen();
       holdingReorder?.destroy();
       holdingReorder = null;
       setChartWorkspaceOwner(null);
@@ -240,6 +246,7 @@ export function startWorkspace() {
     try {
       renderWorkspace();
     } catch {
+      destroyPlannerFullscreen();
       holdingReorder?.destroy();
       holdingReorder = null;
       priceChart?.destroy();
@@ -254,6 +261,7 @@ export function startWorkspace() {
     }
   }
   function renderWorkspace() {
+    destroyPlannerFullscreen();
     holdingReorder?.destroy();
     holdingReorder = null;
     macro?.destroy();

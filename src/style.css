@@ -20,3 +20,9 @@
 @import "./styles/identity.css";
 @import "./styles/holdings.css";
 @import "./styles/reorder.css";
+@import "./styles/chart-fullscreen.css";
+@import "./styles/chart-fullscreen-analysis.css";
+@import "./styles/chart-fullscreen-price.css";
+@import "./styles/chart-fullscreen-context.css";
+@import "./styles/chart-fullscreen-planner.css";
+@import "./styles/chart-fullscreen-scenarios.css";

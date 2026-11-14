@@ -1,0 +1,361 @@
+/* Context stays with its chart; only the plot surface grows. */
+.macro-stage:not(.chart-fullscreen) {
+  display: block;
+}
+.macro-stage-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-bottom: -32px;
+  min-height: 36px;
+  position: relative;
+  z-index: 1;
+}
+.macro-stage-content {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 40px;
+}
+.macro-series-picker {
+  display: none;
+  min-width: 0;
+  max-width: 380px;
+}
+.strategy-comparison-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  position: relative;
+  top: 8px;
+  z-index: 1;
+}
+.strategy-comparison-parameters .strategy-parameters > summary {
+  padding-right: 48px;
+}
+.structure-expand-host {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.macro-stage.chart-fullscreen,
+.strategy-comparison.chart-fullscreen,
+.strategy-structure.chart-fullscreen {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  padding-top: calc(var(--chart-fs-header-height, 52px) + 8px);
+  padding-inline: 24px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  border: 0;
+  overflow: hidden;
+}
+.macro-stage.chart-fullscreen .macro-stage-tools {
+  min-height: 44px;
+  margin: 0 0 12px;
+  justify-content: flex-start;
+  flex-shrink: 0;
+}
+.macro-stage.chart-fullscreen .macro-series-picker {
+  display: block;
+  flex: 1;
+}
+.macro-stage.chart-fullscreen .macro-series-picker .select-control,
+.macro-stage.chart-fullscreen .macro-series-picker select {
+  width: 100%;
+  min-width: 0;
+}
+.macro-stage.chart-fullscreen .macro-stage-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+}
+.macro-stage.chart-fullscreen .macro-focus {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 6px 18px;
+}
+.macro-stage.chart-fullscreen .macro-focus h2 {
+  display: none;
+}
+.macro-stage.chart-fullscreen .macro-large {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  font-size: clamp(30px, 6vh, 54px);
+  line-height: 1.05;
+  text-align: right;
+}
+.macro-stage.chart-fullscreen .macro-large small {
+  font-size: 10px;
+  line-height: 1.4;
+  max-width: 180px;
+}
+.macro-stage.chart-fullscreen .macro-date {
+  margin: 0;
+  grid-column: 1;
+}
+.macro-stage.chart-fullscreen .macro-chart {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  min-height: 0;
+  padding-left: 48px;
+}
+.macro-stage.chart-fullscreen .macro-chart svg {
+  flex: 1;
+  width: 100%;
+  height: 0;
+  min-height: 0;
+}
+.macro-stage.chart-fullscreen .macro-axis {
+  flex-shrink: 0;
+  margin-top: 8px;
+}
+.strategy-comparison.chart-fullscreen .strategy-comparison-toolbar {
+  height: 0;
+  top: 10px;
+  flex-shrink: 0;
+}
+.strategy-comparison.chart-fullscreen .strategy-comparison-parameters {
+  flex-shrink: 0;
+}
+.strategy-comparison.chart-fullscreen .strategy-parameters {
+  margin: 0;
+  border-top: 0;
+}
+.strategy-comparison.chart-fullscreen .strategy-parameters > summary {
+  min-height: 44px;
+  padding-block: 10px;
+}
+.strategy-comparison.chart-fullscreen .strategy-parameters .strategy-controls {
+  max-height: min(32vh, 220px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-right: 6px;
+  margin-block: 8px 12px;
+}
+.strategy-comparison.chart-fullscreen .strategy-comparison-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(60px, 1fr) auto auto;
+  gap: 10px;
+}
+.strategy-comparison.chart-fullscreen .strategy-scoreboard {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.strategy-comparison.chart-fullscreen .strategy-score {
+  padding: 12px 8px 10px;
+}
+.strategy-comparison.chart-fullscreen .strategy-score span {
+  min-height: 0;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.strategy-comparison.chart-fullscreen .strategy-score strong {
+  font-size: clamp(17px, 2.8vw, 28px);
+  margin: 8px 0 0;
+}
+.strategy-comparison.chart-fullscreen .strategy-score small {
+  font-size: 10px;
+  margin-top: 6px;
+}
+.strategy-comparison.chart-fullscreen .strategy-curve {
+  margin: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+.strategy-comparison.chart-fullscreen .strategy-dates {
+  flex-wrap: nowrap;
+  min-height: 16px;
+}
+.strategy-comparison.chart-fullscreen .strategy-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 12px 0 0;
+  margin: 0;
+  border-bottom: 0;
+  gap: 12px;
+}
+.strategy-comparison.chart-fullscreen .strategy-metrics span {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+.strategy-comparison.chart-fullscreen .strategy-metrics b {
+  font-size: 16px;
+}
+.strategy-structure.chart-fullscreen > .section-line {
+  min-height: 36px;
+  flex-shrink: 0;
+  margin: 0;
+}
+.strategy-structure.chart-fullscreen > .section-line h3 {
+  font-size: 15px;
+}
+.strategy-structure.chart-fullscreen .strategy-structure-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.strategy-structure.chart-fullscreen .structure-legend {
+  flex-shrink: 0;
+  gap: 12px 20px;
+  margin: 12px 0 8px;
+}
+.strategy-structure.chart-fullscreen .structure-chart {
+  flex: 1;
+  width: 100%;
+  height: 0;
+  min-height: 0;
+}
+.strategy-structure.chart-fullscreen .structure-chart text {
+  font-size: 10px;
+}
+.strategy-structure.chart-fullscreen .strategy-dates,
+.strategy-structure.chart-fullscreen .structure-source {
+  flex-shrink: 0;
+  line-height: 1.4;
+  font-size: 9px;
+}
+.strategy-structure.chart-fullscreen .structure-source {
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 1100px) and (min-height: 700px) {
+  .macro-stage-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+  }
+}
+@media (max-width: 680px) {
+  .macro-stage-content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .macro-stage.chart-fullscreen,
+  .strategy-comparison.chart-fullscreen,
+  .strategy-structure.chart-fullscreen {
+    padding-inline: max(12px, env(safe-area-inset-left));
+  }
+  .macro-stage.chart-fullscreen .macro-focus {
+    gap: 6px 10px;
+  }
+  .macro-stage.chart-fullscreen .macro-large small {
+    max-width: 125px;
+  }
+  .macro-stage.chart-fullscreen .macro-chart {
+    padding-left: 42px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-scoreboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 10px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-score {
+    padding-block: 8px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-score strong {
+    font-size: 20px;
+    margin-top: 5px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-score small {
+    display: inline-block;
+    margin-top: 4px;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .macro-stage.chart-fullscreen,
+  .strategy-comparison.chart-fullscreen,
+  .strategy-structure.chart-fullscreen {
+    padding-bottom: 8px;
+    padding-top: calc(var(--chart-fs-header-height, 52px) + 2px);
+  }
+  .macro-stage.chart-fullscreen .macro-stage-tools {
+    margin-bottom: 6px;
+    min-height: 36px;
+    max-width: 360px;
+  }
+  .macro-stage.chart-fullscreen .macro-stage-content {
+    gap: 8px;
+  }
+  .macro-stage.chart-fullscreen .macro-focus {
+    position: absolute;
+    top: calc(var(--chart-fs-header-height, 52px) + 2px);
+    right: 24px;
+    display: block;
+    max-width: 40%;
+  }
+  .macro-stage.chart-fullscreen .macro-focus > .eyebrow,
+  .macro-stage.chart-fullscreen .macro-date {
+    display: none;
+  }
+  .macro-stage.chart-fullscreen .macro-large {
+    font-size: 27px;
+  }
+  .macro-stage.chart-fullscreen .macro-large small {
+    display: inline;
+    margin-left: 8px;
+  }
+  .macro-stage.chart-fullscreen .macro-stage-content {
+    display: flex;
+    flex-direction: column;
+  }
+  .macro-stage.chart-fullscreen .macro-chart {
+    flex: 1;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-scoreboard {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .strategy-comparison.chart-fullscreen .strategy-score {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    padding-block: 7px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-score span {
+    grid-column: 1 / -1;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-score strong {
+    font-size: 17px;
+    margin: 0;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-score small {
+    align-self: end;
+    margin: 0;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-comparison-content {
+    gap: 5px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-metrics {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 6px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-metrics > div {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-metrics span {
+    margin: 0;
+  }
+  .strategy-comparison.chart-fullscreen .strategy-metrics b {
+    font-size: 13px;
+  }
+  .strategy-structure.chart-fullscreen > .section-line {
+    display: none;
+  }
+  .strategy-structure.chart-fullscreen .structure-legend {
+    margin-top: 8px;
+  }
+}

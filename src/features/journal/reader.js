@@ -1,6 +1,27 @@
 import { installSurfaceMotion } from "../../shared/surface-motion.js";
+import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 
 installSurfaceMotion();
+
+for (const map of document.querySelectorAll(".journal-map")) {
+  map.style.setProperty(
+    "--scenario-fs-branches",
+    String(Math.max(1, map.querySelectorAll(".journal-scenario").length)),
+  );
+  const fullscreen = mountChartFullscreen(map, {
+    label: () =>
+      `${document.querySelector(".journal-story-head h1")?.textContent || "Journal"} · scenarios`,
+    buttonHost: map.querySelector(".journal-section-heading"),
+    native: true,
+  });
+  map.addEventListener(
+    "click",
+    (event) => {
+      if (event.target.closest("a[href]")) fullscreen.close();
+    },
+    true,
+  );
+}
 
 const progress = document.querySelector(".journal-progress");
 const prose = document.querySelector(".journal-prose");

@@ -16,6 +16,8 @@ Drag asset cards on desktop or use their grips on touch screens to reorder Resea
 
 Line charts share crisp vector strokes, subtle depth, and precise inspection markers. Every observation is retained; gaps stay separated and no smoothing invents intermediate highs or lows. Strategy colors, dashed fits, and conditional projections retain distinct meanings. Candlesticks are unchanged.
 
+Use the expand icon on Research, price history, buyback targets, Markets, strategy charts, and scenario maps to fill the screen. Mobile portrait and landscape layouts keep the plot prominent, with Research tools below and analysis/AI settings in a compact workspace panel. Fullscreen preserves zoom, drawings, selections, and unsaved work; close or Escape returns to the previous page position. Browsers without native fullscreen use the same layout within the browser viewport.
+
 **What changed** compares newly collected evidence with a previous AI review and links cited developments to selected private scenario branches. Preview a single review or enable **Watch sources** for an asset; both use your existing BYOC limits. AI suggestions remain separate from verified events and public articles. See [private source monitoring](docs/SOURCE_MONITORING.md).
 
 ## Hostinger Ubuntu VPS: Docker + existing Caddy

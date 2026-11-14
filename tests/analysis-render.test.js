@@ -238,3 +238,42 @@ test("measurement labels, note bodies and level labels are selectable while cros
   );
   assert.match(html, /class="ta-crosshair" opacity="0" pointer-events="none"/);
 });
+
+test("fullscreen allocation fits price and auxiliary panes within physical chart height", () => {
+  const d = data(Array.from({ length: 60 }, (_, i) => 100 + i + Math.sin(i))),
+    indicators = technicalIndicators(d.points);
+  for (const width of [667, 844, 390]) {
+    for (const height of [180, 205, 260, 520]) {
+      for (const ids of [[], ["rsi"], ["rsi", "macd", "volume"]]) {
+        const s = { ...state, indicators: ids },
+          geometry = chartGeometry(d, s, indicators, width, height);
+        assert.equal(geometry.H + geometry.paneHeight * ids.length, height);
+        assert.ok(geometry.B > geometry.T);
+        assert.ok(geometry.H >= height * 0.6);
+        assert.ok(
+          !/NaN|Infinity/.test(
+            renderAnalysisPlot(d, s, indicators, geometry).html,
+          ),
+        );
+        const anchor = geometry.anchor(
+          geometry.x(20),
+          geometry.y(d.points[20].price),
+        );
+        assert.equal(anchor.time, d.points[20].time);
+        assert.ok(Math.abs(anchor.price - d.points[20].price) < 1e-8);
+      }
+    }
+  }
+});
+
+test("normal chart allocation stays unchanged when no fullscreen height is supplied", () => {
+  const d = data([100, 101, 102]),
+    indicators = technicalIndicators(d.points);
+  const s = { ...state, indicators: ["rsi", "volume"] };
+  const mobile = chartGeometry(d, s, indicators, 390),
+    desktop = chartGeometry(d, s, indicators, 844);
+  assert.equal(mobile.H + 2 * mobile.paneHeight, 390);
+  assert.equal(desktop.H + 2 * desktop.paneHeight, 470);
+  assert.equal(mobile.paneHeight, 82);
+  assert.equal(desktop.paneHeight, 82);
+});
