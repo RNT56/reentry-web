@@ -1,0 +1,116 @@
+.workbench-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 20px;
+  margin: 12px 0 28px;
+}
+.workbench-heading h1 {
+  font-size: clamp(28px, 4vw, 46px);
+  letter-spacing: -0.055em;
+  font-weight: 450;
+  margin: 0;
+}
+.workbench-heading .link {
+  font-size: 11px;
+  color: var(--muted);
+}
+.intelligence-tabs {
+  margin-top: 0;
+}
+.connector-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 0;
+  border-block: 1px solid var(--line);
+  margin: 20px 0;
+}
+.connector-chip {
+  border: 0;
+  background: none;
+  border-radius: 0;
+  padding: 12px 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 7px;
+  font-size: 9px;
+}
+.connector-chip b {
+  font-weight: 400;
+  color: var(--text);
+}
+.privacy-chip,
+.concept-tag {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.asset-chip {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  border-bottom: 1px solid transparent;
+  padding: 12px 6px;
+}
+.asset-chip.selected {
+  border-color: var(--green);
+  background: none;
+}
+.intelligence-footer {
+  margin-top: 24px;
+  padding: 15px 0;
+  font-size: 10px;
+}
+.research-empty {
+  min-height: 200px;
+  border: 0;
+  background: transparent;
+  padding: 40px 0;
+}
+.research-empty h2 {
+  font-size: 24px;
+  font-weight: 400;
+}
+.research-empty .primary {
+  margin-top: 15px;
+}
+.owner-heading h1 {
+  font-size: 28px;
+}
+.foot {
+  font-size: 9px;
+}
+.foot:has(#sync-status:empty) {
+  justify-content: flex-end;
+}
+.foot > span:has(#sync-status:empty) {
+  display: none;
+}
+.brief-panel .section-line .eyebrow:empty {
+  display: none;
+}
+@media (max-width: 680px) {
+  .workbench-heading {
+    margin: 0 0 20px;
+  }
+  .intelligence-tabs {
+    gap: 22px;
+  }
+  .research-asset-bar {
+    margin-top: 8px;
+  }
+  .workbench-heading h1 {
+    font-size: 32px;
+  }
+  .research-command {
+    margin-top: 20px;
+  }
+  .privacy-chip {
+    font-size: 9px;
+  }
+  .intelligence-page {
+    padding-top: 22px;
+  }
+}

@@ -4,3 +4,10 @@
 @import "./styles/charts.css";
 @import "./styles/scenario-map.css";
 @import "./styles/intelligence.css";
+
+@import "./styles/macro.css";
+@import "./styles/strategies.css";
+@import "./styles/admin.css";
+@import "./styles/journal.css";
+@import "./styles/signal.css";
+@import "./styles/workbench.css";

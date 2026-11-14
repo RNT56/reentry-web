@@ -27,21 +27,50 @@ export function mountAISettings(root) {
   }
   function render() {
     const p = info.preferences,
-      s = info.spending,
-      ratio = p.monthlyLimit
-        ? Math.min(100, ((s.spent + s.held) / p.monthlyLimit) * 100)
-        : 0;
-    root.innerHTML = `<div class="section-line"><div><span class="eyebrow">YOUR PRIVATE INTELLIGENCE</span><h2>AI, on your terms.</h2></div><span class="privacy-chip">↗ Bring your own key</span></div><div class="ai-settings-grid"><section class="panel ai-budget"><span class="eyebrow">${esc(s.month)} / USD</span><div class="budget-display"><div><strong>${usd(s.spent)}</strong><span>estimated API cost</span></div><svg viewBox="0 0 100 100" role="img" aria-label="${Math.round(ratio)} percent of monthly budget used or reserved"><circle cx="50" cy="50" r="42" class="budget-track"/><circle cx="50" cy="50" r="42" class="budget-progress" stroke-dasharray="${ratio * 2.639} 264"/><text x="50" y="55" text-anchor="middle">${Math.round(ratio)}%</text></svg></div><div class="budget-breakdown"><span>Reserved / unconfirmed <b>${usd(s.held)}</b></span><span>Monthly cap <b>${usd(p.monthlyLimit)}</b></span><span>Available <b>${usd(Math.max(0, p.monthlyLimit - s.spent - s.held))}</b></span></div><p class="small">Based on reported tokens at published rates. Provider credits, taxes and usage outside Reentry are excluded. Unconfirmed calls keep their budget reservation.</p></section><section class="panel ai-connections"><span class="eyebrow">ENCRYPTED CONNECTIONS</span><h3>Your models. Your account.</h3>${[
+      s = info.spending;
+    root.innerHTML = `<div class="section-line"><h2>Intelligence</h2><span class="small">${esc(s.month)}</span></div><div class="ai-settings-grid"><section class="panel ai-budget"><span class="eyebrow">USAGE / USD</span><div class="budget-display"><div><strong>${usd(s.spent)}</strong></div></div><div class="budget-breakdown"><span>Held <b>${usd(s.held)}</b></span><span>Limit <b>${usd(p.monthlyLimit)}</b></span><span>Available <b>${usd(Math.max(0, p.monthlyLimit - s.spent - s.held))}</b></span></div></section><section class="panel ai-connections"><h3>Connections</h3>${[
       "gemini",
       "anthropic",
     ]
       .map((provider) => {
         const key = info.credentials.find((c) => c.provider === provider);
-        return `<div class="provider-row"><span class="provider-glyph">${provider === "gemini" ? "✦" : "A"}</span><div><b>${provider === "gemini" ? "Google Gemini" : "Anthropic Claude"}</b><small>${key ? `Stored · fingerprint ${esc(key.fingerprint)}` : "No key connected"}</small></div><button class="secondary small-button" data-connect="${provider}" ${!info.vaultAvailable ? "disabled" : ""}>${key ? "Replace" : "Connect"}</button>${key ? `<button class="icon-button" aria-label="Remove ${provider} key" data-disconnect="${provider}">×</button>` : ""}</div>`;
+        return `<div class="provider-row"><span class="provider-glyph">${provider === "gemini" ? "✦" : "A"}</span><div><b>${provider === "gemini" ? "Google Gemini" : "Anthropic Claude"}</b><small>${key ? "Connected" : "—"}</small></div><button class="secondary small-button" data-connect="${provider}" ${!info.vaultAvailable ? "disabled" : ""}>${key ? "Replace" : "Connect"}</button>${key ? `<button class="icon-button" aria-label="Remove ${provider} key" data-disconnect="${provider}">×</button>` : ""}</div>`;
       })
       .join(
         "",
-      )}${!info.vaultAvailable ? '<p class="inline-notice">The operator must configure AI_MASTER_KEY to enable encrypted key storage.</p>' : ""}<p class="small">Keys stay encrypted on the server and are never sent back to the browser. Connecting stores a key; your first research run checks provider access.</p></section><section class="panel ai-controls"><form id="ai-preferences"><div class="section-line"><h3>Research controls</h3><label class="toggle-label"><input name="enabled" type="checkbox" ${p.enabled ? "checked" : ""}> Enable AI</label></div><div class="form-row"><div class="field"><label for="ai-model">Default model</label><select name="model" id="ai-model">${info.models.map((m) => `<option value="${esc(m.id)}" ${p.model === m.id ? "selected" : ""}>${esc(m.label)}</option>`).join("")}</select></div><div class="field"><label for="ai-monthly">Monthly cap · US$</label><input id="ai-monthly" name="monthly" type="number" min="0" max="1000" step=".01" value="${p.monthlyLimit / 1000000}" required></div><div class="field"><label for="ai-run">Per-run cap · US$</label><input id="ai-run" name="run" type="number" min=".001" max="10" step=".001" value="${p.runLimit / 1000000}" required></div></div>${!p.consentAt ? '<label class="consent-line"><input name="consent" type="checkbox"> I approve sending selected asset data, research sources and article drafts to my chosen provider. Portfolio quantities and buy-in prices are excluded.</label>' : ""}<div class="actions"><button class="primary">Save AI settings</button><span class="small">Automation is enabled separately for each asset.</span></div>${!info.workerEnabled ? '<p class="inline-notice">Background jobs are disabled on this server.</p>' : ""}${!info.pricesValid ? '<p class="inline-notice">Pricing needs an operator update before more AI calls can run.</p>' : ""}<details class="provider-details"><summary>Pricing & provider data policies</summary><p class="small">Google’s free API tier may use submitted content to improve products. Choose a paid tier if its data policy better fits your needs.</p>${info.models.map((m) => `<p class="small"><a href="${esc(m.source)}" target="_blank" rel="noopener noreferrer">${esc(m.label)} ↗</a> · $${m.input} input / $${m.output} output per million tokens</p>`).join("")}<a class="small" href="https://aistudio.google.com/docs/terms" target="_blank" rel="noopener noreferrer">Google terms ↗</a> · <a class="small" href="https://privacy.claude.com/en/collections/10672480-data-usage-and-retention" target="_blank" rel="noopener noreferrer">Anthropic data policy ↗</a></details></form></section></div><section class="panel cost-ledger"><div class="section-line"><div><span class="eyebrow">ACCOUNTABLE BY DESIGN</span><h3>Every call has a receipt.</h3></div><button class="secondary small-button" data-cost-export>Export ledger ↓</button></div>${costs.entries.length ? `<div class="ledger-scroll"><table><thead><tr><th>Research</th><th>Model</th><th>Tokens in / out</th><th>Status</th><th>USD</th></tr></thead><tbody>${costs.entries.map((e) => `<tr><td><b>${esc(e.symbol)}</b><small>${esc(when(e.created_at))}</small></td><td>${esc(e.model)}</td><td>${e.usage ? `${(e.usage.input + e.usage.cached + e.usage.write5m + e.usage.write1h).toLocaleString()} / ${e.usage.output.toLocaleString()}` : "—"}${e.usage?.cached ? `<small>${e.usage.cached.toLocaleString()} cached</small>` : ""}</td><td>${esc(e.state)}${e.state === "uncertain" ? ` <button class="link" data-reconcile="${esc(e.id)}">Reconcile ↗</button>` : ""}</td><td>${usd(e.cost ?? e.reserved)}${e.cost === null ? " held" : ""}</td></tr>`).join("")}</tbody></table></div>` : '<p class="small">Your first AI request will appear here. No calls have been charged through Reentry.</p>'}</section>`;
+      )}${!info.vaultAvailable ? '<p class="inline-notice">The operator must configure AI_MASTER_KEY to enable encrypted key storage.</p>' : ""}</section><section class="panel ai-controls"><form id="ai-preferences"><div class="section-line"><h3>Defaults</h3><label class="toggle-label"><input name="enabled" type="checkbox" ${p.enabled ? "checked" : ""}> Enable AI</label></div><div class="form-row"><div class="field"><label for="ai-provider">Provider</label><select id="ai-provider"><option value="gemini" ${p.provider === "gemini" ? "selected" : ""}>Gemini</option><option value="anthropic" ${p.provider === "anthropic" ? "selected" : ""}>Claude</option></select></div><div class="field"><label for="ai-model">Model</label><select name="model" id="ai-model">${info.models
+      .filter((m) => m.provider === p.provider)
+      .map(
+        (m) =>
+          `<option value="${esc(m.id)}" ${p.model === m.id ? "selected" : ""}>${esc(m.label)}</option>`,
+      )
+      .join(
+        "",
+      )}</select></div><div class="field"><label for="ai-monthly">Monthly cap · US$</label><input id="ai-monthly" name="monthly" type="number" min="0" max="1000" step=".01" value="${p.monthlyLimit / 1000000}" required></div><div class="field"><label for="ai-run">Per-run cap · US$</label><input id="ai-run" name="run" type="number" min=".001" max="10" step=".001" value="${p.runLimit / 1000000}" required><span class="small" id="ai-max-hold"></span></div></div>${!p.consentAt ? '<label class="consent-line"><input name="consent" type="checkbox"> Send selected research and drafts to this provider</label>' : ""}<div class="actions"><button class="primary">Save AI settings</button></div>${!info.workerEnabled ? '<p class="inline-notice">Background jobs are disabled on this server.</p>' : ""}${!info.pricesValid ? '<p class="inline-notice">Pricing needs an operator update before more AI calls can run.</p>' : ""}</form></section></div><section class="panel cost-ledger"><div class="section-line"><div><h3>Usage</h3></div><button class="secondary small-button" data-cost-export>Export ledger ↓</button></div>${costs.entries.length ? `<div class="ledger-scroll"><table><thead><tr><th>Research</th><th>Model</th><th>Tokens in / out</th><th>Status</th><th>USD</th></tr></thead><tbody>${costs.entries.map((e) => `<tr><td><b>${esc(e.symbol)}</b><small>${esc(when(e.created_at))}</small></td><td>${esc(e.model)}</td><td>${e.usage ? `${(e.usage.input + e.usage.cached + e.usage.write5m + e.usage.write1h).toLocaleString()} / ${e.usage.output.toLocaleString()}` : "—"}${e.usage?.cached ? `<small>${e.usage.cached.toLocaleString()} cached</small>` : ""}</td><td>${esc(e.state)}${e.state === "uncertain" ? ` <button class="link" data-reconcile="${esc(e.id)}">Reconcile ↗</button>` : ""}</td><td>${usd(e.cost ?? e.reserved)}${e.cost === null ? " held" : ""}</td></tr>`).join("")}</tbody></table></div>` : '<p class="small">No activity</p>'}</section>`;
+    function showHold() {
+      const model = info.models.find(
+        (m) => m.id === root.querySelector("#ai-model").value,
+      );
+      const limits = info.reservationLimits;
+      const hold = Math.ceil(
+        limits.input * model.input + limits.output * model.output,
+      );
+      root.querySelector("#ai-max-hold").textContent =
+        "Max hold · $" + (Math.ceil(hold / 1000) / 1000).toFixed(3);
+    }
+    root.querySelector("#ai-model").onchange = showHold;
+    showHold();
+    root.querySelector("#ai-provider").onchange = (e) => {
+      const provider = e.target.value;
+      root.querySelector("#ai-model").innerHTML = info.models
+        .filter((m) => m.provider === provider)
+        .map(
+          (m) =>
+            `<option value="${esc(m.id)}" ${m.id === info.defaultModels[provider] ? "selected" : ""}>${esc(m.label)}</option>`,
+        )
+        .join("");
+      showHold();
+    };
     root.querySelector("#ai-preferences").onsubmit = (e) => {
       e.preventDefault();
       const f = e.target;
@@ -69,7 +98,7 @@ export function mountAISettings(root) {
     if (b.dataset.connect) {
       const provider = b.dataset.connect;
       modal(
-        `<span class="eyebrow">PRIVATE CONNECTION</span><h2>Connect ${provider === "gemini" ? "Gemini" : "Claude"}</h2><form id="provider-key-form"><div class="field"><label for="provider-key">Your API key</label><input id="provider-key" name="key" type="password" autocomplete="off" spellcheck="false" minlength="20" maxlength="512" required></div><p class="small">Stored encrypted. Only your requests can use this key.</p><div class="actions"><button class="primary">Save connection</button><a class="link" target="_blank" rel="noopener noreferrer" href="${provider === "gemini" ? "https://aistudio.google.com/api-keys" : "https://platform.claude.com/settings/keys"}">Get a key ↗</a></div></form>`,
+        `<span class="eyebrow">PRIVATE CONNECTION</span><h2>Connect ${provider === "gemini" ? "Gemini" : "Claude"}</h2><form id="provider-key-form"><div class="field"><label for="provider-key">Your API key</label><input id="provider-key" name="key" type="password" autocomplete="off" spellcheck="false" minlength="20" maxlength="512" required></div><div class="actions"><button class="primary">Save connection</button><a class="link" target="_blank" rel="noopener noreferrer" href="${provider === "gemini" ? "https://aistudio.google.com/api-keys" : "https://platform.claude.com/settings/keys"}">Get a key ↗</a></div></form>`,
       );
       document.querySelector("#provider-key-form").onsubmit = (e) => {
         e.preventDefault();
@@ -94,7 +123,7 @@ export function mountAISettings(root) {
       download(costs, "reentry-ai-ledger.json");
     if (b.dataset.reconcile) {
       modal(
-        '<h2>Reconcile an unconfirmed call</h2><p class="sub">Check the provider’s usage record first. Enter the amount charged for this request, including zero if the provider confirms no charge.</p><form id="reconcile-form"><div class="field"><label for="reconcile-cost">Confirmed charge · US$</label><input id="reconcile-cost" name="cost" type="number" min="0" max="1000" step=".000001" required></div><div class="field"><label for="reconcile-note">Evidence / invoice reference</label><input id="reconcile-note" name="note" maxlength="500" required></div><button class="primary">Record reconciliation</button></form>',
+        '<h2>Reconcile an unconfirmed call</h2><form id="reconcile-form"><div class="field"><label for="reconcile-cost">Confirmed charge · US$</label><input id="reconcile-cost" name="cost" type="number" min="0" max="1000" step=".000001" required></div><div class="field"><label for="reconcile-note">Evidence / invoice reference</label><input id="reconcile-note" name="note" maxlength="500" required></div><button class="primary">Record reconciliation</button></form>',
       );
       document.querySelector("#reconcile-form").onsubmit = (e) => {
         e.preventDefault();

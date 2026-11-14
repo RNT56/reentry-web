@@ -87,6 +87,7 @@ export function createProviders({ fetcher = fetch } = {}) {
           contents: [{ role: "user", parts: [{ text: prompt }] }],
           generationConfig: {
             maxOutputTokens: MAX_OUTPUT,
+            thinkingConfig: { thinkingLevel: "low" },
             responseMimeType: "application/json",
             responseJsonSchema: resultSchema,
           },

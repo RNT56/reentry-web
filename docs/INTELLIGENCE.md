@@ -1,3 +1,5 @@
+Current model IDs, rates and defaults: [model catalog](MODELS.md). Owner controls: [admin operations](ADMIN.md). Market data: [macro sources](MACRO.md). Strategy methods: [comparisons](STRATEGIES.md).
+
 # Intelligence: operation and boundaries
 
 ## Operator configuration

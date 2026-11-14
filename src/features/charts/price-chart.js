@@ -2,7 +2,8 @@ import { referenceLevels, chartScale } from "../../domain/chart-levels.js";
 import { historyRanges } from "../../domain/market-history.js";
 const cache = new Map(),
   pending = new Map();
-let activeRange = "1mo";
+let activeRange = "1mo",
+  activeCurrency = "EUR";
 const escape = (s) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -16,8 +17,8 @@ const price = (n) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: Math.abs(n) > 0 && Math.abs(n) < 0.1 ? 8 : 2,
   }).format(n);
-async function history(symbol, range) {
-  const key = symbol + ":" + range,
+async function history(symbol, range, currency) {
+  const key = symbol + ":" + range + ":" + currency,
     previous = cache.get(key);
   if (previous && Date.now() - previous.at < 60000) return previous.data;
   if (pending.has(key)) return pending.get(key);
@@ -26,7 +27,7 @@ async function history(symbol, range) {
   const promise = (async () => {
     try {
       const response = await fetch(
-        `/api/history?symbol=${encodeURIComponent(symbol)}&range=${range}`,
+        `/api/history?symbol=${encodeURIComponent(symbol)}&range=${range}&currency=${currency}`,
         { credentials: "same-origin", signal: controller.signal },
       );
       const data = await response.json();
@@ -59,9 +60,10 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
     },
   };
   function load() {
-    const range = activeRange;
+    const range = activeRange,
+      currency = activeCurrency;
     data = null;
-    root.innerHTML = `<div class="price-history-top"><div class="history-readout"><div class="eyebrow">Price history <span class="history-currency"></span></div><div class="history-price">—</div><div class="history-change">${escape(holding.symbol)}</div></div><div class="history-ranges" role="group" aria-label="Price history range">${Object.entries(
+    root.innerHTML = `<div class="price-history-top"><div class="history-readout"><div class="eyebrow"><button class="history-currency-switch" type="button" aria-label="Chart currency: ${currency}. Switch currency">${currency} ⇄</button><span class="history-currency"></span></div><div class="history-price">—</div><div class="history-change">${escape(holding.symbol)}</div></div><div class="history-ranges" role="group" aria-label="Price history range">${Object.entries(
       historyRanges,
     )
       .map(
@@ -70,7 +72,7 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
       )
       .join(
         "",
-      )}</div></div><div class="history-body" aria-busy="true"><div class="history-placeholder" role="status">Loading price history…</div></div><div class="history-caption"><span>Market price</span><span>Drag to explore</span></div>`;
+      )}</div></div><div class="history-body" aria-busy="true"><div class="history-placeholder" role="status">…</div></div><div class="history-caption"><span>Market price</span><span>Drag to explore</span></div>`;
     root.querySelectorAll("[data-history-range]").forEach(
       (button) =>
         (button.onclick = () => {
@@ -78,6 +80,10 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
           load();
         }),
     );
+    root.querySelector(".history-currency-switch").onclick = () => {
+      activeCurrency = activeCurrency === "EUR" ? "USD" : "EUR";
+      load();
+    };
     // A generation token also protects same-root range switches from out-of-order responses.
     const generation = Symbol();
     root.chartGeneration = generation;
@@ -87,28 +93,27 @@ export function mountPriceChart(root, holding, initialLevels = {}) {
       root.querySelector(".history-body").setAttribute("aria-busy", "false");
       root.querySelector(".history-body").innerHTML =
         `<div class="history-placeholder history-unavailable"><span>${text}</span>${retry ? '<button class="link history-retry" type="button">Try again ↗</button>' : ""}</div>`;
-      root.querySelector(".history-caption").innerHTML =
-        "<span>Buyback calculations remain available below.</span>";
+      root.querySelector(".history-caption").innerHTML = "";
       const button = root.querySelector(".history-retry");
       if (button) button.onclick = () => load();
     };
     if (holding.demo) {
-      empty("Demo holding · no market history");
+      empty("Demo");
       return;
     }
-    history(holding.symbol, range)
+    history(holding.symbol, range, currency)
       .then((response) => {
         if (!valid()) return;
         data = response;
         if (!data.points?.length) {
           data = null;
-          empty("No prices available for this period.", true);
+          empty("No observations", true);
           return;
         }
         draw(root, data, levels, hidden);
       })
       .catch(() => {
-        if (valid()) empty("Price history is temporarily unavailable.", true);
+        if (valid()) empty("Data unavailable", true);
       });
   }
   load();
@@ -125,6 +130,7 @@ function draw(root, data, inputs, hidden) {
     ...inputs,
     currency: data.currency,
     symbol: data.symbol,
+    displayFx: data.referenceFx,
   });
   const visible = references.levels.filter((l) => !hidden.has(l.id));
   const { low, high, y } = chartScale(points, visible);
@@ -151,25 +157,25 @@ function draw(root, data, inputs, hidden) {
             ? { month: "short", year: "2-digit" }
             : { day: "numeric", month: "short" }),
     }).format(time * 1000);
-  root.querySelector(".history-currency").textContent = data.currency;
+  root.querySelector(".history-currency").textContent =
+    data.conversionUnavailable ? data.currency + " data" : "";
   root.querySelector(".history-body").setAttribute("aria-busy", "false");
   root.querySelector(".history-body").innerHTML =
     `<div class="history-plot" role="slider" tabindex="0" aria-label="Explore ${escape(data.symbol)} price history" aria-valuemin="0" aria-valuemax="${last}" aria-valuenow="${last}"><svg viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="history-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${color}" stop-opacity=".18"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs><path d="M8 12H992 M8 98H992 M8 184H992" class="history-grid"/><path d="M${line.replaceAll(" ", " L")} L${x(last)} 198 L${x(0)} 198Z" fill="url(#history-fill)"/><polyline points="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>${visible.map((l) => `<line class="history-reference" x1="8" x2="992" y1="${y(l.price)}" y2="${y(l.price)}" stroke="${l.color}" vector-effect="non-scaling-stroke"/>`).join("")}<line class="history-crosshair" x1="${x(last)}" x2="${x(last)}" y1="5" y2="195"/><path class="history-point" d="M${x(last)} ${y(latest)}h.01" stroke="${color}" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>${visible.map((l) => `<span class="history-level-label level-${l.id}" style="top:${y(l.price) / 2}%;--level-color:${l.color}">${escape(l.label)} ${price(l.price)}</span>`).join("")}<span class="history-axis history-axis-high">${price(high)}</span><span class="history-axis history-axis-low">${price(low)}</span></div><div class="history-dates"><span>${date(points[0].time)}</span><span>${date(points[Math.floor(last / 2)].time)}</span><span>${date(points[last].time)}</span></div>`;
   root.querySelector(".history-caption").innerHTML =
-    `<span>${escape(data.source)} · ${escape(data.currency)}${data.currency !== "EUR" && (Number.isFinite(inputs.buyIn) || Number.isFinite(inputs.target)) ? " · Planner in EUR" : ""}</span><span class="history-hover-hint">Drag to explore</span>`;
+    `<span>${escape(data.source)} · ${escape(data.currency)}${data.conversionUnavailable ? " · FX unavailable" : ""}</span><span class="history-hover-hint">Drag to explore</span>`;
   let legend = root.querySelector(".history-levels");
   if (!legend) {
     legend = document.createElement("div");
     legend.className = "history-levels";
     root.querySelector(".history-caption").before(legend);
   }
-  legend.innerHTML =
-    references.levels
-      .map(
-        (l) =>
-          `<button type="button" class="level-toggle" data-level="${l.id}" aria-pressed="${!hidden.has(l.id)}" style="--level-color:${l.color}" title="${escape(l.detail)}${references.converted ? " · FX from " + new Date(references.fxTime * 1000).toISOString() : ""}"><i></i><span>${escape(l.label)}</span><b>${price(l.price)} ${escape(data.currency)}</b></button>`,
-      )
-      .join("") + `<span class="levels-note">${escape(references.note)}</span>`;
+  legend.innerHTML = references.levels
+    .map(
+      (l) =>
+        `<button type="button" class="level-toggle" data-level="${l.id}" aria-pressed="${!hidden.has(l.id)}" style="--level-color:${l.color}" title="${escape(l.detail)}${references.converted ? " · FX from " + new Date(references.fxTime * 1000).toISOString() : ""}"><i></i><span>${escape(l.label)}</span><b>${price(l.price)} ${escape(data.currency)}</b></button>`,
+    )
+    .join("");
   legend.querySelectorAll("[data-level]").forEach(
     (button) =>
       (button.onclick = () => {

@@ -1,4 +1,10 @@
-import { models, priceFor } from "./catalog.js";
+import {
+  models,
+  priceFor,
+  defaultModels,
+  MAX_OUTPUT,
+  MAX_INPUT,
+} from "./catalog.js";
 import { preferences, spending } from "./billing.js";
 import { fail, text, integer, audit, transaction } from "../platform/util.js";
 export function registerAIRoutes(
@@ -18,6 +24,8 @@ export function registerAIRoutes(
     return {
       author: isAuthor(req.auth.username),
       authorName,
+      defaultModels,
+      reservationLimits: { input: MAX_INPUT, output: MAX_OUTPUT },
       vaultAvailable: vault.available,
       workerEnabled: engine.enabled,
       pricesValid,

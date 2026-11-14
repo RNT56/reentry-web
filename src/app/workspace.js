@@ -1,4 +1,5 @@
 import { mountIntelligence } from "../features/intelligence/workspace.js";
+import { mountMacro } from "../features/macro/workspace.js";
 import { mountAISettings } from "../features/intelligence/settings.js";
 import { createSaveQueue } from "../shared/save-queue.js";
 import { parseRoute, routeURL } from "./router.js";
@@ -53,7 +54,8 @@ export function startWorkspace() {
   });
   let priceChart = null,
     intelligence = null,
-    aiSettings = null;
+    aiSettings = null,
+    macro = null;
   const queue = createSaveQueue({
     write: (state, revision) =>
       request("/api/portfolio", "PUT", { state, revision }),
@@ -222,6 +224,8 @@ export function startWorkspace() {
     }
   }
   function renderWorkspace() {
+    macro?.destroy();
+    macro = null;
     intelligence?.destroy();
     intelligence = null;
     aiSettings?.destroy();
@@ -304,6 +308,7 @@ export function startWorkspace() {
     }
     if (model.page === "explore")
       intelligence = mountIntelligence($("#intelligence"), { model, navigate });
+    if (model.page === "markets") macro = mountMacro($("#macro-workspace"));
     if (model.page === "settings") {
       bindSettings();
       aiSettings = mountAISettings($("#ai-settings"));

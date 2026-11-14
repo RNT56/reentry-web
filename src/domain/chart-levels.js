@@ -7,12 +7,22 @@ export function referenceLevels({
   buyIn,
   target,
   quote,
+  displayFx,
   now = Date.now(),
 }) {
   if (!Number.isFinite(buyIn) && !Number.isFinite(target))
     return { levels: [], note: "", converted: false };
   let rate = 1;
-  if (currency !== "EUR") {
+  if (
+    currency === "USD" &&
+    Number.isFinite(displayFx?.rate) &&
+    displayFx.rate > 0 &&
+    Number.isFinite(displayFx.time) &&
+    now / 1000 - displayFx.time >= -300 &&
+    now / 1000 - displayFx.time <= 7 * 86400
+  ) {
+    rate = 1 / displayFx.rate;
+  } else if (currency !== "EUR") {
     const sameListing = quote?.symbol === symbol;
     const sameCurrency = currencyUnit(quote?.originalCurrency)[0] === currency;
     const age = now / 1000 - quote?.fxTime;
@@ -54,7 +64,7 @@ export function referenceLevels({
   return {
     levels,
     converted: currency !== "EUR",
-    fxTime: quote?.fxTime,
+    fxTime: displayFx?.time || quote?.fxTime,
     note:
       currency === "EUR"
         ? "Buy-in includes purchase fees"

@@ -311,3 +311,13 @@
     font-size: 11px;
   }
 }
+.history-currency-switch {
+  font: inherit;
+  color: var(--green);
+  letter-spacing: 0.08em;
+  padding: 4px 0;
+  min-height: 32px;
+}
+.history-currency {
+  margin-left: 8px;
+}

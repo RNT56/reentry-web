@@ -18,6 +18,14 @@ await build({
   outfile: "dist/public/style.css",
   external: ["/fonts/*"],
 });
+await build({
+  entryPoints: ["src/features/journal/reader.js"],
+  bundle: true,
+  minify: true,
+  format: "esm",
+  target: ["es2022"],
+  outfile: "dist/public/journal.js",
+});
 await copyFile("src/index.html", "dist/public/index.html");
 await cp("public", "dist/public", { recursive: true });
 await mkdir("dist/public/fonts", { recursive: true });

@@ -15,9 +15,9 @@ export const when = (n) =>
       })
     : "—";
 export const empty = (title, body, action = "") =>
-  `<div class="research-empty"><span class="orbit-mark">↗</span><h2>${esc(title)}</h2><p>${esc(body)}</p>${action}</div>`;
+  `<div class="research-empty"><h2>${esc(title)}</h2>${body ? `<p>${esc(body)}</p>` : ""}${action}</div>`;
 export const loading = () =>
-  '<div class="research-loading" role="status"><span></span>Connecting your workspace…</div>';
+  '<div class="research-loading" role="status"><span></span>Loading…</div>';
 export const labels = {
   watching: "Watching",
   triggered: "Condition verified",

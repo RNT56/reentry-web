@@ -32,7 +32,7 @@ export function bindLogos() {
 }
 export function associateLabels(root) {
   root.querySelectorAll("label").forEach((label, i) => {
-    if (label.htmlFor) return;
+    if (label.htmlFor || label.querySelector("input,select,textarea")) return;
     const input = label.nextElementSibling?.matches("input,select,textarea")
       ? label.nextElementSibling
       : label.nextElementSibling?.querySelector("input,select,textarea");

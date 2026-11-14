@@ -10,6 +10,7 @@ import { registerAuth } from "./identity/auth.js";
 import { registerPortfolioRoutes } from "./portfolio/routes.js";
 import { registerMarketRoutes } from "./market/routes.js";
 import { createMarketService } from "./market/service.js";
+import { createAdminControls } from "./admin/controls.js";
 import { registerPlatform } from "./platform/register.js";
 export async function createApp(options = {}) {
   const origin =
@@ -96,6 +97,12 @@ export async function createApp(options = {}) {
         return reply.code(415).send({ error: "JSON required." });
     }
   });
+  const controls = createAdminControls(db, {
+    registration: config.registration,
+  });
+  Object.defineProperty(config, "registration", {
+    get: () => controls.get().registrationOpen,
+  });
   await registerAuth(app, db, config);
   registerPortfolioRoutes(app, db);
   const market = options.marketService || createMarketService();
@@ -103,7 +110,7 @@ export async function createApp(options = {}) {
   app.addHook("onClose", async () => {
     if (!options.db) db.close();
   });
-  registerPlatform(app, db, market, options.platform);
+  registerPlatform(app, db, market, { ...options.platform, controls });
   app.get("/healthz", async () => {
     db.prepare("SELECT 1").get();
     return { ok: true, revision: process.env.REENTRY_REVISION || null };

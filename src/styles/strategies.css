@@ -1,0 +1,229 @@
+.strategy-workspace {
+  padding-top: 20px;
+}
+.strategy-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: end;
+  margin: 24px 0 35px;
+}
+.strategy-controls label {
+  display: grid;
+  gap: 9px;
+  font-size: 10px;
+  color: var(--muted);
+  flex: 1;
+  min-width: 90px;
+}
+.strategy-controls input,
+.strategy-controls select {
+  width: 100%;
+  min-height: 44px;
+}
+.strategy-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.strategy-score {
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 8px;
+  color: var(--muted);
+  min-width: 0;
+}
+.strategy-score span,
+.strategy-score small {
+  display: block;
+  font-size: 11px;
+}
+.strategy-score strong {
+  display: block;
+  font-size: clamp(18px, 2.6vw, 30px);
+  font-weight: 450;
+  margin: 14px 0 7px;
+  letter-spacing: -1px;
+}
+.strategy-score.selected {
+  border-color: var(--strategy-color);
+  color: var(--strategy-color);
+}
+.strategy-curve {
+  width: 100%;
+  height: 260px;
+  overflow: visible;
+  margin-top: 28px;
+}
+.strategy-dates {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--muted);
+}
+.strategy-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 25px 0;
+  margin-top: 32px;
+}
+.strategy-metrics span,
+.strategy-metrics b {
+  display: block;
+}
+.strategy-metrics span {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.strategy-metrics b {
+  font-size: 20px;
+  font-weight: 450;
+}
+.strategy-lenses {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  padding: 30px 0;
+}
+.strategy-lenses section {
+  display: grid;
+  gap: 14px;
+}
+.strategy-lenses strong {
+  font-size: 22px;
+  font-weight: 450;
+}
+.strategy-lenses section > span:last-child {
+  font-size: 11px;
+  color: var(--muted);
+}
+.strategy-method {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+  padding: 20px 0;
+}
+.strategy-method summary {
+  cursor: pointer;
+}
+@media (max-width: 600px) {
+  .strategy-scoreboard {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .strategy-score strong {
+    font-size: 25px;
+  }
+  .strategy-curve {
+    height: 190px;
+  }
+  .strategy-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .strategy-controls {
+    gap: 10px;
+  }
+  .strategy-controls label {
+    min-width: calc(50% - 10px);
+  }
+  .strategy-lenses {
+    gap: 16px;
+  }
+  .strategy-lenses strong {
+    font-size: 18px;
+  }
+}
+.strategy-parameters {
+  margin: 16px 0 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+.strategy-parameters > summary {
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted);
+}
+.strategy-parameters-summary {
+  color: var(--green);
+}
+.strategy-structure {
+  padding-top: 34px;
+}
+.strategy-structure h3 {
+  font-size: 18px;
+  font-weight: 450;
+}
+.structure-legend {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 9px;
+  color: var(--muted);
+  margin: 20px 0 10px;
+}
+.structure-legend span:before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 2px;
+  background: #b9f68b;
+  margin: 0 6px 3px 0;
+}
+.structure-legend span:nth-child(2):before {
+  background: #eeb884;
+}
+.structure-legend span:nth-child(n + 3):before {
+  background: #bf9ef0;
+}
+.structure-chart {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.structure-chart text {
+  fill: #a3af9e;
+  font-family: inherit;
+  font-size: 11px;
+}
+.structure-source {
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 15px;
+}
+.strategy-method dl {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 10px 20px;
+}
+.strategy-method dt {
+  color: #d1dbcb;
+}
+.strategy-method dd {
+  margin: 0;
+}
+.strategy-parameters[open] {
+  padding-bottom: 0;
+}
+.strategy-parameters .strategy-controls {
+  margin-bottom: 20px;
+}
+@media (max-width: 600px) {
+  .structure-legend {
+    gap: 12px;
+  }
+  .structure-chart {
+    min-height: 160px;
+  }
+  .strategy-method dl {
+    grid-template-columns: 85px 1fr;
+    gap: 10px;
+  }
+  .structure-chart text {
+    font-size: 14px;
+  }
+}

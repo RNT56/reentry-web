@@ -5,6 +5,10 @@ export function registerMarketRoutes(app, service) {
     service.quote(req.query.symbol),
   );
   app.get("/api/history", options, async (req) =>
-    service.history(req.query.symbol, req.query.range),
+    service.history(
+      req.query.symbol,
+      req.query.range,
+      req.query.currency || "EUR",
+    ),
   );
 }

@@ -57,7 +57,7 @@ export function createPurchases(model, services) {
       const t = chosen?.assetType || "EQUITY";
       $("#asset-tax").innerHTML =
         t !== "EQUITY"
-          ? `<div class="asset-tax-notice"><span class="pill">${assetTypeLabel(t)}</span><p>Set an effective tax rate for this asset. Exemptions and holding-period rules are not automatic.</p><label>Effective tax rate (%)</label><input name="taxRate" type="number" inputmode="decimal" min="0" max="100" step="any" value="${existing?.taxRate ?? ""}" placeholder="Required" required></div>`
+          ? `<div class="asset-tax-notice"><span class="pill">${assetTypeLabel(t)}</span><label>Effective tax rate (%)</label><input name="taxRate" type="number" inputmode="decimal" min="0" max="100" step="any" value="${existing?.taxRate ?? ""}" placeholder="Required" required></div>`
           : "";
       associateLabels($("#modal"));
     }
@@ -321,7 +321,7 @@ export function createPurchases(model, services) {
   }
   function assetSettings(h) {
     modal(
-      `<h2>Asset settings</h2><form id="asset-settings"><div class="field"><label>Asset type</label><select name="assetType">${["EQUITY", "ETF", "MUTUALFUND", "CRYPTOCURRENCY", "INDEX", "OTHER"].map((t) => `<option value="${t}" ${(h.assetType || "EQUITY") === t ? "selected" : ""}>${assetTypeLabel(t)}</option>`).join("")}</select></div><div class="field"><label>ISIN (optional)</label><input name="isin" value="${esc(h.isin || "")}" pattern="[A-Z]{2}[A-Z0-9]{9}[0-9]" maxlength="12" autocapitalize="characters"></div><div class="field"><label>Effective tax rate (%)</label><input name="taxRate" type="number" min="0" max="100" step="any" value="${h.taxRate ?? model.state.settings.rate}" required></div><p class="small">Applied only to this asset. Exemptions and holding-period rules are not automatic.</p><div class="actions"><button class="primary">Save settings</button></div></form>`,
+      `<h2>Asset settings</h2><form id="asset-settings"><div class="field"><label>Asset type</label><select name="assetType">${["EQUITY", "ETF", "MUTUALFUND", "CRYPTOCURRENCY", "INDEX", "OTHER"].map((t) => `<option value="${t}" ${(h.assetType || "EQUITY") === t ? "selected" : ""}>${assetTypeLabel(t)}</option>`).join("")}</select></div><div class="field"><label>ISIN (optional)</label><input name="isin" value="${esc(h.isin || "")}" pattern="[A-Z]{2}[A-Z0-9]{9}[0-9]" maxlength="12" autocapitalize="characters"></div><div class="field"><label>Effective tax rate (%)</label><input name="taxRate" type="number" min="0" max="100" step="any" value="${h.taxRate ?? model.state.settings.rate}" required></div><div class="actions"><button class="primary">Save settings</button></div></form>`,
     );
     $("#asset-settings").onsubmit = (e) => {
       e.preventDefault();

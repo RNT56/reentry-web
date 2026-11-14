@@ -1,3 +1,7 @@
+import { registerAdminRoutes } from "../admin/routes.js";
+import { createMacroService } from "../macro/service.js";
+import { registerMacroRoutes } from "../macro/routes.js";
+import { registerStrategyRoutes } from "../strategies/routes.js";
 import { migratePlatform } from "./schema.js";
 import { createVault } from "../ai/vault.js";
 import { createProviders } from "../ai/providers.js";
@@ -16,13 +20,17 @@ export function registerPlatform(app, db, market, options = {}) {
     authorName = String(
       options.authorName || process.env.AUTHOR_PUBLIC_NAME || "RNT",
     ).slice(0, 80);
+  const macro = options.macro || createMacroService();
+  registerMacroRoutes(app, macro);
+  registerStrategyRoutes(app, { market });
   const vault = options.vault || createVault(options.masterKey),
-    connectors = options.connectors || createConnectors({ market });
+    connectors = options.connectors || createConnectors({ market, macro });
   const engine = createEngine({
     db,
     vault,
     connectors,
     market,
+    paused: () => options.controls?.get().aiPaused || false,
     generate: options.generate || createProviders(),
     enabled:
       options.workerEnabled ?? process.env.ENABLE_BACKGROUND_JOBS === "true",
@@ -35,7 +43,9 @@ export function registerPlatform(app, db, market, options = {}) {
     engine,
     isAuthor,
     authorName,
+    controls: options.controls,
   };
+  if (options.controls) registerAdminRoutes(app, services);
   registerAIRoutes(app, services);
   registerIntelligenceRoutes(app, services);
   registerJournalRoutes(app, services);

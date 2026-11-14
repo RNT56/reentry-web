@@ -183,7 +183,7 @@ async function fixture(t, overrides = {}, ownsStore = false) {
       (
         await c("/api/ai/preferences", "PUT", {
           enabled: true,
-          model: "gemini-3.5-flash-lite",
+          model: "gemini-4-hydrogen",
           monthlyLimit: 5000000,
           runLimit: 250000,
           consent: true,
@@ -290,7 +290,7 @@ test("provider adapters send only fixed-host structured calls and sanitize provi
       seen.push({ url, options });
       return new Response(
         JSON.stringify({
-          modelVersion: "gemini-3.5-flash-lite",
+          modelVersion: "gemini-4-hydrogen",
           responseId: "test",
           usageMetadata: {
             promptTokenCount: 10,
@@ -310,7 +310,7 @@ test("provider adapters send only fixed-host structured calls and sanitize provi
   });
   const result = await generate({
     provider: "gemini",
-    model: "gemini-3.5-flash-lite",
+    model: "gemini-4-hydrogen",
     key,
     prompt: "untrusted fixture",
   });
@@ -421,7 +421,7 @@ test("reservations serialize against all open holds, including previous months",
   await enable();
   const j1 = (await enqueue()).body,
     j2 = (await enqueue()).body,
-    p = priceFor("gemini-3.5-flash-lite"),
+    p = priceFor("gemini-4-hydrogen"),
     amount = reservationFor("test", p);
   db.prepare("UPDATE ai_preferences SET monthly_limit=? WHERE user_id=?").run(
     amount,
@@ -485,7 +485,7 @@ test("invalid structured output is still billed; unknown source citations are re
   assert.equal((await ca("/api/research/jobs/" + j.id)).body.status, "failed");
   const l = (await ca("/api/ai/costs")).body.entries[0];
   assert.equal(l.state, "settled");
-  assert.equal(l.cost, 155);
+  assert.equal(l.cost, 525);
   assert.throws(() =>
     validateResult(
       {

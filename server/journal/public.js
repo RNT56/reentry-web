@@ -6,6 +6,23 @@ const esc = (v) =>
         c
       ],
   );
+const date = (value) =>
+  new Date(value).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+const external = (url) => {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && !u.username && !u.password
+      ? esc(u.href)
+      : "#";
+  } catch {
+    return "#";
+  }
+};
 export const stateLabels = {
   watching: "Watching",
   triggered: "Condition verified",
@@ -13,34 +30,56 @@ export const stateLabels = {
   invalidated: "Invalidated",
   review: "Horizon elapsed",
 };
-export function publicDocument({ articles, article, authorName }) {
+const mark = (symbol) =>
+  `<span class="journal-asset"><img src="https://assets.parqet.com/logos/symbol/${encodeURIComponent(symbol)}?format=png&amp;size=128" alt="" loading="lazy"><span>${esc(symbol)}</span></span>`;
+export function publicDocument({ articles = [], article, authorName }) {
   const title = article
     ? `${article.title} · ${authorName}`
     : `${authorName} · Reentry Journal`;
   const cards = (items) =>
     items
       .map(
-        (a) =>
-          `<a class="journal-public-card" href="/journal/${esc(a.slug)}"><span class="eyebrow">${esc(a.symbol)} <span> / ${new Date(a.publishedAt).toLocaleDateString("en-GB")}</span></span><h2>${esc(a.title)}</h2><p>${esc(a.excerpt)}</p><span class="link">Read thesis ↗</span></a>`,
+        (a, i) =>
+          `<a class="journal-entry-row" href="/journal/${esc(a.slug)}"><span class="journal-entry-number">${String(i + 1).padStart(2, "0")}</span><div class="journal-entry-copy"><div class="journal-entry-meta">${mark(a.symbol)}<time>${date(a.publishedAt)}</time></div><h2>${esc(a.title)}</h2><p>${esc(a.excerpt)}</p></div><span class="journal-entry-arrow" aria-hidden="true">↗</span></a>`,
       )
       .join("");
-  const branch = (b) =>
-    `<section class="scenario-node"><span class="node-status">${esc(stateLabels[b.status.status])}</span><h3>${esc(b.title)}</h3><div class="node-range">${esc(b.low)}<span>–</span>${esc(b.high)} <small>${esc(b.currency)}</small></div><p>${esc(b.condition)}</p><div class="small">${b.horizonDays} days · conditional range</div>${b.passage ? `<blockquote>${esc(b.passage)}</blockquote>` : ""}<details><summary>Evidence & invalidation</summary><p>${esc(b.invalidation)}</p>${
-      article.scenario.observations
-        .filter((o) => b.status.evidence.includes(o.id))
-        .map(
-          (o) =>
-            `<p><a href="${esc(o.url)}" rel="noopener noreferrer" target="_blank">${esc(o.source)}</a><br><small>${new Date(o.occurredAt).toISOString().slice(0, 16)} UTC · ${o.kind === "price" ? esc(o.value) + " " + esc(o.currency) : "Author-verified event"}</small></p>`,
-        )
-        .join("") || "<p>No qualifying evidence yet.</p>"
-    }</details></section>`;
-  const content = article
-    ? `<a class="link" href="/journal">← All writing</a><article class="public-reading"><div class="journal-byline"><span class="concept-tag">${esc(article.author)} / ${esc(article.symbol)}</span><span>${new Date(article.publishedAt).toLocaleDateString("en-GB")} · Edition ${article.revision}</span></div><h1>${esc(article.title)}</h1><div class="article-body">${article.body
-        .split(/\n\s*\n/)
-        .map((p) => `<p>${esc(p).replaceAll("\n", "<br>")}</p>`)
-        .join(
-          "",
-        )}</div>${article.scenario.branches.length ? `<div class="section-line"><h2>The scenario map</h2><span class="small">Conditions → possible outcomes</span></div><div class="scenario-branches ${article.scenario.branches.length > 3 ? "many-branches" : ""}" style="--branches:${Math.min(3, article.scenario.branches.length)}">${article.scenario.branches.map(branch).join("")}</div><p class="small">Price samples are observed periodically and may miss intraday touches. Events are verified by the author. A price touch does not establish causality.</p>` : ""}${article.sources.length ? `<details class="public-sources"><summary>Sources · ${article.sources.length}</summary>${article.sources.map((s) => `<p><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)} ↗</a></p>`).join("")}</details>` : ""}<nav class="edition-nav" aria-label="Published editions">${article.editions.map((e) => `<a href="/journal/${esc(article.slug)}?v=${e.revision}" ${e.revision === article.revision ? 'aria-current="page"' : ""}>Edition ${e.revision}</a>`).join("")}</nav></article>`
-    : `<section class="public-heading"><span class="eyebrow">THE PUBLIC JOURNAL / ${esc(authorName)}</span><h1>Conviction.<br><em>With a record.</em></h1><p>Ideas, conditions, and what happened next.</p></section><div class="public-articles">${cards(articles) || '<div class="research-empty"><span class="orbit-mark">↗</span><h2>The first thesis is ahead.</h2><p>Published writing and its scenario maps will appear here.</p></div>'}</div>`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>${esc(title)}</title><meta name="description" content="${esc(article?.body.slice(0, 160) || "RNT’s public research journal and observable asset scenarios.")}"/><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"></head><body><div class="shell public-shell"><header class="app-header"><a class="brand" href="/journal"><span>↗ reentry</span></a><span class="small">JOURNAL / ${esc(authorName)}</span><a class="secondary small-button" href="/">Your workspace ↗</a></header><main>${content}<footer class="foot"><span>${esc(authorName)} · Reentry</span><span>Public thinking. Private workspaces.</span></footer></main></div></body></html>`;
+  let content;
+  if (article) {
+    const paragraphs = article.body.split(/\n\s*\n/).filter((p) => p.trim());
+    const sections = paragraphs.map((p, i) => ({
+      id: `passage-${i + 1}`,
+      text: p,
+      heading: /^#{1,3}\s/.test(p),
+      label: p
+        .replace(/^#{1,3}\s/, "")
+        .split(/\s+/)
+        .slice(0, 6)
+        .join(" "),
+    }));
+    const passageIndex = (passage) =>
+      Math.max(
+        0,
+        paragraphs.findIndex((p) => p.includes(passage) || passage.includes(p)),
+      );
+    const minutes = Math.max(
+      1,
+      Math.ceil(article.body.split(/\s+/).length / 220),
+    );
+    const branch = (b, i) =>
+      `<section class="journal-scenario" id="scenario-${i + 1}"><div class="journal-scenario-top"><span>${String(i + 1).padStart(2, "0")}</span><span class="state-${esc(b.status.status)}">${esc(stateLabels[b.status.status])}</span></div><h3>${esc(b.title)}</h3><div class="journal-scenario-range">${Number(b.low).toLocaleString("en-GB")}<span>—</span>${Number(b.high).toLocaleString("en-GB")}<small>${esc(b.currency)}</small></div><p>${esc(b.condition)}</p><div class="journal-scenario-horizon">${b.horizonDays}d</div>${b.passage ? `<a class="journal-passage-link" href="#passage-${passageIndex(b.passage) + 1}"><blockquote>${esc(b.passage)}</blockquote><span>↖ Passage</span></a>` : ""}<details><summary>Evidence</summary><div class="journal-invalidation"><span>Invalidation</span><p>${esc(b.invalidation)}</p></div>${
+        article.scenario.observations
+          .filter((o) => b.status.evidence.includes(o.id))
+          .map(
+            (o) =>
+              `<a class="journal-evidence" href="${external(o.url)}" rel="noopener noreferrer" target="_blank"><span>${esc(o.source)}</span><time>${date(o.occurredAt)}</time><b>${o.kind === "price" ? esc(o.value) + " " + esc(o.currency) : "Verified event"} ↗</b></a>`,
+          )
+          .join("") ||
+        '<span class="journal-evidence-empty">0 observations</span>'
+      }</details></section>`;
+    const toc = sections.filter((s) => s.heading);
+    content = `<div class="journal-reading-tools"><a href="/journal">← Journal</a><div><button type="button" data-reading-focus aria-pressed="false">Focus</button><button type="button" data-reading-share>Share ↗</button></div></div><article class="journal-story"><header class="journal-story-head"><div class="journal-story-meta">${mark(article.symbol)}<span>${esc(article.author)}</span><time>${date(article.publishedAt)}</time><span>${minutes} min</span></div><h1>${esc(article.title)}</h1><div class="journal-story-rule"><span>Edition ${article.revision}</span><span>${article.scenario.branches.length ? `${article.scenario.branches.length} scenarios` : ""}</span></div></header><div class="journal-reading-layout"><nav class="journal-reading-rail" aria-label="Article sections">${toc.map((s) => `<a href="#${s.id}">${esc(s.label)}</a>`).join("")}${article.scenario.branches.length ? '<a href="#scenario-map">Scenario map ↘</a>' : ""}${article.sources.length ? '<a href="#article-sources">Sources ↘</a>' : ""}</nav><div class="journal-prose" id="article-prose">${sections.map((s) => (s.heading ? `<h2 id="${s.id}">${esc(s.text.replace(/^#{1,3}\s/, ""))}</h2>` : `<p id="${s.id}">${esc(s.text).replaceAll("\n", "<br>")}</p>`)).join("")}</div></div>${article.scenario.branches.length ? `<section class="journal-map" id="scenario-map"><div class="journal-section-heading"><h2>The scenario map</h2><span>${article.scenario.branches.length.toString().padStart(2, "0")}</span></div><div class="journal-scenarios">${article.scenario.branches.map(branch).join("")}</div></section>` : ""}${article.sources.length ? `<section class="journal-source-list" id="article-sources"><div class="journal-section-heading"><h2>Sources</h2><span>${article.sources.length.toString().padStart(2, "0")}</span></div>${article.sources.map((s, i) => `<a href="${external(s.url)}" target="_blank" rel="noopener noreferrer"><span>${String(i + 1).padStart(2, "0")}</span><b>${esc(s.title)}</b><span>↗</span></a>`).join("")}</section>` : ""}<nav class="journal-editions" aria-label="Published editions"><span>Editions</span>${article.editions.map((e) => `<a href="/journal/${esc(article.slug)}?v=${e.revision}" ${e.revision === article.revision ? 'aria-current="page"' : ""}>${String(e.revision).padStart(2, "0")}<time>${date(e.published_at)}</time></a>`).join("")}</nav><a class="journal-return" href="/journal"><span>More from ${esc(authorName)}</span><b>Back to the journal ↗</b></a></article>`;
+  } else {
+    content = `<section class="journal-cover"><div class="journal-cover-meta"><span>THE PUBLIC JOURNAL / ${esc(authorName)}</span><span>${String(articles.length).padStart(2, "0")} essays</span></div><h1>Independent<br><em>conviction.</em></h1><div class="journal-cover-signature"><span>${esc(authorName)}</span><span>Research & perspectives</span></div></section><div class="journal-index">${cards(articles) || '<div class="journal-index-empty"><span>01</span><h2>Coming next.</h2></div>'}</div>`;
+  }
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>${esc(title)}</title><meta name="description" content="${esc(article?.body.slice(0, 160) || `${authorName} · Research & perspectives`)}"><meta property="og:title" content="${esc(title)}"><meta property="og:type" content="${article ? "article" : "website"}"><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"><script type="module" src="/journal.js"></script></head><body class="journal-experience"><div class="journal-progress" aria-hidden="true"></div><div class="shell journal-shell"><header class="journal-masthead"><a class="brand" href="/journal">↗ reentry<span> / ${esc(authorName)}</span></a><a href="/">Workspace ↗</a></header><main>${content}<footer class="journal-footer"><a href="/journal">${esc(authorName)} · Reentry</a><a href="#">↑ Top</a></footer></main></div><span class="sr-only" role="status" id="journal-announcement"></span></body></html>`;
 }

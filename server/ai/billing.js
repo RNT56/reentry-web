@@ -1,5 +1,10 @@
 import { id, fail, transaction, audit } from "../platform/util.js";
-import { priceFor, reservationFor, costFor } from "./catalog.js";
+import {
+  priceFor,
+  reservationFor,
+  costFor,
+  effectiveModel,
+} from "./catalog.js";
 export const monthStart = (now = Date.now()) => {
   const d = new Date(now);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
@@ -21,7 +26,10 @@ export function preferences(db, user) {
   db.prepare(
     "INSERT OR IGNORE INTO ai_preferences(user_id,updated_at) VALUES(?,?)",
   ).run(user, Date.now());
-  return db.prepare("SELECT * FROM ai_preferences WHERE user_id=?").get(user);
+  const stored = db
+    .prepare("SELECT * FROM ai_preferences WHERE user_id=?")
+    .get(user);
+  return { ...stored, model: effectiveModel(stored.provider, stored.model) };
 }
 export function reserve(db, job, prompt, now = Date.now()) {
   return transaction(db, () => {

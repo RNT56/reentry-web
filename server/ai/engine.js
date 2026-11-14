@@ -1,3 +1,4 @@
+import { effectiveModel } from "./catalog.js";
 import { id, fail, transaction } from "../platform/util.js";
 import { preferences, reserve, settle, release } from "./billing.js";
 import { makePrompt, validateResult, PROMPT_VERSION } from "./contract.js";
@@ -10,6 +11,7 @@ export function createEngine({
   connectors,
   market,
   enabled = false,
+  paused = () => false,
 }) {
   let timer,
     running = null,
@@ -25,6 +27,7 @@ export function createEngine({
       )
       .get(user, requestKey);
     if (existing) return existing;
+    if (paused()) throw fail("AI is paused by the owner.", 503);
     const p = preferences(db, user);
     if (!enabled)
       throw fail("Background research is not enabled on this server.", 503);
@@ -103,6 +106,15 @@ export function createEngine({
     aborter = new AbortController();
     let dispatched = false;
     try {
+      if (paused()) throw fail("AI is paused by the owner.", 503);
+      const resolvedModel = effectiveModel(job.provider, job.model);
+      if (resolvedModel !== job.model) {
+        db.prepare("UPDATE ai_jobs SET model=? WHERE id=?").run(
+          resolvedModel,
+          job.id,
+        );
+        job.model = resolvedModel;
+      }
       const input = JSON.parse(job.input),
         collected = await collectSources(
           db,
@@ -161,6 +173,7 @@ export function createEngine({
         )
         .get(job.user_id, job.provider);
       if (!credential) throw fail("Provider key was removed.", 409);
+      if (paused()) throw fail("AI is paused by the owner.", 503);
       const key = vault.open(job.user_id, job.provider, credential.encrypted);
       const { pricing } = reserve(db, job, prompt);
       db.prepare("UPDATE ai_jobs SET dispatched_at=? WHERE id=?").run(
@@ -237,41 +250,46 @@ export function createEngine({
     if (stopped || running) return;
     running = (async () => {
       recover();
-      const now = Date.now();
-      const due = db
-        .prepare(
-          "SELECT a.* FROM research_assets a JOIN ai_preferences p ON a.user_id=p.user_id WHERE a.automatic=1 AND a.next_run<=? AND p.enabled=1 ORDER BY a.next_run LIMIT 8",
-        )
-        .all(now);
-      for (const a of due) {
-        let next = now + a.interval_hours * 3600000;
-        try {
-          enqueue(a.user_id, {
-            symbol: a.symbol,
-            requestKey: `auto:${a.symbol}:${Math.floor(now / (a.interval_hours * 3600000))}`,
-          });
-        } catch (error) {
-          // A full owner queue is transient; do not silently skip an entire scheduled interval.
-          if (error.statusCode === 429 && error.message.startsWith("Two jobs"))
-            next = now + 60000;
-        }
-        db.prepare(
-          "UPDATE research_assets SET next_run=? WHERE user_id=? AND symbol=?",
-        ).run(next, a.user_id, a.symbol);
-      }
-      const job = transaction(db, () => {
-        const row = db
+      if (!paused()) {
+        const now = Date.now();
+        const due = db
           .prepare(
-            "SELECT * FROM ai_jobs WHERE status='queued' ORDER BY created_at LIMIT 1",
+            "SELECT a.* FROM research_assets a JOIN ai_preferences p ON a.user_id=p.user_id WHERE a.automatic=1 AND a.next_run<=? AND p.enabled=1 ORDER BY a.next_run LIMIT 8",
           )
-          .get();
-        if (row)
+          .all(now);
+        for (const a of due) {
+          let next = now + a.interval_hours * 3600000;
+          try {
+            enqueue(a.user_id, {
+              symbol: a.symbol,
+              requestKey: `auto:${a.symbol}:${Math.floor(now / (a.interval_hours * 3600000))}`,
+            });
+          } catch (error) {
+            // A full owner queue is transient; do not silently skip an entire scheduled interval.
+            if (
+              error.statusCode === 429 &&
+              error.message.startsWith("Two jobs")
+            )
+              next = now + 60000;
+          }
           db.prepare(
-            "UPDATE ai_jobs SET status='running',started_at=?,lease_until=? WHERE id=? AND status='queued'",
-          ).run(now, now + 300000, row.id);
-        return row;
-      });
-      if (job) await execute(job);
+            "UPDATE research_assets SET next_run=? WHERE user_id=? AND symbol=?",
+          ).run(next, a.user_id, a.symbol);
+        }
+        const job = transaction(db, () => {
+          const row = db
+            .prepare(
+              "SELECT * FROM ai_jobs WHERE status='queued' ORDER BY created_at LIMIT 1",
+            )
+            .get();
+          if (row)
+            db.prepare(
+              "UPDATE ai_jobs SET status='running',started_at=?,lease_until=? WHERE id=? AND status='queued'",
+            ).run(now, now + 300000, row.id);
+          return row;
+        });
+        if (job) await execute(job);
+      }
       if (stopped) return;
       for (const row of db
         .prepare(

@@ -1,3 +1,4 @@
+import { createStrategyEvidence } from "../strategies/evidence.js";
 import { createRequestCache } from "../market/cache.js";
 import { createRequestPacer } from "../market/pacing.js";
 import { safeURL } from "../platform/util.js";
@@ -15,6 +16,7 @@ const link = (v) => {
 };
 export function createConnectors({
   market,
+  macro,
   fetcher = fetch,
   secAgent = process.env.SEC_USER_AGENT || "",
 } = {}) {
@@ -245,6 +247,17 @@ export function createConnectors({
       },
     },
   ];
+  definitions.push({
+    id: "strategies",
+    label: "Price structure",
+    collect: async (asset) => [await createStrategyEvidence(market)(asset)],
+  });
+  if (macro)
+    definitions.push({
+      id: "fred",
+      label: "FRED",
+      collect: async () => (await macro.getMacroEvidence()).slice(0, 5),
+    });
   return {
     status: () =>
       definitions.map((d) => ({

@@ -3,8 +3,21 @@ import {
   validateHistoryInput,
 } from "../../src/domain/market-history.js";
 import { currencyUnit } from "../../src/domain/currency.js";
-export function historyPath(symbol, range = "1mo") {
+export function historyPath(symbol, range = "1mo", padded = false) {
   validateHistoryInput(symbol, range);
+  if (padded) {
+    const seconds = {
+      "1d": 86400,
+      "1wk": 7 * 86400,
+      "1mo": 32 * 86400,
+      "3mo": 94 * 86400,
+      "1y": 367 * 86400,
+      "5y": 1830 * 86400,
+    };
+    const end = Math.floor(Date.now() / 1000),
+      buffer = ["1d", "1wk"].includes(range) ? 2 * 86400 : 15 * 86400;
+    return `/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${end - seconds[range] - buffer}&period2=${end}&interval=${historyRanges[range].interval}&includePrePost=false`;
+  }
   if (range === "1wk") {
     const end = Math.floor(Date.now() / 1000);
     return `/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${end - 7 * 86400}&period2=${end}&interval=15m&includePrePost=false`;

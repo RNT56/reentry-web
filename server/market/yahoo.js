@@ -75,9 +75,9 @@ export function yahooProvider({ fetcher = fetch } = {}) {
         assetType: m.instrumentType,
       };
     },
-    async history(symbol, range) {
+    async history(symbol, range, padded = false) {
       return normalizeHistory(
-        await get(historyPath(symbol, range)),
+        await get(historyPath(symbol, range, padded)),
         symbol,
         range,
       );

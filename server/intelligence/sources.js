@@ -42,12 +42,24 @@ export async function collectSources(db, connectors, user, asset) {
       ...notes,
       ...fresh.sort(
         (a, b) =>
-          (({ fundamentals: 0, filing: 1, quote: 2, headline: 3, coverage: 4 })[
-            a.kind
-          ] ?? 5) -
-          ({ fundamentals: 0, filing: 1, quote: 2, headline: 3, coverage: 4 }[
-            b.kind
-          ] ?? 5),
+          (({
+            fundamentals: 0,
+            filing: 1,
+            quote: 2,
+            technical: 3,
+            macro: 4,
+            headline: 5,
+            coverage: 6,
+          })[a.kind] ?? 5) -
+          ({
+            fundamentals: 0,
+            filing: 1,
+            quote: 2,
+            technical: 3,
+            macro: 4,
+            headline: 5,
+            coverage: 6,
+          }[b.kind] ?? 5),
       ),
     ]
       .slice(0, 18)
