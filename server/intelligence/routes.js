@@ -10,6 +10,10 @@ import {
 } from "../platform/util.js";
 import { putSource } from "./sources.js";
 import { researchAsset } from "./portfolio-sources.js";
+import {
+  hiddenResearchSymbols,
+  researchHidden,
+} from "./research-visibility.js";
 import { createSet, ownedSet, setView, observePrice } from "./scenarios.js";
 import { validateBranches } from "../ai/contract.js";
 export function registerIntelligenceRoutes(
@@ -24,6 +28,7 @@ export function registerIntelligenceRoutes(
   app.get("/api/research/assets", auth, async (req) => {
     const user = req.auth.user_id;
     const held = portfolioSources.sync(user);
+    const hidden = hiddenResearchSymbols(db, user);
     const assets = new Map(
       held.map((asset) => [
         asset.symbol,
@@ -43,6 +48,7 @@ export function registerIntelligenceRoutes(
     }
     return {
       assets: [...assets.values()]
+        .filter((asset) => !hidden.has(asset.symbol))
         .sort((a, b) => a.symbol.localeCompare(b.symbol))
         .map((asset) => ({
           ...asset,
@@ -60,9 +66,11 @@ export function registerIntelligenceRoutes(
       .prepare("SELECT * FROM research_assets WHERE user_id=? AND symbol=?")
       .get(user, s);
     if (
-      !existing &&
+      (!existing || researchHidden(db, user, s)) &&
       db
-        .prepare("SELECT COUNT(*) AS n FROM research_assets WHERE user_id=?")
+        .prepare(
+          "SELECT COUNT(*) AS n FROM research_assets a WHERE a.user_id=? AND NOT EXISTS(SELECT 1 FROM research_hidden_assets h WHERE h.user_id=a.user_id AND h.symbol=a.symbol)",
+        )
         .get(user).n >= 50
     )
       throw fail("Research lists support fifty assets.");
@@ -88,32 +96,45 @@ export function registerIntelligenceRoutes(
       metadata.isin = b.isin;
     }
 
-    db.prepare(
-      "INSERT INTO research_assets(user_id,symbol,name,automatic,interval_hours,next_run) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,symbol) DO UPDATE SET name=excluded.name,automatic=excluded.automatic,interval_hours=excluded.interval_hours,next_run=excluded.next_run",
-    ).run(
-      user,
-      s,
-      name,
-      Number(b.automatic),
-      hours,
-      Date.now() + hours * 3600000,
-    );
-    db.prepare(
-      "UPDATE research_assets SET metadata=? WHERE user_id=? AND symbol=?",
-    ).run(JSON.stringify(metadata), user, s);
+    transaction(db, () => {
+      db.prepare(
+        "INSERT INTO research_assets(user_id,symbol,name,automatic,interval_hours,next_run) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,symbol) DO UPDATE SET name=excluded.name,automatic=excluded.automatic,interval_hours=excluded.interval_hours,next_run=excluded.next_run",
+      ).run(
+        user,
+        s,
+        name,
+        Number(b.automatic),
+        hours,
+        Date.now() + hours * 3600000,
+      );
+      db.prepare(
+        "UPDATE research_assets SET metadata=? WHERE user_id=? AND symbol=?",
+      ).run(JSON.stringify(metadata), user, s);
+      db.prepare(
+        "DELETE FROM research_hidden_assets WHERE user_id=? AND symbol=?",
+      ).run(user, s);
+    });
     return { ok: true };
   });
   app.delete("/api/research/assets/:symbol", auth, async (req) => {
     const s = symbol(req.params.symbol),
       user = req.auth.user_id;
-    db.prepare("DELETE FROM research_assets WHERE user_id=? AND symbol=?").run(
-      user,
-      s,
-    );
-    db.prepare(
-      "UPDATE ai_jobs SET status='cancelled',finished_at=? WHERE user_id=? AND symbol=? AND status='queued'",
-    ).run(Date.now(), user, s);
-    return { ok: true };
+    const now = Date.now();
+    transaction(db, () => {
+      db.prepare(
+        "INSERT OR IGNORE INTO research_hidden_assets(user_id,symbol,hidden_at) VALUES(?,?,?)",
+      ).run(user, s, now);
+      db.prepare(
+        "UPDATE research_assets SET automatic=0,next_run=0 WHERE user_id=? AND symbol=?",
+      ).run(user, s);
+      db.prepare(
+        "UPDATE source_monitors SET enabled=0,updated_at=?,next_check=0 WHERE user_id=? AND symbol=?",
+      ).run(now, user, s);
+      db.prepare(
+        "UPDATE ai_jobs SET status='cancelled',finished_at=? WHERE user_id=? AND symbol=? AND status='queued'",
+      ).run(now, user, s);
+    });
+    return { ok: true, hidden: true, symbol: s };
   });
   app.post("/api/research/collect", limited, async (req) => {
     const asset = researchAsset(db, req.auth.user_id, symbol(req.body?.symbol));
@@ -334,6 +355,7 @@ export function registerIntelligenceRoutes(
     const user = req.auth.user_id,
       tables = [
         "research_assets",
+        "research_hidden_assets",
         "research_sources",
         "source_monitors",
         "source_monitor_reviews",

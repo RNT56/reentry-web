@@ -280,18 +280,7 @@ export function createPurchases(model, services) {
     };
     $("#remove").onclick = () => {
       close();
-      modal(
-        `<h2>Remove this holding?</h2><p class="sub">${esc(h.name)} and its purchase entries will be removed. Recorded sales stay in your buyback plans.</p><div class="actions"><button class="secondary" id="no">Keep holding</button><button class="danger" id="yes">Remove holding</button></div>`,
-      );
-      $("#no").onclick = close;
-      $("#yes").onclick = () => {
-        model.state.holdings = model.state.holdings.filter(
-          (a) => a.id !== h.id,
-        );
-        save();
-        close();
-        render();
-      };
+      removeHolding(h.id);
     };
     document.querySelectorAll("[data-edit]").forEach(
       (b) =>
@@ -329,6 +318,36 @@ export function createPurchases(model, services) {
         }),
     );
   }
+  function removeHolding(id) {
+    const h = model.state.holdings.find((asset) => asset.id === id);
+    if (!h) return;
+    modal(
+      `<h2>Remove ${esc(h.symbol)}?</h2><p class="sub">${esc(h.name)} · ${esc(h.broker)}<br>Purchase entries will be removed. Recorded sales stay in your buyback plans.</p><div class="actions"><button class="secondary" id="keep-holding">Keep holding</button><button class="danger" id="confirm-remove-holding">Remove holding</button></div>`,
+    );
+    $("#keep-holding").onclick = close;
+    $("#confirm-remove-holding").onclick = () => {
+      const index = model.state.holdings.findIndex((asset) => asset.id === id);
+      if (index < 0) return close();
+      model.state.holdings = model.state.holdings.filter(
+        (asset) => asset.id !== id,
+      );
+      delete model.scenario[id];
+      // Removing another depot's holding must not move the active planner.
+      if (model.selected === id)
+        model.selected =
+          model.state.holdings[Math.min(index, model.state.holdings.length - 1)]
+            ?.id || null;
+      save();
+      close();
+      navigate("portfolio", model.selected);
+      document
+        .querySelector(`[data-holding="${CSS.escape(model.selected || "")}"]`)
+        ?.focus({ preventScroll: true });
+      if (!model.state.holdings.length)
+        $("#empty-add")?.focus({ preventScroll: true });
+    };
+    $("#keep-holding").focus();
+  }
   function assetSettings(h) {
     modal(
       `<h2>Asset settings</h2><form id="asset-settings"><div class="field"><label>Asset type</label><select name="assetType">${["EQUITY", "ETF", "MUTUALFUND", "CRYPTOCURRENCY", "INDEX", "OTHER"].map((t) => `<option value="${t}" ${(h.assetType || "EQUITY") === t ? "selected" : ""}>${assetTypeLabel(t)}</option>`).join("")}</select></div><div class="field"><label>ISIN (optional)</label><input name="isin" value="${esc(h.isin || "")}" pattern="[A-Z]{2}[A-Z0-9]{9}[0-9]" maxlength="12" autocapitalize="characters"></div><div class="field"><label>Effective tax rate (%)</label><input name="taxRate" type="number" min="0" max="100" step="any" value="${h.taxRate ?? model.state.settings.rate}" required></div><div class="actions"><button class="primary">Save settings</button></div></form>`,
@@ -347,5 +366,5 @@ export function createPurchases(model, services) {
     };
   }
 
-  return { purchase, manage, demo };
+  return { purchase, manage, demo, removeHolding };
 }

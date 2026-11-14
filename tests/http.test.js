@@ -3,11 +3,14 @@ import assert from "node:assert/strict";
 import { request } from "../src/shared/http.js";
 
 function reply(t, status, data) {
-  t.mock.method(globalThis, "fetch", async () =>
-    new Response(JSON.stringify(data), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    }),
+  t.mock.method(
+    globalThis,
+    "fetch",
+    async () =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
   );
 }
 
@@ -59,4 +62,19 @@ test("HTTP requests return successful payloads unchanged", async (t) => {
     saved: true,
     revision: 2,
   });
+});
+
+test("bodyless deletion preserves CSRF header without declaring an empty JSON body", async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (_path, options) => {
+    calls.push(options);
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  });
+  await request("/api/research/assets/INTC", "DELETE");
+  assert.equal(calls[0].headers["X-Reentry-Request"], "1");
+  assert.equal(calls[0].headers["Content-Type"], undefined);
+  assert.equal(calls[0].body, undefined);
+  await request("/api/research/assets", "PUT", { symbol: "INTC" });
+  assert.equal(calls[1].headers["Content-Type"], "application/json");
+  assert.equal(JSON.parse(calls[1].body).symbol, "INTC");
 });

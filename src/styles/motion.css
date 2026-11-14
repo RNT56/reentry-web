@@ -281,3 +281,10 @@
     min-height: 555px;
   }
 }
+
+/* The shared observer animates content leaves; container transforms would
+   establish a new frame for sticky controls and cause nested entrance motion. */
+html[data-surface-motion="active"]
+  :is(.planner, .settings-grid, .history-item, .welcome) {
+  animation: none;
+}

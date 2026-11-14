@@ -27,6 +27,8 @@ Every source-monitor job uses the shared persisted AI queue and cost ledger. The
 
 Valid provider usage is recorded even if the response is malformed or fails evidence validation. Ambiguous dispatched calls retain their reservation. The scheduler does not automatically repeat a failed paid request for the same snapshot. Previously completed reviews remain available when a later review fails, a key is removed, or the budget is exhausted.
 
+Removing an asset with its Research × persists an owner-specific visibility preference, including for portfolio-derived assets. It pauses both paid schedules, cancels queued asset jobs, and blocks undispatched paid calls. Already dispatched requests retain normal usage reconciliation. Holdings, saved chart analyses, sources, scenarios, and completed jobs remain intact; free source collection continues for assets still held. Undo or Find an asset restores visibility without re-enabling either paid schedule. Portfolio × uses a separate confirmation before removing that holding's purchase entries.
+
 Cost values are provider list-price estimates. The ledger cannot observe calls made outside Reentry or reconcile provider-specific credits automatically.
 
 ## Provider contract

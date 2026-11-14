@@ -62,7 +62,13 @@ export function mountIntelligence(root, { model, navigate }) {
     poll,
     searchTimer,
     searchEpoch = 0,
-    navigationEpoch = 0;
+    navigationEpoch = 0,
+    loadGeneration = 0,
+    assetListGeneration = 0,
+    assetMutation = 0;
+  const hiddenAssets = new Set(),
+    removingAssets = new Set();
+  const ownerId = model.currentUser.id || model.currentUser.username;
   root.innerHTML = loading();
   const active = () => assets.find((a) => a.symbol === memory.symbol);
   const live = () => alive && root.isConnected;
@@ -71,7 +77,7 @@ export function mountIntelligence(root, { model, navigate }) {
       toast("Save the article draft before leaving the studio.");
       return false;
     }
-    return true;
+    return chart?.canLeave?.() !== false;
   };
   function destroyChildren(keepChart = false) {
     strategies?.destroy();
@@ -90,7 +96,167 @@ export function mountIntelligence(root, { model, navigate }) {
     studio?.destroy();
     studio = null;
   }
+  function assetChips() {
+    return assets
+      .map(
+        (a) =>
+          `<span class="research-asset-item ${a.symbol === memory.symbol ? "is-selected" : ""}"><button type="button" class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}" aria-current="${a.symbol === memory.symbol ? "true" : "false"}" ${removingAssets.has(a.symbol) ? "disabled" : ""}>${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button><button type="button" class="research-asset-remove" data-remove-research="${esc(a.symbol)}" aria-label="Remove ${esc(a.symbol)} from research" title="Remove from research" ${removingAssets.has(a.symbol) ? 'disabled aria-busy="true"' : ""}><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="m5 5 6 6m0-6-6 6"/></svg></button></span>`,
+      )
+      .join("");
+  }
+  function patchAssetChips(focusSymbol = null) {
+    const rail = root.querySelector(".research-assets");
+    if (!rail) return;
+    const scroll = rail.scrollLeft;
+    rail.innerHTML = assetChips();
+    rail.scrollLeft = scroll;
+    bindLogos();
+    if (focusSymbol)
+      rail
+        .querySelector(`[data-research-asset="${CSS.escape(focusSymbol)}"]`)
+        ?.focus({ preventScroll: true });
+  }
+  function clearAssetSelection(symbol) {
+    memory.symbol = symbol;
+    memory.jobId =
+      memory.aiJobId =
+      memory.aiEventKey =
+      memory.monitorJobId =
+      memory.monitorChange =
+      memory.focusSetId =
+        null;
+    coverage = [];
+    sources = [];
+    collection = null;
+    job = null;
+    sourceSignals = null;
+    sourceConnections = [];
+  }
+  async function refreshAssetList() {
+    const generation = ++assetListGeneration,
+      mutation = assetMutation;
+    const response = await request("/api/research/assets");
+    if (
+      !live() ||
+      generation !== assetListGeneration ||
+      mutation !== assetMutation
+    )
+      return;
+    assets = response.assets.filter((a) => !hiddenAssets.has(a.symbol));
+    if (
+      !memory.symbol &&
+      assets.length &&
+      ["research", "strategies", "scenarios"].includes(memory.tab)
+    ) {
+      const operation = ++navigationEpoch;
+      clearAssetSelection(assets[0].symbol);
+      await loadAsset();
+      if (live() && operation === navigationEpoch) render();
+    } else patchAssetChips();
+  }
+  const onResearchAssetRestored = (event) => {
+    if (!live() || event.detail?.ownerId !== ownerId) return;
+    hiddenAssets.delete(event.detail.symbol);
+    assetMutation++;
+    refreshAssetList().catch((e) => live() && toast(e.message));
+  };
+  window.addEventListener(
+    "reentry:research-asset-restored",
+    onResearchAssetRestored,
+  );
+  async function removeResearchAsset(symbol) {
+    const removed = assets.find((a) => a.symbol === symbol);
+    if (!removed || removingAssets.has(symbol)) return;
+    const wasActive = memory.symbol === symbol;
+    if (wasActive && !canLeave()) return;
+    if (wasActive) navigationEpoch++;
+    const oldIndex = assets.findIndex((a) => a.symbol === symbol);
+    const hadFocus =
+      root.querySelector(`[data-remove-research="${CSS.escape(symbol)}"]`) ===
+      document.activeElement;
+    removingAssets.add(symbol);
+    assetMutation++;
+    patchAssetChips();
+    try {
+      await request(
+        "/api/research/assets/" + encodeURIComponent(symbol),
+        "DELETE",
+      );
+      if ((model.currentUser?.id || model.currentUser?.username) !== ownerId)
+        return;
+      hiddenAssets.add(symbol);
+      assetMutation++;
+      assets = assets.filter((a) => a.symbol !== symbol);
+      removingAssets.delete(symbol);
+      const nearest =
+        assets[Math.min(oldIndex, assets.length - 1)]?.symbol || null;
+      if (live()) {
+        const focusStillAvailable =
+          hadFocus &&
+          (!root.contains(document.activeElement) ||
+            document.activeElement === document.body);
+        if (memory.symbol === symbol) {
+          const operation = ++navigationEpoch;
+          const assetPage = ["research", "strategies", "scenarios"].includes(
+            memory.tab,
+          );
+          clearAssetSelection(nearest);
+          if (!nearest && assetPage) memory.tab = "research";
+          try {
+            await loadAsset();
+          } catch (e) {
+            if (live()) toast(e.message);
+          }
+          if (live() && operation === navigationEpoch) {
+            if (assetPage) {
+              render();
+              if (nearest) patchAssetChips(nearest);
+              else
+                root
+                  .querySelector("#research-search")
+                  ?.focus({ preventScroll: true });
+            } else patchAssetChips();
+          }
+        } else patchAssetChips(focusStillAvailable ? nearest : null);
+      }
+      toast(symbol + " removed from research", {
+        actionLabel: "Undo",
+        onAction: async () => {
+          if (
+            (model.currentUser?.id || model.currentUser?.username) !== ownerId
+          )
+            throw Error("Sign in to restore this asset.");
+          if (!hiddenAssets.has(symbol)) return;
+          await request(
+            "/api/research/assets/" + encodeURIComponent(symbol),
+            "PUT",
+            {
+              name: removed.name,
+              assetType: removed.assetType,
+              isin: removed.isin,
+              automatic: false,
+              intervalHours: removed.interval_hours || 24,
+            },
+          );
+          hiddenAssets.delete(symbol);
+          window.dispatchEvent(
+            new CustomEvent("reentry:research-asset-restored", {
+              detail: { ownerId, symbol },
+            }),
+          );
+        },
+      });
+    } catch (e) {
+      if (live()) {
+        removingAssets.delete(symbol);
+        patchAssetChips();
+        toast(e.message);
+      }
+    }
+  }
   async function load() {
+    const generation = ++loadGeneration,
+      mutation = assetMutation;
     const data = await Promise.all([
       request("/api/intelligence"),
       request("/api/research/assets"),
@@ -98,9 +264,10 @@ export function mountIntelligence(root, { model, navigate }) {
       request("/api/scenarios"),
       request("/api/public/journal"),
     ]);
-    if (!live()) return;
+    if (!live() || generation !== loadGeneration || mutation !== assetMutation)
+      return;
     [info] = data;
-    assets = data[1].assets;
+    assets = data[1].assets.filter((a) => !hiddenAssets.has(a.symbol));
     jobs = data[2].jobs.filter((j) =>
       ["research", "map-article"].includes(j.kind),
     );
@@ -365,7 +532,7 @@ export function mountIntelligence(root, { model, navigate }) {
       )
       .join(
         "",
-      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assets.map((a) => `<button class="asset-chip ${a.symbol === memory.symbol ? "selected" : ""}" data-research-asset="${esc(a.symbol)}">${monogram(a)}<span>${esc(a.symbol)}</span>${a.automatic ? '<i class="auto-dot"></i>' : ""}</button>`).join("")}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button>${active() && !active().inPortfolio && memory.tab === "research" ? '<button class="link muted" data-remove-asset>Remove from research</button>' : ""}</div>`;
+      )}</nav></div><div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assetChips()}</div><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="＋ Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", '<button class="link" data-focus-search>Find asset ↗</button>')) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ↓</button></div>`;
     if (memory.tab === "strategies" && active())
       strategies = mountStrategies(root.querySelector("#strategy-workspace"), {
         symbol: memory.symbol,
@@ -722,6 +889,10 @@ export function mountIntelligence(root, { model, navigate }) {
     }
     if (b.hasAttribute("data-focus-search"))
       root.querySelector("#research-search").focus();
+    if (b.dataset.removeResearch) {
+      removeResearchAsset(b.dataset.removeResearch);
+      return;
+    }
     if (b.dataset.addAsset)
       action(b, async () => {
         const operation = ++navigationEpoch;
@@ -736,6 +907,8 @@ export function mountIntelligence(root, { model, navigate }) {
             intervalHours: 24,
           },
         );
+        hiddenAssets.delete(b.dataset.addAsset);
+        assetMutation++;
         if (!live() || operation !== navigationEpoch) return;
         memory.symbol = b.dataset.addAsset;
         memory.jobId = null;
@@ -854,7 +1027,11 @@ export function mountIntelligence(root, { model, navigate }) {
               intervalHours: 24,
             },
           );
-          assets = (await request("/api/research/assets")).assets;
+          hiddenAssets.delete(selectedSymbol);
+          assetMutation++;
+          const response = await request("/api/research/assets");
+          if (!live() || operation !== navigationEpoch) return;
+          assets = response.assets.filter((a) => !hiddenAssets.has(a.symbol));
         }
         if (!live() || operation !== navigationEpoch) return;
         memory.symbol = selectedSymbol;
@@ -923,15 +1100,6 @@ export function mountIntelligence(root, { model, navigate }) {
         memory.tab = "studio";
         render();
         await studio.apply(mapped);
-      });
-    if (b.hasAttribute("data-remove-asset"))
-      action(b, async () => {
-        await request(
-          "/api/research/assets/" + encodeURIComponent(memory.symbol),
-          "DELETE",
-        );
-        await load();
-        toast("Removed from automation. Existing research is retained.");
       });
     if (b.hasAttribute("data-export-research"))
       action(b, async () =>
@@ -1004,6 +1172,12 @@ export function mountIntelligence(root, { model, navigate }) {
       clearInterval(poll);
       clearInterval(sourcePoll);
       sourceGeneration++;
+      loadGeneration++;
+      assetListGeneration++;
+      window.removeEventListener(
+        "reentry:research-asset-restored",
+        onResearchAssetRestored,
+      );
       sourceRequest?.abort();
       clearTimeout(searchTimer);
       destroyChildren();

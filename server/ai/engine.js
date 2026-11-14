@@ -16,6 +16,7 @@ import {
   sourceMonitorSchema,
 } from "./source-monitor-contract.js";
 import { researchAsset } from "../intelligence/portfolio-sources.js";
+import { researchHidden } from "../intelligence/research-visibility.js";
 import { createSet, observePrice } from "../intelligence/scenarios.js";
 export function createEngine({
   db,
@@ -398,6 +399,12 @@ export function createEngine({
           throw fail("Scenario limit reached. No AI request was sent.", 409);
         chartBudget(job.user_id, prompt, job.model, input.approvedMaximum);
       }
+      if (
+        researchHidden(db, job.user_id, job.symbol) ||
+        (["research", "chart-analysis"].includes(job.kind) &&
+          !researchAsset(db, job.user_id, job.symbol))
+      )
+        throw fail("Asset was removed from Research before dispatch.", 409);
       if (sourceJob) sourceMonitor.dispatch(job, input, prompt);
       const key = vault.open(job.user_id, job.provider, credential.encrypted);
       const { pricing } = reserve(

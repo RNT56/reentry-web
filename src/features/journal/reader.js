@@ -1,3 +1,7 @@
+import { installSurfaceMotion } from "../../shared/surface-motion.js";
+
+installSurfaceMotion();
+
 const progress = document.querySelector(".journal-progress");
 const prose = document.querySelector(".journal-prose");
 const tools = document.querySelector(".journal-reading-tools");

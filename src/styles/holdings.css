@@ -1,0 +1,48 @@
+.holding-shell {
+  position: relative;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  --holding-inset: 15px;
+  --holding-logo: 37px;
+}
+.holding-remove {
+  position: absolute;
+  top: 3px;
+  left: calc(var(--holding-inset) + var(--holding-logo) - 14px);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #9aafa1;
+}
+.holding-remove .icon {
+  width: 17px;
+  height: 17px;
+  padding: 2px;
+  border-radius: 50%;
+  background: var(--bg, #101512);
+}
+.holding-remove:hover {
+  color: #e9b6ab;
+}
+.holding-remove:focus-visible {
+  outline: 1px solid #a4cf9e80;
+  outline-offset: -2px;
+  color: #e5f1e8;
+}
+@media (max-width: 1100px) {
+  .holding-shell {
+    --holding-inset: 12px;
+  }
+}
+@media (max-width: 850px) {
+  .holding-shell {
+    --holding-logo: 34px;
+  }
+}
+@media (max-width: 600px) {
+  .holding-shell {
+    --holding-inset: 13px;
+  }
+}

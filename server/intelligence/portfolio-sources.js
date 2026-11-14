@@ -1,5 +1,9 @@
 import { collectSources } from "./sources.js";
 import { transaction } from "../platform/util.js";
+import {
+  initializeResearchVisibility,
+  researchHidden,
+} from "./research-visibility.js";
 
 const SIX_HOURS = 6 * 3600000;
 const LEASE = 120000;
@@ -34,6 +38,7 @@ export function portfolioAssets(db, user) {
 }
 
 export function researchAsset(db, user, symbol) {
+  if (researchHidden(db, user, symbol)) return null;
   return (
     db
       .prepare(
@@ -51,6 +56,7 @@ export function createPortfolioSources({
   enabled = false,
   now = Date.now,
 }) {
+  initializeResearchVisibility(db);
   db.exec(`CREATE TABLE IF NOT EXISTS source_refresh_states(
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     symbol TEXT NOT NULL,name TEXT NOT NULL,in_portfolio INTEGER NOT NULL DEFAULT 0,

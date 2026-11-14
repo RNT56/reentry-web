@@ -1,3 +1,5 @@
+import { installSurfaceMotion } from "./surface-motion.js";
+
 /* Values change immediately. Motion acknowledges the change without inventing intermediates. */
 const running = new WeakMap();
 const numeric = new WeakMap();
@@ -60,6 +62,7 @@ export function revealChart(element) {
   }
 }
 export function installMotion(root = document) {
+  installSurfaceMotion(root);
   if (installed) return;
   installed = true;
   const visit = (element, initial = false) => {

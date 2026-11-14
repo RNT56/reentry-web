@@ -91,10 +91,58 @@ export function modal(html) {
 export function close() {
   $("#modal").close();
 }
-let toastTimer;
-export function toast(s) {
-  $("#toast").textContent = s;
-  $("#toast").classList.add("show");
+let toastTimer,
+  toastVersion = 0;
+export function toast(
+  s,
+  { actionLabel, onAction, duration = actionLabel ? 8000 : 4000 } = {},
+) {
+  const node = $("#toast"),
+    version = ++toastVersion;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => $("#toast").classList.remove("show"), 4000);
+  node.replaceChildren();
+  const message = document.createElement("span");
+  message.textContent = String(s);
+  node.append(message);
+  node.classList.toggle("has-action", !!(actionLabel && onAction));
+  const expire = () => {
+    if (version === toastVersion) {
+      node.classList.remove("show");
+      node.inert = true;
+    }
+  };
+  const schedule = () => {
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(expire, duration);
+  };
+  if (actionLabel && onAction) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = actionLabel;
+    button.onclick = async () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      clearTimeout(toastTimer);
+      try {
+        await onAction();
+        if (version === toastVersion) expire();
+      } catch (error) {
+        if (version === toastVersion)
+          toast(error.message || "Could not complete this action.");
+      }
+    };
+    node.append(button);
+    node.onpointerenter = () => clearTimeout(toastTimer);
+    node.onpointerleave = schedule;
+    node.onfocusin = () => clearTimeout(toastTimer);
+    node.onfocusout = schedule;
+  } else
+    node.onpointerenter =
+      node.onpointerleave =
+      node.onfocusin =
+      node.onfocusout =
+        null;
+  node.inert = false;
+  node.classList.add("show");
+  schedule();
 }

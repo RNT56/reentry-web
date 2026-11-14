@@ -681,3 +681,59 @@
   resize: none;
   overflow: hidden;
 }
+/* The dismissal target belongs to the instrument, independently of selection. */
+.research-asset-item {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.research-assets .research-asset-item .asset-chip {
+  min-height: 52px;
+  padding: 12px 28px 12px 5px;
+}
+.research-asset-remove {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: #80988a;
+}
+.research-asset-remove svg {
+  width: 14px;
+  height: 14px;
+}
+.research-asset-remove:hover {
+  color: #d4e5d8;
+  background: #b9d5be10;
+}
+.research-asset-remove:focus-visible {
+  color: #d4e5d8;
+  outline: 1px solid #a4cf9e80;
+  outline-offset: -2px;
+}
+.research-asset-remove[aria-busy="true"] {
+  opacity: 0.35;
+}
+.research-asset-item.is-selected .research-asset-remove {
+  color: #a0b995;
+}
+@media (max-width: 680px) {
+  .research-assets {
+    gap: 12px;
+  }
+  .research-asset-remove {
+    width: 30px;
+    height: 30px;
+    top: 0;
+  }
+  .research-assets .research-asset-item .asset-chip {
+    padding-right: 30px;
+  }
+}

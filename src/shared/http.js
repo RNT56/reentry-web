@@ -46,7 +46,10 @@ export async function request(
     res = await fetch(path, {
       method,
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-Reentry-Request": "1" },
+      headers: {
+        "X-Reentry-Request": "1",
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
     });

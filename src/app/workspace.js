@@ -38,7 +38,7 @@ export function startWorkspace() {
     getChart: () => priceChart,
     record: (...a) => record(...a),
   });
-  const { purchase, manage, demo } = createPurchases(model, {
+  const { purchase, manage, demo, removeHolding } = createPurchases(model, {
     save,
     render,
     refresh,
@@ -281,6 +281,9 @@ export function startWorkspace() {
           navigate("portfolio", b.dataset.holding);
         }),
     );
+    document.querySelectorAll("[data-remove-holding]").forEach((button) => {
+      button.onclick = () => removeHolding(button.dataset.removeHolding);
+    });
     ["add", "add-second", "empty-add"].forEach((id) => {
       if ($("#" + id))
         $("#" + id).onclick = () => {
