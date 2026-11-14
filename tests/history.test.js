@@ -82,3 +82,56 @@ test("invalid history input fails before an upstream request", () => {
     statusCode: 400,
   });
 });
+test("real provider OHLC and volume survive normalization and quote subunits", () => {
+  const p = payload("GBp");
+  const result = p.chart.result[0];
+  result.timestamp = [100, 200];
+  result.indicators.quote[0] = {
+    open: [1000, 1200],
+    high: [1250, 1300],
+    low: [900, 1100],
+    close: [1200, 1150],
+    volume: [400, 0],
+  };
+  const history = normalizeHistory(p, "VOD.L", "1mo");
+  assert.deepEqual(history.points, [
+    {
+      time: 100,
+      price: 12,
+      open: 10,
+      high: 12.5,
+      low: 9,
+      close: 12,
+      volume: 400,
+    },
+    {
+      time: 200,
+      price: 11.5,
+      open: 12,
+      high: 13,
+      low: 11,
+      close: 11.5,
+      volume: 0,
+    },
+  ]);
+  assert.equal(history.currency, "GBP");
+});
+test("missing or inconsistent candles stay close-only and invalid volume is omitted", () => {
+  const p = payload();
+  const result = p.chart.result[0];
+  result.timestamp = [100, 200, 300, 400, 500];
+  result.indicators.quote[0] = {
+    close: [10, 11, 12, 13, 14],
+    open: [null, 10, 10, 15, 12],
+    high: [11, 10.5, 14, 14, Infinity],
+    low: [9, 9, 11, 12, 10],
+    volume: [null, -1, Infinity, "100", 25],
+  };
+  assert.deepEqual(normalizeHistory(p, "AAPL", "1mo").points, [
+    { time: 100, price: 10 },
+    { time: 200, price: 11 },
+    { time: 300, price: 12 },
+    { time: 400, price: 13 },
+    { time: 500, price: 14, volume: 25 },
+  ]);
+});

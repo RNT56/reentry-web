@@ -321,3 +321,78 @@
 .history-currency {
   margin-left: 8px;
 }
+/* Loading retains the same plotting, dates, legend and caption allocation. */
+.history-body {
+  min-height: 214px;
+}
+.history-placeholder {
+  height: 214px;
+  border-style: solid;
+  background: none;
+}
+.history-skeleton-grid {
+  width: 100%;
+  height: 190px;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 84px,
+    #ffffff06 84px 85px
+  );
+}
+.history-levels {
+  min-height: 40px;
+  align-content: start;
+}
+.history-caption {
+  min-height: 18px;
+  align-items: baseline;
+}
+.history-loading .history-body::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #b9f68b66, transparent);
+  background-size: 200% 100%;
+  animation: chart-data-pending 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+.history-loading .history-plot {
+  pointer-events: none;
+}
+.history-hover-hint .history-retry {
+  min-height: 0;
+  padding: 0;
+  font-size: inherit;
+}
+@keyframes chart-data-pending {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (max-width: 600px) {
+  .history-body,
+  .history-placeholder {
+    min-height: 199px;
+    height: 199px;
+  }
+  .history-skeleton-grid {
+    height: 175px;
+  }
+  .history-levels {
+    min-height: 40px;
+  }
+  .history-caption {
+    min-height: 32px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .history-loading .history-body::after {
+    animation: none;
+  }
+}

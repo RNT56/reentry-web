@@ -21,7 +21,21 @@ export function convertHistory(history, fx, target) {
       index++;
     const rate = rates[index];
     if (!rate || point.time - rate.time > 10 * 86400) return null;
-    return { ...point, price: point.price * rate.price };
+    const converted = { ...point, price: point.price * rate.price };
+    // One completed, earlier FX observation is used for the complete bar so
+    // converted candle geometry stays coherent. Trading volume is a count.
+    for (const field of ["open", "high", "low", "close"])
+      if (Number.isFinite(point[field]) && point[field] > 0)
+        converted[field] = point[field] * rate.price;
+    if (
+      ["price", "open", "high", "low", "close"].some(
+        (field) =>
+          field in converted &&
+          (!Number.isFinite(converted[field]) || converted[field] <= 0),
+      )
+    )
+      return null;
+    return converted;
   });
   // Keep the complete native series if FX coverage is incomplete; no silent gap removal.
   if (points.some((p) => !p))

@@ -30,14 +30,15 @@ await copyFile("src/index.html", "dist/public/index.html");
 await cp("public", "dist/public", { recursive: true });
 await mkdir("dist/public/fonts", { recursive: true });
 await copyFile(
-  "node_modules/@fontsource-variable/dm-sans/files/dm-sans-latin-wght-normal.woff2",
-  "dist/public/fonts/dm-sans.woff2",
-);
-await copyFile(
   "node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2",
   "dist/public/fonts/manrope.woff2",
 );
-for (const font of ["dm-sans", "manrope"])
+for (const font of ["geist", "geist-mono"])
+  await copyFile(
+    `node_modules/@fontsource-variable/${font}/files/${font}-latin-wght-normal.woff2`,
+    `dist/public/fonts/${font}.woff2`,
+  );
+for (const font of ["manrope", "geist", "geist-mono"])
   await copyFile(
     `node_modules/@fontsource-variable/${font}/LICENSE`,
     `dist/public/fonts/${font}-LICENSE.txt`,

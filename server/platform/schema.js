@@ -32,6 +32,12 @@ export const platformMigrations = [
    CREATE INDEX ai_audit_owner_action ON ai_audit(user_id,action,created_at);
  `,
   },
+  {
+    version: 3,
+    sql: `
+      CREATE TABLE chart_workspaces(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, symbol TEXT NOT NULL, slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 3), revision INTEGER NOT NULL CHECK(revision > 0), state TEXT, updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,symbol,slot));
+    `,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

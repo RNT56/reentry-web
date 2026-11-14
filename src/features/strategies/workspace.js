@@ -1,3 +1,4 @@
+import { loadingSurface, revealChart } from "../../shared/motion.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
 const colors = ["#b9f68b", "#83bdf1", "#eeb884", "#bf9ef0"];
@@ -38,7 +39,7 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
     current = null,
     selected = 0;
   const controls = `<form class="strategy-controls"><label>Capital<input name="capital" type="number" min="100" max="10000000" value="10000" step="100"></label><label>Order fee<input name="fee" type="number" min="0" max="1000" value="1" step="0.1"></label><label>Spread · bp<input name="bps" type="number" min="0" max="500" value="0"></label><label>Currency<select name="currency"><option ${currency === "EUR" ? "selected" : ""}>EUR</option><option ${currency === "USD" ? "selected" : ""}>USD</option></select></label><button class="secondary">Compare ↗</button></form>`;
-  root.innerHTML = `<section class="strategy-workspace"><div class="section-line"><h2>Strategies</h2><span>${esc(symbol || "")}</span></div><details class="strategy-parameters"><summary>Parameters <span class="strategy-parameters-summary">10,000 ${esc(currency)}</span></summary>${controls}</details><div class="strategy-output" aria-live="polite">Loading history…</div></section>`;
+  root.innerHTML = `<section class="strategy-workspace"><div class="section-line"><h2>Strategies</h2><span>${esc(symbol || "")}</span></div><details class="strategy-parameters"><summary>Parameters <span class="strategy-parameters-summary">10,000 ${esc(currency)}</span></summary>${controls}</details><div class="strategy-output" aria-live="polite" aria-busy="true">${loadingSurface("strategies")}</div></section>`;
   const output = root.querySelector(".strategy-output"),
     form = root.querySelector("form");
   function render() {
@@ -68,7 +69,7 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
         minimumFractionDigits: 2,
         maximumFractionDigits: Math.abs(n) < 0.01 ? 8 : 2,
       }).format(n);
-    output.innerHTML = `<div class="strategy-scoreboard">${d.strategies.map((s, i) => `<button class="strategy-score ${selected === i ? "selected" : ""}" data-strategy="${i}" style="--strategy-color:${colors[i]}"><span>${esc(s.name)}</span><strong>${money(s.value)}</strong><small>${pct(s.return)}</small></button>`).join("")}</div><svg class="strategy-curve" viewBox="0 0 1000 240" role="img" aria-label="Strategy account values including uninvested cash">${d.strategies.map((s, i) => `<polyline points="${line(s)}" fill="none" stroke="${colors[i]}" stroke-width="${selected === i ? 3 : 1.5}" opacity="${selected === i ? 1 : 0.45}" vector-effect="non-scaling-stroke"/>`).join("")}</svg><div class="strategy-dates"><span>${new Date(d.start * 1000).toLocaleDateString()}</span><span>${esc(d.currency)} · ${d.samples} samples</span><span>${new Date(d.end * 1000).toLocaleDateString()}</span></div><div class="strategy-metrics"><div><span>Drawdown</span><b>${pct(s.drawdown)}</b></div><div><span>Cash</span><b>${money(s.cash)}</b></div><div><span>Orders</span><b>${s.trades.length}</b></div><div><span>Fees</span><b>${money(s.fees)}</b></div></div>${structureChart(d, assetPrice)}<div class="strategy-lenses"><section><span class="eyebrow">POWER LAW · LOG FIT</span><strong>R² ${d.power?.r2.toFixed(3) ?? "—"}</strong><span>Fit ${d.power ? assetPrice(d.power.fair) : "—"}</span></section><section><span class="eyebrow">ELLIOTT · WAVE 2 SCAN</span><strong>${d.wave.active ? "Setup detected" : "No active setup"}</strong><span>${d.wave.active ? d.wave.projected.map(assetPrice).join(" → ") : d.wave.pivots.length + " confirmed pivots"}</span></section></div><details class="strategy-method"><summary>Method & data ↗</summary><dl><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Capital</dt><dd>Equal starting cash · ${money(d.capital)}</dd><dt>Timing</dt><dd>Monthly tranches · next sampled close</dd><dt>Cash yield</dt><dd>0%</dd><dt>Costs</dt><dd>${money(d.fee)} / order + ${d.bps} bp</dd><dt>Basis</dt><dd>Pre-tax · price returns · dividends excluded</dd><dt>Power law</dt><dd>Observed-window log price / log elapsed days</dd><dt>Elliott</dt><dd>Wave 2 candidate · 38.2–78.6% retracement</dd><dt>Confirmation</dt><dd>2 later samples / pivot</dd><dt>Extension</dt><dd>1× / 1.618× prior impulse · conditional</dd>${d.conversionUnavailable ? `<dt>FX</dt><dd>${esc(d.requestedCurrency)} unavailable · ${esc(d.currency)} shown</dd>` : ""}</dl><a href="https://www.investor.gov/introduction-investing/investing-basics/glossary/dollar-cost-averaging" target="_blank" rel="noopener noreferrer">DCA ↗</a> · <a href="https://www.elliottwave.com/wave-riffs/questions-we-get-questions/" target="_blank" rel="noopener noreferrer">Wave rules ↗</a></details>`;
+    output.innerHTML = `<div class="strategy-scoreboard">${d.strategies.map((s, i) => `<button class="strategy-score ${selected === i ? "selected" : ""}" data-strategy="${i}" style="--strategy-color:${colors[i]}"><span>${esc(s.name)}</span><strong>${money(s.value)}</strong><small>${pct(s.return)}</small></button>`).join("")}</div><svg class="strategy-curve" viewBox="0 0 1000 240" role="img" aria-label="Strategy account values including uninvested cash">${d.strategies.map((s, i) => `<polyline data-reveal points="${line(s)}" fill="none" stroke="${colors[i]}" stroke-width="${selected === i ? 3 : 1.5}" opacity="${selected === i ? 1 : 0.45}" vector-effect="non-scaling-stroke"/>`).join("")}</svg><div class="strategy-dates"><span>${new Date(d.start * 1000).toLocaleDateString()}</span><span>${esc(d.currency)} · ${d.samples} samples</span><span>${new Date(d.end * 1000).toLocaleDateString()}</span></div><div class="strategy-metrics"><div><span>Drawdown</span><b>${pct(s.drawdown)}</b></div><div><span>Cash</span><b>${money(s.cash)}</b></div><div><span>Orders</span><b>${s.trades.length}</b></div><div><span>Fees</span><b>${money(s.fees)}</b></div></div>${structureChart(d, assetPrice)}<div class="strategy-lenses"><section><span class="eyebrow">POWER LAW · LOG FIT</span><strong>R² ${d.power?.r2.toFixed(3) ?? "—"}</strong><span>Fit ${d.power ? assetPrice(d.power.fair) : "—"}</span></section><section><span class="eyebrow">ELLIOTT · WAVE 2 SCAN</span><strong>${d.wave.active ? "Setup detected" : "No active setup"}</strong><span>${d.wave.active ? d.wave.projected.map(assetPrice).join(" → ") : d.wave.pivots.length + " confirmed pivots"}</span></section></div><details class="strategy-method"><summary>Method & data ↗</summary><dl><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Capital</dt><dd>Equal starting cash · ${money(d.capital)}</dd><dt>Timing</dt><dd>Monthly tranches · next sampled close</dd><dt>Cash yield</dt><dd>0%</dd><dt>Costs</dt><dd>${money(d.fee)} / order + ${d.bps} bp</dd><dt>Basis</dt><dd>Pre-tax · price returns · dividends excluded</dd><dt>Power law</dt><dd>Observed-window log price / log elapsed days</dd><dt>Elliott</dt><dd>Wave 2 candidate · 38.2–78.6% retracement</dd><dt>Confirmation</dt><dd>2 later samples / pivot</dd><dt>Extension</dt><dd>1× / 1.618× prior impulse · conditional</dd>${d.conversionUnavailable ? `<dt>FX</dt><dd>${esc(d.requestedCurrency)} unavailable · ${esc(d.currency)} shown</dd>` : ""}</dl><a href="https://www.investor.gov/introduction-investing/investing-basics/glossary/dollar-cost-averaging" target="_blank" rel="noopener noreferrer">DCA ↗</a> · <a href="https://www.elliottwave.com/wave-riffs/questions-we-get-questions/" target="_blank" rel="noopener noreferrer">Wave rules ↗</a></details>`;
     output.querySelectorAll("[data-strategy]").forEach(
       (b) =>
         (b.onclick = () => {
@@ -79,7 +80,9 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
   }
   async function load() {
     const id = ++epoch;
+    output.setAttribute("aria-busy", "true");
     const values = new FormData(form);
+    root.querySelector(".refresh-problem")?.remove();
     form.querySelector('button[type="submit"],button:not([type])').disabled =
       true;
     try {
@@ -91,6 +94,7 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
         { timeout: 40000 },
       );
       if (!disposed && id === epoch) {
+        output.setAttribute("aria-busy", "false");
         current = data;
         root.querySelector(".strategy-parameters-summary").textContent =
           new Intl.NumberFormat("de-DE", {
@@ -100,9 +104,21 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
           }).format(data.capital);
         root.querySelector(".strategy-parameters").open = false;
         render();
+        revealChart(output.querySelector(".strategy-curve"));
       }
     } catch (e) {
-      if (!disposed && id === epoch) output.textContent = e.message;
+      if (!disposed && id === epoch) {
+        output.setAttribute("aria-busy", "false");
+        if (current) {
+          let notice = root.querySelector(".refresh-problem");
+          if (!notice) {
+            notice = document.createElement("p");
+            notice.className = "refresh-problem";
+            form.after(notice);
+          }
+          notice.textContent = e.message;
+        } else output.textContent = e.message;
+      }
     } finally {
       if (!disposed && id === epoch)
         form.querySelector(

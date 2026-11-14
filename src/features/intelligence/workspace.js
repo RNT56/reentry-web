@@ -8,7 +8,7 @@ import {
   bindLogos,
   associateLabels,
 } from "../../shared/ui.js";
-import { mountPriceChart } from "../charts/price-chart.js";
+import { mountAnalysisChart } from "../charts/analysis-chart.js";
 import { editPrivateScenario } from "./scenario-editor.js";
 import { mountStrategies } from "../strategies/workspace.js";
 import { mountAdmin } from "../admin/workspace.js";
@@ -38,6 +38,7 @@ export function mountIntelligence(root, { model, navigate }) {
     coverage = [],
     job = null,
     chart = null,
+    chartSymbol = null,
     studio = null,
     strategies = null,
     admin = null,
@@ -54,13 +55,16 @@ export function mountIntelligence(root, { model, navigate }) {
     }
     return true;
   };
-  function destroyChildren() {
+  function destroyChildren(keepChart = false) {
     strategies?.destroy();
     strategies = null;
     admin?.destroy();
     admin = null;
-    chart?.destroy();
-    chart = null;
+    if (!keepChart) {
+      chart?.destroy();
+      chart = null;
+      chartSymbol = null;
+    }
     studio?.destroy();
     studio = null;
   }
@@ -257,7 +261,14 @@ export function mountIntelligence(root, { model, navigate }) {
   }
   function render() {
     if (!live()) return;
-    destroyChildren();
+    const retainedChart =
+      memory.tab === "research" && chartSymbol === memory.symbol
+        ? root.querySelector("#research-chart")
+        : null;
+    const focusedChartField = retainedChart?.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+    destroyChildren(!!retainedChart);
     root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ↗</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
       ["research", "Overview"],
       ["strategies", "Strategies"],
@@ -290,8 +301,19 @@ export function mountIntelligence(root, { model, navigate }) {
           render();
         },
       });
-    if (memory.tab === "research" && active())
-      chart = mountPriceChart(root.querySelector("#research-chart"), active());
+    if (memory.tab === "research" && active()) {
+      if (retainedChart) {
+        root.querySelector("#research-chart").replaceWith(retainedChart);
+        focusedChartField?.focus({ preventScroll: true });
+      } else {
+        chart = mountAnalysisChart(
+          root.querySelector("#research-chart"),
+          active(),
+          { ownerId: model.currentUser.id || model.currentUser.username },
+        );
+        chartSymbol = memory.symbol;
+      }
+    }
     if (memory.tab === "studio" && info.author)
       studio = createStudio({
         root: root.querySelector("#author-studio"),

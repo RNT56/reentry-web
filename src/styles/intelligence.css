@@ -860,7 +860,7 @@ textarea {
   background: #111813;
   color: #e8ebe9;
   font:
-    13px/1.7 "DM Sans",
+    13px/1.7 "Geist",
     sans-serif;
   padding: 14px;
   resize: vertical;
@@ -876,7 +876,7 @@ textarea:focus {
   border: none;
   background: transparent;
   font:
-    16px/1.85 "DM Sans",
+    16px/1.85 "Geist",
     sans-serif;
   padding: 20px 0;
   color: #d4ded0;

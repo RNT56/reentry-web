@@ -1,3 +1,4 @@
+import { brandMark } from "./brand.js";
 import { assetInfo, logoURL } from "../domain/assets.js";
 import { $, esc } from "./format.js";
 const icons = {
@@ -17,7 +18,7 @@ export function icon(name, cls = "") {
   return `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.arrow}</svg>`;
 }
 export function logo() {
-  return '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 23V9h14M12 26 26 12M17 12h9v9" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return brandMark();
 }
 export function monogram(h) {
   const a = assetInfo(h),

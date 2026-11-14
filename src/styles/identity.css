@@ -1,0 +1,168 @@
+/* Self-hosted type: a quiet interface, an editorial display, precise figures. */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: optional;
+  src: url("/fonts/geist.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: optional;
+  src: url("/fonts/geist-mono.woff2") format("woff2");
+}
+:root {
+  --font-ui: "Geist", sans-serif;
+  --font-display: "Manrope", "Geist", sans-serif;
+  --font-numbers: "Geist Mono", "SFMono-Regular", Consolas, monospace;
+  --wave-deep: #08734d;
+  --wave-crest: #24b878;
+  --wave-light: #54d99a;
+  font-family: var(--font-ui);
+  font-optical-sizing: auto;
+}
+body {
+  font-family: var(--font-ui);
+}
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+.brand,
+.auth-brand {
+  font-family: var(--font-ui);
+  font-weight: 650;
+  letter-spacing: -0.06em;
+}
+.reentry-mark {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+  overflow: visible;
+}
+.brand > .reentry-mark,
+.app-header .brand > .reentry-mark {
+  width: 36px;
+  height: 36px;
+}
+.auth-brand > .reentry-mark {
+  width: 42px;
+  height: 42px;
+}
+.journal-masthead .brand > .reentry-mark {
+  width: 36px;
+  height: 36px;
+}
+.brand .reentry-crest,
+.auth-brand .reentry-crest {
+  transition: fill 240ms ease;
+}
+.brand:hover .reentry-crest {
+  fill: #43ce8f;
+}
+.numeric,
+[data-number],
+[data-numeric],
+.balance,
+.overview-secondary strong,
+.holding-values b,
+.target-price,
+.target-meta,
+.settlement b,
+.history-price,
+.history-change,
+.history-axis,
+.history-level-label,
+.level-toggle b,
+.mobile-target-dock .dock-target b,
+.history-targets b,
+.history-targets strong,
+.calculation-ledger dd,
+.strategy-score strong,
+.strategy-score small,
+.strategy-metrics b,
+.strategy-lenses strong,
+.strategy-fit-stats strong,
+.macro-large,
+.macro-value,
+.macro-reading strong,
+.macro-axis,
+.macro-axis-label,
+.budget-display strong,
+.budget-breakdown b,
+.owner-census strong,
+.owner-queue strong,
+.owner-queue b,
+.owner-runtime dd,
+.owner-prices dd,
+.scenario-range,
+.node-range,
+.scenario-node .node-price,
+.journal-scenario-range,
+.journal-scenario-value,
+input[type="number"],
+input[inputmode="decimal"],
+.input-wrap input[type="number"] {
+  --field-font-family: var(--font-numbers);
+  font-family: var(--font-numbers);
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  font-kerning: none;
+}
+.balance,
+.target-price,
+.history-price,
+.macro-large {
+  font-weight: 450;
+  letter-spacing: -0.065em;
+}
+.strategy-score strong {
+  letter-spacing: -0.07em;
+}
+.numeric,
+[data-number],
+[data-numeric],
+.history-change,
+.macro-value,
+.macro-reading strong,
+.owner-runtime dd,
+.budget-breakdown b {
+  letter-spacing: -0.035em;
+}
+.macro-large > small,
+.target-price > small {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+.history-plot svg text,
+.strategy-curve text,
+.strategy-structure-chart text,
+.macro-chart svg text,
+.analysis-chart svg text {
+  font-family: var(--font-numbers);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 850px) {
+  .brand > .reentry-mark,
+  .app-header .brand > .reentry-mark {
+    width: 32px;
+    height: 32px;
+  }
+}
+@media (max-width: 600px) {
+  .target-price {
+    font-size: clamp(30px, 8vw, 42px);
+    overflow-wrap: anywhere;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand .reentry-crest,
+  .auth-brand .reentry-crest {
+    transition: none;
+  }
+}

@@ -1,0 +1,283 @@
+/* Motion changes the ink; component geometry stays still. */
+[data-number],
+.history-price,
+.history-change,
+.target-price,
+.target-meta,
+.settlement b,
+.dock-target b,
+.holding-values b,
+.overview-secondary strong,
+.macro-large,
+.macro-reading strong,
+.strategy-score strong,
+.strategy-score small,
+.strategy-metrics b,
+.budget-display strong,
+.budget-breakdown b,
+.owner-census strong,
+.owner-queue strong,
+.owner-runtime dd {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
+}
+.balance {
+  min-height: 1.2em;
+}
+.balance [data-number] {
+  display: inline-block;
+  min-width: 1ch;
+}
+.overview-secondary strong,
+.holding-values b,
+.target-price,
+.settlement b,
+.strategy-score strong,
+.strategy-metrics b {
+  display: inline-block;
+}
+.loading-surface {
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+}
+.loading-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 20%,
+    #c4edbd04 45%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: surface-light 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.skeleton-line {
+  display: block;
+  width: var(--skeleton-width, 100%);
+  height: var(--skeleton-height, 12px);
+  border-radius: 4px;
+  background: #d5e8d009;
+}
+.skeleton-line + .skeleton-line {
+  margin-top: 16px;
+}
+.surface-skeleton {
+  min-height: 680px;
+  padding: 24px 0;
+}
+.surface-skeleton .skeleton-heading {
+  height: 44px;
+  width: 180px;
+  margin-bottom: 34px;
+}
+.surface-skeleton .skeleton-rail {
+  height: 50px;
+  margin-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(
+    90deg,
+    #d5e8d009 0 65px,
+    transparent 65px 90px,
+    #d5e8d006 90px 155px,
+    transparent 155px 185px,
+    #d5e8d006 185px 255px,
+    transparent 255px
+  );
+}
+.surface-skeleton .skeleton-content {
+  border: 1px solid #ffffff0b;
+  border-radius: 14px;
+  padding: 30px;
+  min-height: 440px;
+}
+.surface-skeleton .skeleton-chart {
+  height: 240px;
+  margin-top: 28px;
+  border-block: 1px solid #ffffff06;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 79px,
+    #ffffff05 79px 80px
+  );
+}
+.strategy-output[aria-busy="true"],
+.macro-workspace[aria-busy="true"],
+.ai-settings[aria-busy="true"] {
+  cursor: progress;
+}
+.strategy-loading {
+  min-height: 780px;
+}
+.strategy-loading .strategy-scoreboard {
+  min-height: 112px;
+}
+.strategy-loading .strategy-score {
+  min-height: 112px;
+}
+.strategy-loading .strategy-curve-slot {
+  height: clamp(170px, 24vw, 300px);
+  margin-block: 18px;
+  border-block: 1px solid var(--line);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 79px,
+    #ffffff05 79px 80px
+  );
+}
+.strategy-output {
+  min-height: 780px;
+}
+.macro-loading {
+  min-height: 980px;
+}
+.macro-loading .macro-stage {
+  min-height: 350px;
+}
+.macro-loading .macro-tape {
+  min-height: 600px;
+}
+.macro-loading .macro-row {
+  min-height: 92px;
+  pointer-events: none;
+}
+.ai-loading {
+  min-height: 850px;
+}
+.ai-loading .ai-settings-grid {
+  min-height: 610px;
+}
+.ai-loading .panel {
+  min-height: 220px;
+}
+.owner-loading-surface {
+  min-height: 900px;
+}
+.owner-loading-surface .owner-census {
+  min-height: 145px;
+}
+.owner-loading-surface .owner-split {
+  min-height: 420px;
+}
+.refresh-problem {
+  min-height: 24px;
+  margin-top: 12px;
+  color: #d6aa9c;
+  font-size: 12px;
+}
+.refresh-problem:empty {
+  visibility: hidden;
+}
+@keyframes surface-light {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (max-width: 680px) {
+  .surface-skeleton {
+    min-height: 780px;
+  }
+  .surface-skeleton .skeleton-content {
+    padding: 20px;
+  }
+  .strategy-loading .strategy-scoreboard {
+    min-height: 206px;
+  }
+  .strategy-output {
+    min-height: 900px;
+  }
+  .macro-loading .macro-stage {
+    min-height: 430px;
+  }
+  .ai-loading .ai-settings-grid {
+    min-height: 1000px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-surface::after {
+    animation: none;
+  }
+}
+.quote-error {
+  min-height: 16px;
+  margin-top: 8px;
+}
+.quote-error:empty {
+  visibility: hidden;
+}
+.target-meta [data-target-qty] {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.result-empty {
+  min-height: 430px;
+}
+@media (max-width: 600px) {
+  .history-levels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 52px;
+  }
+  .history-levels .level-toggle {
+    display: grid;
+    grid-template-columns: 12px minmax(0, 1fr);
+    align-content: center;
+    gap: 3px 6px;
+    min-height: 52px;
+  }
+  .history-levels .level-toggle b {
+    grid-column: 2;
+    white-space: nowrap;
+  }
+}
+.strategy-loading .strategy-curve-slot {
+  height: 260px;
+  margin-top: 28px;
+}
+.macro-loading .macro-chart .skeleton-chart {
+  height: 250px;
+  width: 100%;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 79px,
+    #ffffff05 79px 80px
+  );
+}
+@media (max-width: 680px) {
+  .strategy-loading .strategy-curve-slot {
+    height: 190px;
+  }
+}
+.results {
+  min-height: 650px;
+}
+.target-loading {
+  min-height: 560px;
+  padding-top: 26px;
+}
+.target-loading > .skeleton-line:nth-child(2) {
+  margin-top: 48px;
+}
+.target-loading-chart {
+  height: 160px;
+  margin: 26px 0 36px;
+  border-block: 1px solid #ffffff08;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0 49px,
+    #ffffff05 49px 50px
+  );
+}
+@media (min-width: 851px) {
+  .results .result-empty {
+    min-height: 555px;
+  }
+}

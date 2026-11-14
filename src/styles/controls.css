@@ -27,7 +27,7 @@ textarea,
   padding: var(--field-padding, 12px 14px);
   background: var(--control-surface);
   color: #e7eee8;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--field-font-family, var(--font-ui, "Geist", sans-serif));
   font-size: var(--field-font-size, 14px);
   font-weight: 450;
   line-height: 1.45;
@@ -320,7 +320,7 @@ input[type="range"]:focus-visible {
   --field-font-size: 26px;
   --field-padding: 13px 52px 13px 14px;
   min-height: 62px;
-  font-family: Manrope, sans-serif;
+  font-family: var(--font-numbers, Manrope, sans-serif);
   font-size: 26px;
   letter-spacing: -0.8px;
   padding: 13px 52px 13px 14px;

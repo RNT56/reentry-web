@@ -1,3 +1,4 @@
+import { brandMark } from "../../shared/brand.js";
 import {
   startRegistration,
   startAuthentication,
@@ -5,8 +6,7 @@ import {
 } from "@simplewebauthn/browser";
 import { esc } from "../../shared/format.js";
 import { request } from "../../shared/http.js";
-const mark =
-  '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 23V9h14M12 26 26 12M17 12h9v9" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const mark = brandMark();
 export function showAuth(onAuthenticated, registration = true, mode = "login") {
   const app = document.querySelector("#app");
   app.innerHTML = `<main class="auth-shell"><div class="auth-brand">${mark}reentry</div><section class="auth-card"><h1>${mode === "register" ? "Create account." : mode === "recover" ? "Recover account." : "Welcome back."}</h1>${mode === "login" ? `<button class="secondary passkey-login" id="passkey-login" ${!browserSupportsWebAuthn() ? "disabled" : ""}>◉ Continue with passkey</button><div class="auth-or">or use your password</div>` : ""}<form id="auth-form"><div class="field"><label for="username">Username</label><input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9_]{3,32}" minlength="3" maxlength="32" placeholder="Your username" required></div>${mode === "recover" ? '<div class="field"><label for="recovery-key">Recovery key</label><input id="recovery-key" name="recoveryKey" autocomplete="off" required></div>' : ""}<div class="field"><label for="password">${mode === "recover" ? "New password" : "Password"}</label><div class="password-field"><input id="password" name="password" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" minlength="${mode === "login" ? 1 : 12}" maxlength="128" placeholder="${mode === "login" ? "Your password" : "At least 12 characters"}" required><button type="button" id="show-password" aria-label="Show password">Show</button></div></div><p class="error" id="auth-error" role="alert"></p><button class="primary auth-submit" type="submit">${mode === "register" ? "Create account" : mode === "recover" ? "Recover account" : "Sign in"} <span>↗</span></button></form><div class="auth-links">${mode === "login" ? `${registration ? '<button class="link" id="to-register">Create an account</button>' : ""}<button class="link" id="to-recover">Lost access?</button>` : '<button class="link" id="to-login">Back to sign in</button>'}</div></section><p class="auth-footer"><a href="/journal">Read RNT’s journal ↗</a></p></main>`;

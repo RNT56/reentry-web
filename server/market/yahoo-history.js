@@ -33,7 +33,10 @@ export function normalizeHistory(payload, symbol, range) {
   const [currency, unit] = currencyUnit(meta.currency);
   if (!/^[A-Z]{3}$/.test(currency || ""))
     throw Error("The history currency is unavailable.");
-  const closes = result.indicators?.quote?.[0]?.close || [];
+  const quote = result.indicators?.quote?.[0] || {};
+  const closes = quote.close || [];
+  const positive = (value) =>
+    typeof value === "number" && Number.isFinite(value) && value > 0;
   const unique = new Map();
   for (const [i, time] of (result.timestamp || []).entries()) {
     const value = closes[i];
@@ -44,8 +47,29 @@ export function normalizeHistory(payload, symbol, range) {
       typeof value === "number" &&
       Number.isFinite(value) &&
       value > 0
-    )
-      unique.set(time, { time, price: value * unit });
+    ) {
+      const point = { time, price: value * unit };
+      const open = quote.open?.[i],
+        high = quote.high?.[i],
+        low = quote.low?.[i];
+      // Keep only genuine, internally consistent provider candles. A missing
+      // open/high/low never becomes a synthetic candle around the close.
+      if (
+        [open, high, low].every(positive) &&
+        low <= Math.min(open, value) &&
+        high >= Math.max(open, value)
+      )
+        Object.assign(point, {
+          open: open * unit,
+          high: high * unit,
+          low: low * unit,
+          close: value * unit,
+        });
+      const volume = quote.volume?.[i];
+      if (typeof volume === "number" && Number.isFinite(volume) && volume >= 0)
+        point.volume = volume;
+      unique.set(time, point);
+    }
   }
   const points = [...unique.values()].sort((a, b) => a.time - b.time);
   // Bounded requests use at most a few hundred bars, including intraday crypto.

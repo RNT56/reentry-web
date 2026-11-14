@@ -110,3 +110,54 @@ test("daily FX closes become eligible only after the day has completed", () => {
   );
   assert.equal(converted.points[0].price, 9);
 });
+test("historical FX converts complete OHLC bars with one earlier rate and preserves volume", () => {
+  const native = {
+    currency: "USD",
+    points: [
+      {
+        time: 200000,
+        price: 12,
+        open: 10,
+        high: 14,
+        low: 9,
+        close: 12,
+        volume: 500,
+      },
+    ],
+  };
+  const converted = convertHistory(
+    native,
+    {
+      range: "1mo",
+      points: [
+        { time: 100000, price: 0.8 },
+        { time: 190000, price: 0.5 },
+      ],
+    },
+    "EUR",
+  );
+  assert.deepEqual(converted.points[0], {
+    time: 200000,
+    price: 9.600000000000001,
+    open: 8,
+    high: 11.200000000000001,
+    low: 7.2,
+    close: 9.600000000000001,
+    volume: 500,
+  });
+  assert.equal(native.points[0].open, 10);
+  assert.equal(converted.currency, "EUR");
+});
+test("overflow during FX conversion retains complete native history", () => {
+  const native = {
+    currency: "USD",
+    points: [{ time: 100, price: 1e300, volume: 1 }],
+  };
+  const converted = convertHistory(
+    native,
+    { points: [{ time: 99, price: 1e300 }] },
+    "EUR",
+  );
+  assert.equal(converted.conversionUnavailable, true);
+  assert.deepEqual(converted.points, native.points);
+});

@@ -1,3 +1,4 @@
+import { installMotion, setAnimatedText } from "../shared/motion.js";
 import { mountViewport } from "../shared/viewport.js";
 import { mountIntelligence } from "../features/intelligence/workspace.js";
 import { mountMacro } from "../features/macro/workspace.js";
@@ -7,9 +8,9 @@ import { parseRoute, routeURL } from "./router.js";
 import { createWorkspaceModel } from "./model.js";
 import { workspaceView } from "./view.js";
 import { emptyPortfolio } from "../domain/portfolio.js";
-import { qty } from "../domain/portfolio.js";
+import { qty, basis } from "../domain/portfolio.js";
 import { validatePortfolio as validate } from "../domain/portfolio-validation.js";
-import { $, esc, today } from "../shared/format.js";
+import { $, esc, today, money } from "../shared/format.js";
 import {
   modal,
   close,
@@ -20,12 +21,14 @@ import {
 import { request } from "../shared/http.js";
 import { showAuth, openPasskeys } from "../features/identity/session.js";
 import { mountPriceChart } from "../features/charts/price-chart.js";
+import { setChartWorkspaceOwner } from "../features/charts/analysis-chart.js";
 import { createPlanner } from "../features/planner/controller.js";
 import { createPurchases } from "../features/portfolio/purchases.js";
 import { createActivity } from "../features/activity/controller.js";
 import { createSettings } from "../features/settings/controller.js";
 export function startWorkspace() {
   mountViewport($("#app"));
+  installMotion();
   const model = createWorkspaceModel();
   const current = () =>
     model.state.holdings.find((h) => h.id === model.selected) ||
@@ -117,6 +120,7 @@ export function startWorkspace() {
     model.busy = false;
     model.intelligence = null;
     model.currentUser = user;
+    setChartWorkspaceOwner(user.id || user.username);
     try {
       const p = await request("/api/portfolio");
       model.state = validate(p.state);
@@ -131,6 +135,7 @@ export function startWorkspace() {
       if (newAccount) openPasskeys({ modal, close, toast });
     } catch (e) {
       model.currentUser = null;
+      setChartWorkspaceOwner(null);
       showAuth(signedIn);
       toast(e.message);
     }
@@ -139,7 +144,10 @@ export function startWorkspace() {
     try {
       const r = await request("/api/auth/me");
       if (r.user) await signedIn(r.user);
-      else showAuth(signedIn, r.registration);
+      else {
+        setChartWorkspaceOwner(null);
+        showAuth(signedIn, r.registration);
+      }
     } catch (e) {
       $("#app").innerHTML =
         '<main class="auth-shell"><section class="auth-card"><h1>Connection paused.</h1><p class="sub">' +
@@ -160,6 +168,7 @@ export function startWorkspace() {
       refreshEpoch++;
       model.busy = false;
       model.currentUser = null;
+      setChartWorkspaceOwner(null);
       model.state = emptyPortfolio();
       model.quotes = {};
       model.scenario = {};
@@ -285,7 +294,12 @@ export function startWorkspace() {
     if ($("#sync-status")) $("#sync-status").onclick = resolveSync;
     if ($("#sellqty")) {
       ["sellqty", "sellprice", "sf", "bf", "allowance", "losses"].forEach(
-        (id) => ($("#" + id).oninput = update),
+        (id) => {
+          $("#" + id).oninput = () => {
+            if (id === "sellprice") $("#sellprice").dataset.userEdited = "true";
+            update();
+          };
+        },
       );
       $("#slider").oninput = () => {
         $("#sellqty").value = Number(
@@ -303,6 +317,7 @@ export function startWorkspace() {
           }),
       );
       $("#usequote").onclick = () => {
+        $("#sellprice").dataset.userEdited = "true";
         $("#sellprice").value = quoteInput(h);
         update();
       };
@@ -331,6 +346,100 @@ export function startWorkspace() {
     if (!q) return "Quote not loaded · enter a EUR price";
     return `${esc(q.source || "Yahoo Finance")} · ${esc(q.exchange || "")} · ${esc(new Date(q.time * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }))}`;
   }
+  let quoteSignature = "";
+  function quoteBusy() {
+    const button = $("#refresh");
+    if (button) {
+      button.disabled = model.busy;
+      button.classList.toggle("spinning", model.busy);
+      button.setAttribute("aria-busy", String(model.busy));
+    }
+  }
+  // Quotes update retained readouts instead of replacing the active workspace and inputs.
+  function refreshReadouts() {
+    if (model.page !== "portfolio" || !$("[data-portfolio-value]")) return;
+    const holdings = model.state.holdings;
+    const totalBasis = holdings.reduce((sum, h) => sum + basis(h), 0);
+    const valued = holdings.filter((h) =>
+      Number.isFinite(model.quotes[h.symbol]?.price),
+    );
+    const full = holdings.length > 0 && valued.length === holdings.length;
+    const totalValue = valued.reduce(
+      (sum, h) => sum + model.quotes[h.symbol].price * qty(h),
+      0,
+    );
+    setAnimatedText(
+      $("[data-portfolio-value]"),
+      full ? money(totalValue) : "—",
+    );
+    setAnimatedText($("[data-portfolio-invested]"), money(totalBasis));
+    const unrealized = $("[data-portfolio-unrealized]");
+    setAnimatedText(unrealized, full ? money(totalValue - totalBasis) : "—");
+    unrealized?.classList.toggle("positive", full && totalValue >= totalBasis);
+    unrealized?.classList.toggle("negative", full && totalValue < totalBasis);
+    setAnimatedText(
+      $("[data-portfolio-return]"),
+      full && totalBasis
+        ? `${totalValue >= totalBasis ? "+" : ""}${((totalValue / totalBasis - 1) * 100).toFixed(2)}% return`
+        : "Before tax",
+    );
+    setAnimatedText(
+      $("[data-portfolio-status]"),
+      holdings.some((h) => h.demo)
+        ? "Includes demo data"
+        : full
+          ? "Latest available prices"
+          : holdings.length
+            ? "Waiting for quotes"
+            : "Start with your first holding",
+      { animate: false },
+    );
+    for (const button of document.querySelectorAll("[data-holding]")) {
+      const holding = holdings.find((h) => h.id === button.dataset.holding);
+      const quote = holding && model.quotes[holding.symbol];
+      setAnimatedText(
+        button.querySelector(".holding-values b"),
+        quote?.price ? money(quote.price) : "—",
+      );
+    }
+    const h = current(),
+      quote = h && model.quotes[h.symbol];
+    if (!h || !$("#sellprice")) return;
+    const priceInput = $("#sellprice");
+    const quoteAvailable = Number.isFinite(quote?.price);
+    if (
+      quoteAvailable &&
+      priceInput.value === "" &&
+      !priceInput.dataset.userEdited
+    ) {
+      priceInput.value = quoteInput(h);
+    }
+    const useQuote = $("#usequote");
+    if (useQuote) useQuote.disabled = !quoteAvailable;
+    const label = $(".quote-line > span");
+    if (label) {
+      label.title = quoteLabel(h).replace(/&[^;]+;/g, " ");
+      label.textContent = h.demo
+        ? "Demo price"
+        : quoteAvailable
+          ? `${quote.exchange || "Quote"}${quote.converted ? " · " + quote.originalCurrency + "→EUR" : ""} · ${new Date(quote.time * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })}`
+          : "Manual price";
+    }
+    const error = $(".quote-error");
+    if (error) error.textContent = quote?.error || "";
+    // Refresh overlays independently; an edited sale price stays the user's price.
+    const signature = [
+      h.id,
+      quote?.time,
+      quote?.price,
+      quote?.error,
+      model.busy,
+    ].join(":");
+    if (signature !== quoteSignature) {
+      quoteSignature = signature;
+      update();
+    }
+  }
   let refreshEpoch = 0;
   async function refresh() {
     if (model.busy) return;
@@ -342,7 +451,8 @@ export function startWorkspace() {
       model.state === portfolio &&
       epoch === refreshEpoch;
     model.busy = true;
-    render();
+    quoteBusy();
+    refreshReadouts();
     const symbols = [
       ...new Set(
         portfolio.holdings.filter((h) => !h.demo).map((h) => h.symbol),
@@ -358,19 +468,24 @@ export function startWorkspace() {
             const data = await request(
               "/api/quote?symbol=" + encodeURIComponent(symbol),
             );
-            if (valid()) model.quotes[symbol] = data;
+            if (valid()) {
+              model.quotes[symbol] = data;
+              refreshReadouts();
+            }
           } catch (error) {
             if (valid())
               model.quotes[symbol] = {
                 ...model.quotes[symbol],
                 error: error.message,
               };
+            if (valid()) refreshReadouts();
           }
         }
       }),
     );
     if (epoch !== refreshEpoch) return;
     model.busy = false;
+    quoteBusy();
     if (
       model.currentUser === user &&
       (model.state !== portfolio ||
@@ -381,12 +496,7 @@ export function startWorkspace() {
       await refresh();
       return;
     }
-    if (
-      valid() &&
-      model.page === "portfolio" &&
-      !document.querySelector("#modal").open
-    )
-      render();
+    if (valid()) refreshReadouts();
   }
 
   boot();

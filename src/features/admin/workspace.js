@@ -1,3 +1,4 @@
+import { loadingSurface } from "../../shared/motion.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
 import { action, usd, when } from "../intelligence/shared.js";
@@ -7,7 +8,7 @@ export function mountAdmin(
 ) {
   let alive = true,
     timer;
-  root.innerHTML = '<div class="owner-loading" role="status">↗</div>';
+  root.innerHTML = loadingSurface("owner");
   const bytes = (n) =>
     n > 1024 ** 3
       ? (n / 1024 ** 3).toFixed(1) + " GB"

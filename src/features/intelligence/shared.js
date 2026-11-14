@@ -1,3 +1,4 @@
+import { loadingSurface } from "../../shared/motion.js";
 import { esc } from "../../shared/format.js";
 import { toast } from "../../shared/ui.js";
 export const usd = (n) =>
@@ -16,8 +17,7 @@ export const when = (n) =>
     : "—";
 export const empty = (title, body, action = "") =>
   `<div class="research-empty"><h2>${esc(title)}</h2>${body ? `<p>${esc(body)}</p>` : ""}${action}</div>`;
-export const loading = () =>
-  '<div class="research-loading" role="status"><span></span>Loading…</div>';
+export const loading = (kind) => loadingSurface(kind);
 export const labels = {
   watching: "Watching",
   triggered: "Condition verified",

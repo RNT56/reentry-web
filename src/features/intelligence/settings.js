@@ -6,7 +6,7 @@ export function mountAISettings(root) {
   let alive = true,
     info,
     costs;
-  root.innerHTML = loading();
+  root.innerHTML = loading("settings");
   async function load() {
     try {
       const values = await Promise.all([

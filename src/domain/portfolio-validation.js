@@ -1,3 +1,5 @@
+import { isDepotName } from "./depots.js";
+
 export function validatePortfolio(s) {
   const fail = () => {
     throw Object.assign(Error("Invalid portfolio data."), { statusCode: 400 });
@@ -33,7 +35,7 @@ export function validatePortfolio(s) {
       !str(h.name) ||
       !str(h.symbol, 32) ||
       !/^[A-Za-z0-9.^=-]+$/.test(h.symbol) ||
-      !["Trade Republic", "Consorsbank", "Other"].includes(h.broker) ||
+      !isDepotName(h.broker) ||
       !Array.isArray(h.lots) ||
       !h.lots.length ||
       h.lots.length > 10000
@@ -72,7 +74,7 @@ export function validatePortfolio(s) {
       ids.has(sale.id) ||
       !str(sale.name) ||
       !str(sale.symbol, 32) ||
-      !["Trade Republic", "Consorsbank", "Other"].includes(sale.broker) ||
+      !isDepotName(sale.broker) ||
       !["waiting", "complete"].includes(sale.status) ||
       !date(sale.date)
     )
