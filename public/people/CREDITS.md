@@ -16,3 +16,15 @@ Other Congress portraits are served by the public-domain/CC0
 The political feed is provided by [Kadoa Congress Trading Monitor](https://github.com/kadoa-org/congress-trading-monitor).
 Its MIT notice is preserved in KADOA-DATA-LICENSE.txt; official-record use restrictions
 remain applicable (see docs/political-disclosures.md).
+
+## Expanded catalog — 15 November 2026
+
+550 verified portrait assets cover the merged House, Senate and executive catalog.
+Full image source, identity, license and attribution records are in `credits.json`;
+the human-readable credits are at `/people/credits.html`. Additional portraits
+were retrieved from Wikimedia Commons with its per-file license metadata. These
+include public-domain official photographs and three CC BY-SA portraits, credited
+individually. Files are unaltered. Cropping and saturation are presentation CSS.
+
+Congress identity/term metadata: https://github.com/unitedstates/congress-legislators
+(public domain / CC0), retrieved 15 November 2026.

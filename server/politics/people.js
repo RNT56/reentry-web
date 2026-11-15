@@ -1,6 +1,9 @@
 import { portraitURL } from "./portraits.js";
 
 export const FEATURED_PEOPLE = [
+  "congress:P000197",
+  "congress:B001277",
+  "congress:G000583",
   "house_nancy_pelosi",
   "senate_richard_blumenthal",
   "house_josh_gottheimer",

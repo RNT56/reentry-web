@@ -55,6 +55,10 @@ export const platformMigrations = [
     version: 6,
     sql: `CREATE TABLE political_sync(id TEXT PRIMARY KEY,checked_at INTEGER,attempted_at INTEGER,next_check_at INTEGER NOT NULL DEFAULT 0,etag TEXT,failures INTEGER NOT NULL DEFAULT 0,last_error TEXT);`,
   },
+  {
+    version: 7,
+    sql: `CREATE TABLE political_archives(id TEXT PRIMARY KEY,revision TEXT NOT NULL,payload BLOB NOT NULL,updated_at INTEGER NOT NULL);`,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

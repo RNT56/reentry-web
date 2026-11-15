@@ -1,4 +1,4 @@
-import { createPoliticalFeed } from "../politics/feed.js";
+import { createPoliticalIntelligence } from "../politics/service.js";
 import { registerPoliticalRoutes } from "../politics/routes.js";
 import { registerWatchlistRoutes } from "../watchlists/store.js";
 import { registerAdminRoutes } from "../admin/routes.js";
@@ -32,7 +32,7 @@ export function registerPlatform(app, db, market, options = {}) {
   const macro = options.macro || createMacroService();
   const politics =
     options.politics ||
-    createPoliticalFeed({
+    createPoliticalIntelligence({
       db,
       enabled:
         options.workerEnabled ?? process.env.ENABLE_BACKGROUND_JOBS === "true",

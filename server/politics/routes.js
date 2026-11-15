@@ -2,11 +2,14 @@ import { fail } from "../platform/util.js";
 import { portfolioAssets } from "../intelligence/portfolio-sources.js";
 import { ownedList } from "../watchlists/store.js";
 import { featuredPeople, politicalPeople } from "./people.js";
+import { careerProfile } from "./career.js";
 
 export function feedStatus(data) {
   return Object.fromEntries(
     [
       "coverage",
+      "sources",
+      "historyStatus",
       "status",
       "fetchedAt",
       "publishedAt",
@@ -142,7 +145,7 @@ export function registerPoliticalRoutes(app, { db, politics }) {
   });
   app.get("/api/politics", { preHandler: app.requireUser }, async (req) => {
     const user = req.auth.user_id,
-      q = req.query,
+      q = { ...req.query },
       scope = String(q.scope || "all");
     let symbols = null;
     if (scope === "portfolio")
@@ -153,10 +156,11 @@ export function registerPoliticalRoutes(app, { db, politics }) {
     const data = await politics.get();
     if (q.version && q.version !== data.version)
       throw fail("Disclosures updated. Refresh this view.", 409);
+    if (q.member && data.aliases?.[q.member]) q.member = data.aliases[q.member];
     const rows = filterDisclosures(data.rows, q, symbols),
       summary = summarizeDisclosures(rows);
     const offset = Number(q.offset || 0);
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 20000)
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 500000)
       throw fail("Invalid page.");
     const member = q.member
       ? (data.people || politicalPeople([], data.rows)).find(
@@ -168,12 +172,66 @@ export function registerPoliticalRoutes(app, { db, politics }) {
       nextOffset: offset + 50 < rows.length ? offset + 50 : null,
       summary: {
         ...summary,
-        members: featuredPeople(summary.members, 16),
+        members: matchingPeople(data.people || [], summary.members, q),
         tickers: summary.tickers.slice(0, 10),
       },
       member,
+      career: member
+        ? careerProfile(
+            member,
+            data.rows.filter((r) => r.memberId === member.id),
+          )
+        : null,
+      power: q.ticker
+        ? powerStruggle(
+            filterDisclosures(
+              data.rows,
+              { ...q, member: "", side: "all", q: "" },
+              symbols,
+            ),
+          )
+        : null,
       ...feedStatus(data),
       rejected: data.rejected || 0,
     };
   });
+}
+
+export function matchingPeople(directory, active, query) {
+  const result = [...active],
+    ids = new Set(active.map((p) => p.id)),
+    q = String(query.q || "").toLowerCase();
+  if (
+    (!query.scope || query.scope === "all") &&
+    !query.ticker &&
+    (!query.side || query.side === "all")
+  )
+    for (const p of directory)
+      if (
+        !ids.has(p.id) &&
+        (!query.chamber ||
+          query.chamber === "all" ||
+          p.chamber === query.chamber) &&
+        (!q || [p.name, p.state].some((v) => v?.toLowerCase().includes(q)))
+      )
+        result.push({ ...p, count: 0, buys: 0, sells: 0 });
+  return featuredPeople(result, result.length);
+}
+export function powerStruggle(rows) {
+  const s = summarizeDisclosures(rows);
+  const buyers = s.members
+    .filter((p) => p.buys)
+    .sort((a, b) => b.buys - a.buys || a.name.localeCompare(b.name));
+  const sellers = s.members
+    .filter((p) => p.sells)
+    .sort((a, b) => b.sells - a.sells || a.name.localeCompare(b.name));
+  return {
+    buyers,
+    sellers,
+    buyDisclosures: s.buys,
+    sellDisclosures: s.sells,
+    both: s.members.filter((p) => p.buys && p.sells).length,
+    other: s.count - s.buys - s.sells,
+    people: s.people,
+  };
 }

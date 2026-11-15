@@ -1,109 +1,110 @@
 # Political disclosures / Capitol
 
-Capitol is a free, account-authenticated research surface. It imports the published
-rolling dataset from [Kadoa Congress Trading Monitor](https://github.com/kadoa-org/congress-trading-monitor),
-which parses House Clerk PTRs, Senate eFD reports, and executive-branch OGE filings.
-The feed is not a complete historical archive. At implementation time (15 November
-2026), its `trades.json` contained 5,000 rows filed from 18 August to 12 November 2026.
-The application calculates and displays its current coverage from the actual rows.
-Upstream's complete continuous historical dataset is a separate commercial offering;
-Reentry does not claim to provide that coverage.
+Capitol imports two complementary public datasets with links back to official House,
+Senate and executive-branch records. It requires an account, but no data API key or AI
+request. Private holdings/watchlist filters never leave Reentry.
 
-## Why this connector
+## Sources and reconciliation
 
-- [Capitol Trades](https://www.capitoltrades.com/disclaimer) describes collecting House
-  and Senate disclosures. Its site is not used as a scrape or unofficial API.
-- [LuxAlgo Market Trackers](https://github.com/LuxAlgo/market-trackers) provides typed,
-  primary-source-linked CC0 dumps. The inspected congress snapshot was only 175 rows,
-  last ingested 7 September 2026, so it was not chosen as the current feed.
-- Kadoa's openly published MIT repository provides a fresher rolling snapshot,
-  stable row/member IDs, official filing links, ranges, and a separate filer index.
-  No key, paid request, broker connection, or AI processing is needed to import it.
+- [Kadoa Congress Trading Monitor](https://github.com/kadoa-org/congress-trading-monitor)
+  supplies a recent rolling window, including OGE executive disclosures. JSON files
+  are pinned to one Git commit; conditional revision checks run every five minutes.
+- [NexusTrade congressional archive](https://huggingface.co/datasets/austin-starks/congressional-stock-trades)
+  supplies House/Senate history from 2012. Reentry imports `political_trade_events`
+  and `political_filings`, not the unreconciled raw-trades table. Its
+  [methodology](https://huggingface.co/datasets/austin-starks/congressional-stock-trades/blob/main/METHODOLOGY.md)
+  distinguishes economic events, amendments and when records became available.
+  The manifest is checked every five minutes; unchanged yearly shards are reused.
+  Upstream publishes on its own schedule, so checks do not imply new disclosures.
+- [OptimistFi](https://optimistfi.com/congress/data) was also evaluated. Its free
+  House-only current-year feed includes new/amended/deleted source rows. It is not
+  combined blindly with the reconciled archive; that would risk double-counting.
 
-## Semantics
+Every archive shard must match the manifest's SHA-256 and size. Only audited v2
+manifests, bounded Parquet files and fixed HTTPS download hosts are accepted.
+Decoding runs in a temporary worker with a bounded heap per yearly partition.
+Superseded event versions and future availability are excluded. Real filing dates
+come from the filings table, separately from first-publication timestamps.
+Invalid identities, URLs, dates and ranges cannot become evidence. An excessive
+rejection rate rejects the replacement and retains the last good snapshot.
 
-The [House Ethics Committee](https://ethics.house.gov/financial-disclosure/) and
-[Senate Ethics Committee](https://www.ethics.senate.gov/public/index.cfm/financialdisclosure)
-explain transaction-reporting obligations. Reports are generally due within 30 days
-of notification and no later than 45 days after a covered transaction. Filing and
-transaction dates are distinct. Filing date is not verified first-publication time,
-and we do not label reporting lag alone as an adjudicated violation.
+The reconciled archive takes precedence for overlapping official documents,
+including contributor/original documents referenced by amendments. The rolling
+source fills newer/uncovered documents and executive reports. Failed/unparsed
+archive filings do not suppress otherwise valid rolling-feed evidence. Duplicate
+member aliases and House-to-Senate changes resolve to the same Bioguide identity.
+No matching records does not establish that a person never traded.
 
-Amounts are disclosed **USD ranges**, never exact execution amounts. No midpoint
-portfolio, performance ranking, implied holdings, insider-trading allegation, or
-buy recommendation is derived. A row identifies its reported owner where available;
-missing owners, tickers, and values remain missing. Equities, funds, options, bonds,
-and unlisted assets can all appear. Asset descriptions and comments remain available
-with the original filing. Chart prices default to EUR; USD filing bands stay USD to
-preserve what was disclosed.
+The 15 November 2026 validation imported 182,269 current historical event records,
+including 218 Pelosi records. Published snapshot counts and app counts can differ
+because superseded events and invalid records are excluded. This is available
+history, not a guarantee of complete lifetime trading activity.
 
-The normalized dataset's MIT license does not override underlying disclosure-use
-rules. Official reports restrict uses including commercial uses outside news/media
-reporting, credit decisions, and solicitations. This feature reports public filings
-for personal research and the platform's informational publishing. Reassess permitted
-use before repackaging or selling the records. Source references:
-[House public access](https://ethics.house.gov/manual/retention-of-and-public-access-to-reports/),
-[OGE public resources](https://www.oge.gov/web/oge.nsf/publicresources_disclosure-faq).
+## Interpretation
 
-## Reliability and privacy
+Amounts are **reported USD bands**, not exact execution amounts. Spouse, joint and
+dependent ownership remain attached to each filing. Options, bonds, unlisted assets
+and unknown tickers retain their original descriptions. Charts can use EUR, but
+original disclosure amounts stay in USD.
 
-- Every five minutes, one shared server worker checks the published data revision,
-  including when nobody is browsing. ETag/304 checks and unchanged revisions skip
-  both data downloads. Both JSON files remain pinned to the same commit.
-- Open Capitol pages check server status each minute and on return to the tab.
-  Changed data updates idle views; active charts and expanded filings retain their
-  state with a compact “New filings” action. Manual checks share a one-minute
-  cooldown. No client can bypass a source-imposed retry period.
-- Last successful check, last downloaded snapshot, upstream publication date and
-  latest filing date are separate values. Source lag, an overdue check and an outage
-  remain visible. Frequent checking cannot make an upstream publisher deliver a
-  filing sooner; the UI never describes a successful check as a new publication.
-- Retry schedules and ETags persist across restarts. Backoff grows from one minute
-  to an hour, respects Retry-After / GitHub reset times, and serves the last good
-  snapshot while recovering. A new validated revision replaces the snapshot atomically.
-- Bounded responses, fixed HTTPS endpoints, strict official-document host allowlist,
-  valid date/range checks, stable-ID deduplication, and rejection thresholds protect
-  the cache. An invalid replacement never replaces a good snapshot.
-- The last validated snapshot persists in SQLite and survives deploys/restarts.
-  Outages show cached/unavailable state; old latest-filing dates show delayed state.
-- Filtered results and counts are calculated on the server from that snapshot.
-  Pagination pins its version and restarts if the snapshot changes.
-- Holdings/watchlist scopes use only the authenticated account. Public-source fetches
-  do not transmit the user's holdings or list names to Kadoa/GitHub.
-- Research automatically receives up to eight matching disclosures as filing evidence.
-  Existing AI research/source-monitor workflows still require the account's own BYOC
-  key, opt-in, and budget reservations. Importing data itself incurs no AI charges.
-- Watchlists are independent account-owned containers. Membership changes commute;
-  reorder/rename/delete use revisions. Removing a list never deletes a holding,
-  source, scenario, analysis, or research asset. Watchlists are included in export.
+The Power struggle bar counts distinct filers with at least one purchase or sale
+of the selected ticker in the selected **filing-date** window. It retains chamber
+and holdings/watchlist scope, while ignoring selected person, transaction-side and
+free-text filters so the comparison shows both sides. A filer on both sides counts
+once on each side; this overlap is shown. Disclosed transaction counts are separate
+from participant counts. Exchanges and unknown actions are excluded from the bar.
+It does not show share quantities, executed market volume, or a predictive signal.
 
-## People directory
+Profiles show available-history purchase ranges and sale-proceeds ranges alongside
+sourced political base salary. **Sales are not profits.** Disclosures do not provide
+complete cost bases, full holdings or lifetime realized gains; no fictional career
+return or net-worth figure is generated. Executive salaries are explicitly labeled
+2026 role benchmarks, because scheduled pay, actual frozen pay and former
+appointment dates can differ. Salary sources: [2026 schedules 5–6](https://uscode.house.gov/us/usc/119-136/t5/s5332/)
+and [presidential compensation](https://uscode.house.gov/us/usc/119-136/t3/s102/).
+Congress terms and role metadata are attributed to the
+[United States project](https://github.com/unitedstates/congress-legislators),
+retrieved 15 November 2026. Tenure dates are not used to invent cumulative salary.
 
-All filer identities in the published index are searchable, including people whose
-transactions fall outside its rolling window. Counts come only from imported rows,
-never the index's full-history trade counts. Pelosi, Blumenthal and Gottheimer are
-placed first in the matching profile rail, followed by activity-ranked people.
-Selecting a directory profile clears unrelated filters and shows its available data.
-No matching rows means “outside this feed window,” not that a person never traded.
+## UI and portraits
 
-Real-source regression fixtures include the latest available named records from
-Nancy Pelosi, Richard Blumenthal and Josh Gottheimer, with their pinned repository
-revision. Pelosi's 20035780 and Gottheimer's 20035770 were cross-checked against
-original House PDFs; source links remain on every disclosure. House ownership codes
-SP/JT/DC are displayed as Spouse/Joint/Dependent child. Senate whitespace is normalized
-without inventing tickers for private partnerships or funds.
+All matching people are included in the scroll rail. With unrestricted asset/side
+scope, matching people with no disclosures in the selected period remain visible
+with zero counts. The directory also contains the full merged identity catalog.
+Opening a profile preserves filters, page scroll and horizontal rail position;
+the pinned back control restores that context.
 
-## Portraits
+All 550 distinct people in the verified catalog have bundled real portraits.
+Bioguide IDs identify Congress portraits; ambiguous executive names are explicitly
+resolved (e.g. CIA director William Burns, FAA administrator Michael Whitaker,
+OMB official Jason Miller, and Sara Carter Bailey). No generated faces are used.
+The static catalog records source links and licenses. Public portrait credits at
+`/people/credits.html` include CC BY-SA attribution where applicable; images are
+unaltered and display crops are CSS. Future Congress IDs can use the provider's
+strictly allowlisted official-portrait URL until bundled; newly added identities
+require source verification before a missing photo is assigned.
 
-Congress photos use the [United States project's public-domain portraits](https://github.com/unitedstates/images),
-matched by the provider's Bioguide photo URL. Only its exact photo URL pattern is accepted.
-Known executive portraits are bundled from the official sources listed in
-`public/people/CREDITS.md`. Missing/unavailable portraits fall back to initials;
-identities are never guessed from a name search.
+## Reliability, data preservation and AI
 
-## Operations
+ETags, retry backoff and last successful checks persist in SQLite. Rate-limit
+Retry-After is respected. Downloads have time/size/redirect limits. Snapshot
+replacement is atomic; source failures serve cached data. Archive partitions that
+unexpectedly disappear are rejected. The UI exposes source/coverage status and
+keeps current charts/expanded rows intact when updates arrive.
 
-`ENABLE_BACKGROUND_JOBS=true` enables the existing worker lifecycle and the shared
-political refresh. No new secret/environment variable is required. `political_feed`
-is a replaceable public-data cache; `watchlists` and `watchlist_preferences` are durable
-private account data. Migration 5 only creates these new tables and an index.
+Migration 7 adds only `political_archives`, a replaceable public cache. It changes
+no accounts, holdings, chart workspaces, scenarios or watchlists. Background
+refresh uses the existing `ENABLE_BACKGROUND_JOBS=true` worker lifecycle; no new
+secret is needed. The account-authenticated API scopes private filters to the
+signed-in user, and pagination pins the merged snapshot version.
+
+Research receives up to eight recent relevant disclosures as evidence. Existing
+AI research and source monitors retain BYOC consent, key isolation and spending
+reservations. Importing public data incurs no model charges.
+
+Official-record use restrictions remain applicable, irrespective of a normalized
+feed's software license. See the archive's
+[data terms](https://huggingface.co/datasets/austin-starks/congressional-stock-trades/blob/main/LICENSE_DATA.md),
+[House public access rules](https://ethics.house.gov/manual/retention-of-and-public-access-to-reports/)
+and [OGE resources](https://www.oge.gov/web/oge.nsf/publicresources_disclosure-faq).
+Kadoa's MIT notice remains in `public/people/KADOA-DATA-LICENSE.txt`.
