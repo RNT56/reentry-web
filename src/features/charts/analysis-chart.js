@@ -1,6 +1,7 @@
 import { chartWorkspaceSync } from "./chart-sync.js";
 import { chartStateVersion as versionOf } from "./chart-autosave.js";
 import { mergeChartStates } from "../../domain/chart-merge.js";
+import { scalePriceRange } from "../../domain/chart-axis.js";
 import { download } from "../intelligence/shared.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { esc } from "../../shared/format.js";
@@ -75,6 +76,7 @@ export function mountAnalysisChart(
     fullscreenSettings = false,
     fullscreenPlacements = [],
     gestureBefore = null,
+    gestureActive = false,
     conflict = false,
     data = null,
     indicators = null,
@@ -112,6 +114,7 @@ export function mountAnalysisChart(
     managing ||
     drag ||
     gestureBefore ||
+    gestureActive ||
     pendingAnchor ||
     editorOpen ||
     document.activeElement === root.querySelector(".ta-name");
@@ -164,7 +167,7 @@ export function mountAnalysisChart(
   const drawerId = "ta-tools-" + crypto.randomUUID();
   const fullscreenPanelId = "ta-workspace-" + crypto.randomUUID();
   root.classList.add("analysis-chart");
-  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-heading-actions"><button type="button" class="ta-fullscreen-settings" data-ta-fullscreen-settings aria-label="Chart workspace settings" aria-controls="${fullscreenPanelId}" aria-expanded="false">${icon("sliders")}<span>Workspace</span></button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
+  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-heading-actions"><button type="button" class="ta-fullscreen-settings" data-ta-fullscreen-settings aria-label="Chart workspace settings" aria-controls="${fullscreenPanelId}" aria-expanded="false">${icon("sliders")}<span>Workspace</span></button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Drag either axis to scale; double-click it to reset. Arrow keys inspect, plus and minus zoom time, Alt with up and down scales price, zero fits both axes; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
     historyRanges,
   )
     .map(
@@ -405,7 +408,13 @@ export function mountAnalysisChart(
     protectInteraction();
   }
   const view = () =>
-    geometry && data ? { ...geometry, length: data.points.length } : null;
+    geometry && data
+      ? {
+          ...geometry,
+          length: data.points.length,
+          priceRange: state.priceRange ?? null,
+        }
+      : null;
   function applyViewport(next) {
     state.viewport =
       next.from === 0 && next.to === data.points.length - 1
@@ -415,12 +424,19 @@ export function mountAnalysisChart(
   const gestures = mountChartGestures(plot, {
     getView: view,
     enabled: () => editable() && !!geometry && tool === "inspect" && !drag,
+    axesEnabled: () => editable() && !!geometry && !drag && !pendingAnchor,
+    onResetAxis: (axis) => resetAxes(axis),
+    onInteraction: (active) => {
+      gestureActive = active;
+      protectInteraction();
+    },
     onStart: () => {
       gestureBefore = clone(state);
       protectInteraction();
     },
     onChange: (next) => {
       applyViewport(next);
+      if (Object.hasOwn(next, "priceRange")) state.priceRange = next.priceRange;
       draw();
     },
     onEnd: ({ cancelled }) => {
@@ -715,6 +731,7 @@ export function mountAnalysisChart(
       const next = validateChartWorkspaceState({
         ...previous,
         currency: nextCurrency,
+        priceRange: null,
         drawings,
       });
       if (!live() || generation !== fetchGeneration) return;
@@ -868,7 +885,14 @@ export function mountAnalysisChart(
       return;
     }
     const point = locate(e);
-    if (!point || point.y > geometry.B) return;
+    if (
+      !point ||
+      point.y > geometry.B ||
+      point.y < geometry.T ||
+      point.x < geometry.L ||
+      point.x > geometry.R
+    )
+      return;
     const target = e.target.closest("[data-drawing]");
     if (tool === "inspect" && target) {
       gestures.finish();
@@ -902,7 +926,15 @@ export function mountAnalysisChart(
   plot.onpointermove = (e) => {
     if (!editable() || !geometry || gestures.isActive()) return;
     const p = locate(e);
-    if (!p || p.y > geometry.B) return;
+    if (
+      !p ||
+      (!drag &&
+        (p.y > geometry.B ||
+          p.y < geometry.T ||
+          p.x < geometry.L ||
+          p.x > geometry.R))
+    )
+      return;
     if (drag) {
       const drawing = state.drawings.find((d) => d.id === drag.id);
       drawing.anchors[drag.index] = geometry.anchor(p.x, p.y);
@@ -984,10 +1016,20 @@ export function mountAnalysisChart(
     } else if ((e.key === "Delete" || e.key === "Backspace") && selected) {
       e.preventDefault();
       removeDrawing(selected);
+    } else if (e.altKey && ["ArrowUp", "ArrowDown"].includes(e.key)) {
+      e.preventDefault();
+      gestures.finish();
+      checkpoint();
+      state.priceRange = scalePriceRange(
+        geometry,
+        e.key === "ArrowDown" ? 1.5 : 0.65,
+      );
+      mark();
+      draw();
     } else if (["+", "=", "-", "0"].includes(e.key)) {
       e.preventDefault();
       gestures.finish();
-      if (e.key === "0") setViewport({ from: 0, to: data.points.length - 1 });
+      if (e.key === "0") resetAxes();
       else zoom(e.key === "-" ? 1.5 : 0.65);
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
@@ -1035,6 +1077,17 @@ export function mountAnalysisChart(
     updateChrome();
     root.querySelector("[data-ta-tools-toggle]").focus({ preventScroll: true });
   };
+  function resetAxes(axis = "both") {
+    if (!geometry || !editable()) return;
+    const price = axis !== "time" && state.priceRange;
+    const time = axis !== "price" && state.viewport;
+    if (!price && !time) return;
+    checkpoint();
+    if (axis !== "time") state.priceRange = null;
+    if (axis !== "price") state.viewport = null;
+    mark();
+    draw();
+  }
   function setViewport(next) {
     if (!geometry || !editable() || sameChartView(view(), next)) return;
     checkpoint();
@@ -1310,7 +1363,7 @@ export function mountAnalysisChart(
       return;
     }
     if (b.hasAttribute("data-ta-fit")) {
-      setViewport({ from: 0, to: data.points.length - 1 });
+      resetAxes();
       return;
     }
     if (b.hasAttribute("data-ta-currency")) {
@@ -1324,6 +1377,7 @@ export function mountAnalysisChart(
     if (b.dataset.taRange) {
       state.range = b.dataset.taRange;
       state.viewport = null;
+      state.priceRange = null;
       pendingAnchor = null;
       selected = null;
       tool = "inspect";
@@ -1338,6 +1392,7 @@ export function mountAnalysisChart(
       draw();
     } else if (b.hasAttribute("data-ta-scale")) {
       state.scale = state.scale === "linear" ? "log" : "linear";
+      state.priceRange = null;
       mark();
       draw();
     } else undo.pop();

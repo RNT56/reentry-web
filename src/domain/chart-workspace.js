@@ -1,4 +1,5 @@
 import { historyRanges } from "./market-history.js";
+import { MIN_LOG_PRICE, MAX_AXIS_PRICE } from "./chart-axis.js";
 
 export const MAX_CHART_WORKSPACES = 3;
 export const MAX_CHART_DRAWINGS = 40;
@@ -57,6 +58,7 @@ export function defaultChartWorkspaceState(name = "Analysis 1") {
     indicators: ["sma20", "sma50"],
     drawings: [],
     viewport: null,
+    priceRange: null,
   };
 }
 
@@ -128,6 +130,21 @@ export function validateChartWorkspaceState(input) {
     if (from >= to) throw invalid("Check the chart viewport.");
     viewport = { from, to };
   }
+  let priceRange = null;
+  if (input.priceRange !== undefined && input.priceRange !== null) {
+    const value = object(input.priceRange, "price range");
+    const { min, max } = value;
+    if (
+      !Number.isFinite(min) ||
+      !Number.isFinite(max) ||
+      min >= max ||
+      min < -MAX_AXIS_PRICE ||
+      max > MAX_AXIS_PRICE ||
+      (input.scale === "log" && min < MIN_LOG_PRICE)
+    )
+      throw invalid("Check the chart price range.");
+    priceRange = { min, max };
+  }
   return {
     name: text(input.name, 40, "analysis name"),
     range: input.range,
@@ -137,5 +154,6 @@ export function validateChartWorkspaceState(input) {
     indicators: [...input.indicators],
     drawings,
     viewport,
+    priceRange,
   };
 }

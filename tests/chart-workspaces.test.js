@@ -25,6 +25,7 @@ const state = (name = "Support study") => ({
     },
   ],
   viewport: { from: 1700000000, to: 1700864000 },
+  priceRange: { min: 20, max: 40 },
 });
 const origin = "http://localhost:4173";
 async function fixture() {
@@ -99,6 +100,11 @@ test("chart workspace validation bounds persisted drawings and preserves only sa
   assert.equal(normalized.name, "Support study");
   assert.equal(normalized.unexpected, undefined);
   assert.deepEqual(normalized.viewport, input.viewport);
+  assert.deepEqual(normalized.priceRange, input.priceRange);
+  assert.equal(
+    validateChartWorkspaceState({ ...input, priceRange: undefined }).priceRange,
+    null,
+  );
   assert.notEqual(normalized.drawings, input.drawings);
   assert.deepEqual(defaultChartWorkspaceState().indicators, ["sma20", "sma50"]);
   for (const invalid of [
@@ -107,6 +113,17 @@ test("chart workspace validation bounds persisted drawings and preserves only sa
     { ...input, range: "max" },
     { ...input, currency: "GBP" },
     { ...input, scale: "symlog" },
+    ...[
+      {},
+      [],
+      { min: 10, max: 10 },
+      { min: 20, max: 10 },
+      { min: NaN, max: 20 },
+      { min: 10, max: Infinity },
+      { min: -1e13, max: 10 },
+      { min: 10, max: 1e13 },
+    ].map((priceRange) => ({ ...input, priceRange })),
+    { ...input, scale: "log", priceRange: { min: 0, max: 100 } },
     { ...input, chartType: "invented" },
     { ...input, indicators: ["rsi", "rsi"] },
     { ...input, indicators: ["arbitrary"] },
@@ -205,6 +222,7 @@ test("saved analyses are authenticated, isolated by user and asset, and bounded 
       assert.equal(saved.statusCode, 200, saved.body);
       assert.equal(saved.json().revision, 1);
       assert.equal(saved.json().symbol, "INTC");
+      assert.deepEqual(saved.json().state.priceRange, state().priceRange);
     }
     assert.equal(
       (
@@ -249,6 +267,11 @@ test("saved analyses are authenticated, isolated by user and asset, and bounded 
       (await f.call("first", "/api/chart-workspaces?symbol=INTC")).json()
         .slots[0].state.name,
       "Analysis 1",
+    );
+    assert.deepEqual(
+      (await f.call("first", "/api/chart-workspaces?symbol=INTC")).json()
+        .slots[0].state.priceRange,
+      state().priceRange,
     );
     assert.equal(
       f.db

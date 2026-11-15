@@ -29,7 +29,6 @@ export function mergeChartStates(base, local, remote, slot = 1) {
   const state = { ...remote };
   for (const [key, label] of [
     ["name", "Name"],
-    ["scale", "Price scale"],
     ["chartType", "Chart style"],
   ])
     state[key] = pick(b[key], local[key], remote[key], label);
@@ -47,12 +46,25 @@ export function mergeChartStates(base, local, remote, slot = 1) {
     ),
   );
   if (local.currency !== b.currency || remote.currency !== b.currency) {
-    const prices = (s) => ({ currency: s.currency, drawings: s.drawings });
+    const prices = (s) => ({
+      currency: s.currency,
+      drawings: s.drawings,
+      scale: s.scale,
+      priceRange: s.priceRange ?? null,
+    });
     Object.assign(
       state,
       pick(prices(b), prices(local), prices(remote), "Currency / drawings"),
     );
   } else {
+    const priceScale = (s) => ({
+      scale: s.scale,
+      priceRange: s.priceRange ?? null,
+    });
+    Object.assign(
+      state,
+      pick(priceScale(b), priceScale(local), priceScale(remote), "Price scale"),
+    );
     const map = (s) => new Map(s.drawings.map((d) => [d.id, d]));
     const before = map(b),
       mine = map(local),

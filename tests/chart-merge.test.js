@@ -82,3 +82,32 @@ test("cleared analyses never silently resurrect and merged limits remain valid",
     "Drawing limit",
   ]);
 });
+
+test("independent time and price scaling merge while competing price edits require review", () => {
+  const b = base();
+  const priceRange = { min: 8, max: 18 };
+  const viewport = { from: 1700000000, to: 1700864000 };
+  const result = mergeChartStates(b, { ...b, priceRange }, { ...b, viewport });
+  assert.deepEqual(result.conflicts, []);
+  assert.deepEqual(result.state.priceRange, priceRange);
+  assert.deepEqual(result.state.viewport, viewport);
+  for (const remote of [
+    { ...b, priceRange: { min: 9, max: 20 } },
+    { ...b, scale: "log" },
+  ])
+    assert.deepEqual(
+      mergeChartStates(b, { ...b, priceRange }, remote).conflicts,
+      ["Price scale"],
+    );
+  assert.deepEqual(
+    mergeChartStates(b, { ...b, priceRange }, { ...b, currency: "USD" })
+      .conflicts,
+    ["Currency / drawings"],
+  );
+  const saved = { ...b, priceRange };
+  assert.deepEqual(
+    mergeChartStates(saved, b, { ...saved, priceRange: { min: 9, max: 20 } })
+      .conflicts,
+    ["Price scale"],
+  );
+});

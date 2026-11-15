@@ -2,7 +2,7 @@
 
 ## Research workspace
 
-Each signed-in account has three independent analyses per asset. An analysis automatically saves its name, range, EUR/USD currency, linear/log scale, line/candle preference, indicator selection, viewport, and up to 40 drawings. All completed edits, including moves, deletions and undo/redo, enter a serialized per-slot queue after a 350 ms quiet interval. New edits remain available during writes; the latest state follows the acknowledged revision. The toolbar shows Saving/Saved, with retry or conflict controls when needed. There is no manual Save action.
+Each signed-in account has three independent analyses per asset. An analysis automatically saves its name, range, EUR/USD currency, linear/log scale, line/candle preference, indicator selection, time viewport, manual price range, and up to 40 drawings. All completed edits, including moves, deletions and undo/redo, enter a serialized per-slot queue after a 350 ms quiet interval. New edits remain available during writes; the latest state follows the acknowledged revision. The toolbar shows Saving/Saved, with retry or conflict controls when needed. There is no manual Save action.
 
 `chart-autosave.js` implements the queue independently of the chart UI. Pending snapshots, their base revision and in-flight attempts are journaled in sessionStorage under account/asset keys, allowing reload recovery and reconciliation of lost responses. This is tab-session recovery, not a durable offline database: closing the tab or clearing browser storage can remove pending drafts. If storage is unavailable, pending writes retain a before-unload guard. `chart-sync.js` scopes controllers to the active account, flushes on page hide and sign-out, and resumes bounded retries when connectivity returns. Slot selection is remembered within the tab session; saved analysis content is stored on the server.
 
@@ -11,6 +11,12 @@ The drawing toolbar provides trend lines, horizontal levels, Fibonacci retraceme
 Charts use cached market history and local calculations; these tools consume no AI credits. Candles and volume appear only when genuine source observations exist. Indicator warmup gaps remain empty. Historical currency conversion updates drawing anchors atomically with the data; failed conversions retain the previous state.
 
 Storage uses authenticated `/api/chart-workspaces` endpoints and the additive `chart_workspaces` table. Ownership is enforced in every SQL operation; the client's expected-owner header rejects stale-tab requests after a different account signs in. Revision checks and deletion tombstones prevent concurrent tabs from silently overwriting an analysis. Clearing a slot waits for in-flight writes and cancels queued successors so they cannot resurrect it. Existing portfolio, account, passkey, and AI credential data are not rewritten.
+
+## Axis scaling
+
+Drag the right price axis vertically to stretch/compress its range around the visible midpoint. Log mode scales around the geometric midpoint. Drag the bottom time axis horizontally to change bar spacing, anchoring the latest visible bar. Axis hit regions stay separate from drawing anchors and work with any drawing tool selected. Pointer capture survives SVG redraws, frame batching keeps motion smooth, and each completed drag creates one undo/autosave transaction. Cancelled gestures restore their initial state. Remote reconciliation is held from pointer-down, including the interval before the first changed frame.
+
+Double-click an axis to reset only that axis. Fit or keyboard `0` restores both automatic ranges. Keyboard `+`/`−` scales time; `Alt`+`↑`/`↓` scales price. Changing the history range, currency or linear/log mode restores automatic price scaling. Price ranges are bounded and validated by the server; legacy states without a price range remain automatic. Independent price/time edits merge across devices; conflicting price edits require review. Scale type and price bounds merge atomically, and currency changes include the price range to avoid mixing units.
 
 ## Fullscreen lifecycle
 

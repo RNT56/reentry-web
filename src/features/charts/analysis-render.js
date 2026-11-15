@@ -118,8 +118,12 @@ export function chartGeometry(data, state, indicators, width, totalHeight) {
   const min = transform(minimum),
     max = transform(maximum),
     padding = Math.max((max - min) * 0.09, log ? 0.005 : maximum * 0.001);
-  const low = log || minimum < 0 ? min - padding : Math.max(0, min - padding),
-    high = max + padding;
+  const low = state.priceRange
+      ? transform(state.priceRange.min)
+      : log || minimum < 0
+        ? min - padding
+        : Math.max(0, min - padding),
+    high = state.priceRange ? transform(state.priceRange.max) : max + padding;
   const x = (i) => L + ((i - from) / (to - from)) * (R - L),
     y = (v) => T + ((high - transform(v)) / (high - low)) * (B - T);
   function indexAt(time) {
@@ -383,8 +387,9 @@ export function renderAnalysisPlot(
         `<text x="${g.x(i)}" y="${g.H - 7}" text-anchor="${k === 0 ? "start" : k === 2 ? "end" : "middle"}" class="ta-axis">${date(data.points[i].time)}</text>`,
     )
     .join("");
+  const axes = `<rect class="ta-axis-hit" data-ta-axis="price" x="${g.R}" y="${g.T}" width="${g.W - g.R}" height="${g.B - g.T}"><title>Drag to scale price · Double-click to reset</title></rect><rect class="ta-axis-hit" data-ta-axis="time" x="${g.L}" y="${g.B}" width="${g.R - g.L}" height="${g.H - g.B}"><title>Drag to scale time · Double-click to reset</title></rect>`;
   const gradientId = inkId;
-  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs>${hasCandles ? "" : ink.defs}<clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : ink.bodyMarkup}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0" pointer-events="none"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${hasCandles ? "" : `<g class="ta-line-endpoint" pointer-events="none">${ink.endpointMarkup}</g>`}${dates}</svg>`;
+  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs>${hasCandles ? "" : ink.defs}<clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : ink.bodyMarkup}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0" pointer-events="none"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${hasCandles || g.y(latest.price) < g.T || g.y(latest.price) > g.B ? "" : `<g class="ta-line-endpoint" pointer-events="none">${ink.endpointMarkup}</g>`}${dates}${axes}</svg>`;
   const panes = state.indicators
     .filter((id) => ["rsi", "macd", "volume"].includes(id))
     .map((id) => renderPane(id, indicators[id], g))

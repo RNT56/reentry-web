@@ -52,7 +52,7 @@ test("viewport math remains bounded for repeated extreme zooms and pans", () => 
   }
 });
 
-function harness() {
+function harness(overrides = {}, options = {}) {
   const handlers = new Map(),
     captures = new Set(),
     frames = new Map();
@@ -81,12 +81,26 @@ function harness() {
     hasPointerCapture: (id) => captures.has(id),
     releasePointerCapture: (id) => captures.delete(id),
   };
-  let current = { ...view, W: 1000, H: 500, L: 0, R: 1000, T: 0, B: 500 };
+  let current = {
+    ...view,
+    W: 1000,
+    H: 500,
+    L: 0,
+    R: 1000,
+    T: 0,
+    B: 500,
+    ...overrides,
+  };
   const starts = [],
     changes = [],
-    ends = [];
+    ends = [],
+    resets = [],
+    interactions = [];
   const controller = mountChartGestures(plot, {
+    ...options,
     getView: () => current,
+    onResetAxis: (axis) => resets.push(axis),
+    onInteraction: (active) => interactions.push(active),
     onStart: (value) => starts.push(value),
     onChange: (value) => {
       current = { ...current, ...value };
@@ -96,6 +110,9 @@ function harness() {
   });
   return {
     controller,
+    resets,
+    interactions,
+    current: () => current,
     starts,
     changes,
     ends,
@@ -248,6 +265,108 @@ test("zooming out at the full range never creates an undo transaction", () => {
     assert.equal(h.starts.length, starts);
     assert.equal(h.ends.length, ends);
     assert.equal(h.controller.isActive(), false);
+  } finally {
+    h.close();
+  }
+});
+
+const axes = {
+  L: 10,
+  R: 924,
+  T: 16,
+  B: 468,
+  low: 80,
+  high: 120,
+  priceRange: null,
+};
+
+test("price axis drags scale only price, batch frames, and commit a single undo/save transaction", () => {
+  const h = harness(axes);
+  try {
+    const down = h.event("pointerdown", { clientX: 950 });
+    assert.ok(down.defaultPrevented && down.stopped);
+    assert.deepEqual(h.interactions, [true]);
+    assert.equal(h.starts.length, 0);
+    h.event("pointermove", { clientX: 700, clientY: 160 });
+    h.event("pointermove", { clientX: 600, clientY: 100 });
+    h.flush();
+    assert.equal(h.changes.length, 1);
+    assert.equal(h.current().from, view.from);
+    assert.equal(h.current().to, view.to);
+    const range = h.current().priceRange;
+    assert.ok(range.max - range.min < 40);
+    assert.equal((range.min + range.max) / 2, 100);
+    h.event("pointerup");
+    assert.equal(h.ends.length, 1);
+    assert.equal(h.ends[0].changed, true);
+    assert.equal(h.captures.size, 0);
+    assert.equal(h.interactions.at(-1), false);
+  } finally {
+    h.close();
+  }
+});
+
+test("time axis drag anchors the latest visible bar and retains manual price range", () => {
+  const priceRange = { min: 90, max: 110 };
+  const h = harness({ ...axes, priceRange });
+  try {
+    h.event("pointerdown", { clientX: 500, clientY: 485 });
+    h.event("pointermove", { clientX: 680, clientY: 600 });
+    h.event("pointerup");
+    assert.equal(h.current().to, view.to);
+    assert.equal(h.current().to - h.current().from + 1, 37);
+    assert.deepEqual(h.current().priceRange, priceRange);
+    assert.equal(h.ends.length, 1);
+  } finally {
+    h.close();
+  }
+});
+
+test("axis scaling works with a drawing tool selected; no-op clicks and right-clicks never save", () => {
+  const h = harness(axes, { enabled: () => false, axesEnabled: () => true });
+  try {
+    h.event("pointerdown", { clientX: 950, button: 2 });
+    assert.equal(h.controller.isActive(), false);
+    h.event("pointerdown", { clientX: 950 });
+    h.event("pointerup");
+    assert.equal(h.ends.length, 0);
+    h.event("pointerdown", { clientX: 950 });
+    h.event("pointermove", { clientX: 950, clientY: 300 });
+    h.event("pointerup");
+    assert.equal(h.ends.length, 1);
+    assert.ok(h.current().priceRange.max - h.current().priceRange.min > 40);
+  } finally {
+    h.close();
+  }
+});
+
+test("axis cancellation reports rollback; double-click resets only its axis", () => {
+  const h = harness(axes);
+  try {
+    h.event("pointerdown", { clientX: 950 });
+    h.event("pointermove", { clientX: 950, clientY: 100 });
+    h.flush();
+    h.event("lostpointercapture");
+    assert.equal(h.ends[0].cancelled, true);
+    assert.equal(h.ends[0].initial.priceRange, null);
+    assert.equal(h.captures.size, 0);
+    h.event("dblclick", { clientX: 950 });
+    h.event("dblclick", { clientY: 485 });
+    h.event("dblclick", { clientX: 500 });
+    h.event("dblclick", { clientX: 950, clientY: 485 });
+    assert.deepEqual(h.resets, ["price", "time"]);
+  } finally {
+    h.close();
+  }
+});
+
+test("disabled axes do not capture input or reset views", () => {
+  const h = harness(axes, { enabled: () => false });
+  try {
+    assert.ok(!h.event("pointerdown", { clientX: 950 }).defaultPrevented);
+    h.event("dblclick", { clientX: 950 });
+    assert.equal(h.controller.isActive(), false);
+    assert.deepEqual(h.resets, []);
   } finally {
     h.close();
   }

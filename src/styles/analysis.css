@@ -747,6 +747,32 @@
 .ta-plot.is-panning {
   cursor: grabbing;
 }
+.ta-axis-hit {
+  fill: transparent;
+  touch-action: none;
+  transition: fill 120ms;
+}
+.ta-axis-hit:hover {
+  fill: #b9edb108;
+}
+.ta-axis-hit[data-ta-axis="price"] {
+  cursor: ns-resize;
+}
+.ta-axis-hit[data-ta-axis="time"] {
+  cursor: ew-resize;
+}
+.ta-plot.is-scaling-price,
+.ta-plot.is-scaling-price * {
+  cursor: ns-resize !important;
+}
+.ta-plot.is-scaling-time,
+.ta-plot.is-scaling-time * {
+  cursor: ew-resize !important;
+}
+.ta-plot.is-scaling-price [data-ta-axis="price"],
+.ta-plot.is-scaling-time [data-ta-axis="time"] {
+  fill: #b9edb10d;
+}
 .ta-active-row[hidden] {
   display: none;
 }
