@@ -1,6 +1,7 @@
 import { chartWorkspaceSync } from "./chart-sync.js";
 import { chartStateVersion as versionOf } from "./chart-autosave.js";
 import { mergeChartStates } from "../../domain/chart-merge.js";
+import { savedChartViewport } from "../../domain/chart-viewport.js";
 import { scalePriceRange } from "../../domain/chart-axis.js";
 import { download } from "../intelligence/shared.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
@@ -25,6 +26,7 @@ import {
   mountChartGestures,
   zoomChartView,
   panChartView,
+  panChartPlane,
   sameChartView,
 } from "./chart-gestures.js";
 import {
@@ -167,7 +169,7 @@ export function mountAnalysisChart(
   const drawerId = "ta-tools-" + crypto.randomUUID();
   const fullscreenPanelId = "ta-workspace-" + crypto.randomUUID();
   root.classList.add("analysis-chart");
-  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-heading-actions"><button type="button" class="ta-fullscreen-settings" data-ta-fullscreen-settings aria-label="Chart workspace settings" aria-controls="${fullscreenPanelId}" aria-expanded="false">${icon("sliders")}<span>Workspace</span></button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Drag either axis to scale; double-click it to reset. Arrow keys inspect, plus and minus zoom time, Alt with up and down scales price, zero fits both axes; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
+  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-heading-actions"><button type="button" class="ta-fullscreen-settings" data-ta-fullscreen-settings aria-label="Chart workspace settings" aria-controls="${fullscreenPanelId}" aria-expanded="false">${icon("sliders")}<span>Workspace</span></button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag in any direction to pan; scroll or pinch to zoom. Drag either axis to scale; double-click it to reset. Arrow keys inspect, Shift with arrows pans, plus and minus zoom time, Alt with up and down scales price, zero fits both axes; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
     historyRanges,
   )
     .map(
@@ -411,15 +413,14 @@ export function mountAnalysisChart(
     geometry && data
       ? {
           ...geometry,
+          from: geometry.start,
+          to: geometry.end,
           length: data.points.length,
           priceRange: state.priceRange ?? null,
         }
       : null;
   function applyViewport(next) {
-    state.viewport =
-      next.from === 0 && next.to === data.points.length - 1
-        ? null
-        : { from: data.points[next.from].time, to: data.points[next.to].time };
+    state.viewport = savedChartViewport(data.points, next);
   }
   const gestures = mountChartGestures(plot, {
     getView: view,
@@ -518,8 +519,8 @@ export function mountAnalysisChart(
       " · " +
       state.currency +
       " · " +
-      (geometry.to - geometry.from + 1 < data.points.length
-        ? `${geometry.to - geometry.from + 1} / ${data.points.length}`
+      (geometry.visibleTo - geometry.visibleFrom + 1 < data.points.length
+        ? `${geometry.visibleTo - geometry.visibleFrom + 1} / ${data.points.length}`
         : data.points.length) +
       " bars";
     selectPoint(data.points.length - 1, false);
@@ -528,9 +529,12 @@ export function mountAnalysisChart(
   }
   function selectPoint(index, exploring = true) {
     if (!data || !geometry) return;
-    hoverIndex = Math.max(geometry.from, Math.min(geometry.to, index));
+    hoverIndex = Math.max(
+      geometry.visibleFrom,
+      Math.min(geometry.visibleTo, index),
+    );
     const p = data.points[hoverIndex],
-      first = data.points[geometry.from].price,
+      first = data.points[geometry.visibleFrom].price,
       change = p.price - first;
     setAnimatedText(root.querySelector(".ta-price"), chartNumber(p.price));
     setAnimatedText(
@@ -600,14 +604,7 @@ export function mountAnalysisChart(
       ? {
           range: data.range,
           currency: data.currency,
-          viewport:
-            geometry &&
-            (geometry.from !== 0 || geometry.to !== data.points.length - 1)
-              ? {
-                  from: data.points[geometry.from].time,
-                  to: data.points[geometry.to].time,
-                }
-              : null,
+          viewport: geometry ? savedChartViewport(data.points, view()) : null,
         }
       : null;
     busy = true;
@@ -988,13 +985,31 @@ export function mountAnalysisChart(
   };
   plot.onkeydown = (e) => {
     if (!data || !editable()) return;
-    if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+    if (
+      e.shiftKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
+    ) {
+      e.preventDefault();
+      gestures.finish();
+      const next = panChartPlane(
+        view(),
+        e.key === "ArrowRight" ? 32 : e.key === "ArrowLeft" ? -32 : 0,
+        e.key === "ArrowDown" ? 32 : e.key === "ArrowUp" ? -32 : 0,
+      );
+      checkpoint();
+      applyViewport(next);
+      if (next.priceRange) state.priceRange = next.priceRange;
+      mark();
+      draw();
+    } else if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
       e.preventDefault();
       selectPoint(
         e.key === "Home"
-          ? geometry.from
+          ? geometry.visibleFrom
           : e.key === "End"
-            ? geometry.to
+            ? geometry.visibleTo
             : hoverIndex + (e.key === "ArrowRight" ? 1 : -1),
       );
     } else if (e.key === "Enter" && tool !== "inspect") {

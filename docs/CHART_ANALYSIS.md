@@ -12,6 +12,14 @@ Charts use cached market history and local calculations; these tools consume no 
 
 Storage uses authenticated `/api/chart-workspaces` endpoints and the additive `chart_workspaces` table. Ownership is enforced in every SQL operation; the client's expected-owner header rejects stale-tab requests after a different account signs in. Revision checks and deletion tombstones prevent concurrent tabs from silently overwriting an analysis. Clearing a slot waits for in-flight writes and cancels queued successors so they cannot resurrect it. Existing portfolio, account, passkey, and AI credential data are not rewritten.
 
+## Two-dimensional panning
+
+Dragging the price plot moves both time and price, with mouse, pen or one finger. The canvas owns its touch gestures (`touch-action: none`); chart headings, controls, margins and auxiliary panes remain available for page scrolling. Drawing hit targets retain priority. A five-pixel threshold distinguishes taps from drags, pointer capture survives SVG redraws, and one completed gesture creates one undo/autosave entry. Escape or pointer cancellation rolls back both axes. Shift plus arrow keys offers the same panning by keyboard.
+
+`chart-viewport.js` maps fractional bar positions to persisted timestamps and back, including market gaps. Dragging no longer snaps to whole bars. Bounded blank space at either edge allows panning even at full zoom while retaining observed prices on-screen. Plot lines include adjacent observations under a clip so fractional edges remain continuous; auxiliary panes share the same x transform. No price bars are synthesized in the blank space. Linear pans preserve the price interval; log pans preserve its ratio. The manual price interval stays fixed while time moves, preventing automatic rescaling from fighting a diagonal drag.
+
+A second finger transitions into pinch zoom and midpoint panning; releasing it continues with the remaining finger from the current view, within the same save transaction. Fractional time windows and price bounds use the existing account/asset/slot state and revision checks. Reloads, device updates and fullscreen resizing restore the same market coordinates.
+
 ## Axis scaling
 
 Drag the right price axis vertically to stretch/compress its range around the visible midpoint. Log mode scales around the geometric midpoint. Drag the bottom time axis horizontally to change bar spacing, anchoring the latest visible bar. Axis hit regions stay separate from drawing anchors and work with any drawing tool selected. Pointer capture survives SVG redraws, frame batching keeps motion smooth, and each completed drag creates one undo/autosave transaction. Cancelled gestures restore their initial state. Remote reconciliation is held from pointer-down, including the interval before the first changed frame.

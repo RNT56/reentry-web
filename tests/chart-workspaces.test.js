@@ -24,7 +24,7 @@ const state = (name = "Support study") => ({
       color: "#b9f68b",
     },
   ],
-  viewport: { from: 1700000000, to: 1700864000 },
+  viewport: { from: 1700000000.125, to: 1700864000.875 },
   priceRange: { min: 20, max: 40 },
 });
 const origin = "http://localhost:4173";
@@ -223,6 +223,7 @@ test("saved analyses are authenticated, isolated by user and asset, and bounded 
       assert.equal(saved.json().revision, 1);
       assert.equal(saved.json().symbol, "INTC");
       assert.deepEqual(saved.json().state.priceRange, state().priceRange);
+      assert.deepEqual(saved.json().state.viewport, state().viewport);
     }
     assert.equal(
       (

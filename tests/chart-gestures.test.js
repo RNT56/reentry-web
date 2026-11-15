@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   zoomChartView,
   panChartView,
+  panChartPlane,
   mountChartGestures,
 } from "../src/features/charts/chart-gestures.js";
 
@@ -11,9 +12,9 @@ const view = { length: 251, from: 50, to: 149 };
 test("zoom keeps the pointed observation anchored within rounding precision", () => {
   for (const anchor of [0, 0.2, 0.5, 0.8, 1]) {
     const result = zoomChartView(view, 0.6, anchor);
-    assert.equal(result.to - result.from + 1, 60);
+    assert.ok(Math.abs(result.to - result.from + 1 - 60) < 1e-10);
     assert.ok(
-      Math.abs(result.from + anchor * 59 - (view.from + anchor * 99)) <= 0.5,
+      Math.abs(result.from + anchor * 59 - (view.from + anchor * 99)) < 1e-10,
     );
   }
 });
@@ -28,11 +29,11 @@ test("zoom and pan stay bounded, preserve inclusive counts, and stop at minimum 
     zoomChartView(view, 0.001).to - zoomChartView(view, 0.001).from + 1,
     12,
   );
-  assert.deepEqual(panChartView(view, -1000), { from: 0, to: 99 });
-  assert.deepEqual(panChartView(view, 1000), { from: 151, to: 250 });
+  assert.deepEqual(panChartView(view, -1000), { from: -49.5, to: 49.5 });
+  assert.deepEqual(panChartView(view, 1000), { from: 200.5, to: 299.5 });
   assert.deepEqual(panChartView({ length: 251, from: 0, to: 250 }, 15), {
-    from: 0,
-    to: 250,
+    from: 15,
+    to: 265,
   });
   assert.deepEqual(zoomChartView(view, NaN), { from: 50, to: 149 });
   assert.deepEqual(panChartView(view, Infinity), { from: 50, to: 149 });
@@ -46,9 +47,13 @@ test("viewport math remains bounded for repeated extreme zooms and pans", () => 
       ...zoomChartView(current, i % 2 ? 1.23 : 0.78, (i % 11) / 10),
     };
     current = { ...current, ...panChartView(current, (i % 21) - 10) };
-    assert.ok(current.from >= 0 && current.to < current.length);
-    assert.ok(current.to - current.from + 1 >= 12);
-    assert.ok(Number.isInteger(current.from) && Number.isInteger(current.to));
+    const span = current.to - current.from;
+    assert.ok(
+      current.from >= -span / 2 - 1e-8 &&
+        current.to <= current.length - 1 + span / 2 + 1e-8,
+    );
+    assert.ok(span + 1 >= 12 - 1e-8);
+    assert.ok(Number.isFinite(current.from) && Number.isFinite(current.to));
   }
 });
 
@@ -89,6 +94,8 @@ function harness(overrides = {}, options = {}) {
     R: 1000,
     T: 0,
     B: 500,
+    low: 80,
+    high: 120,
     ...overrides,
   };
   const starts = [],
@@ -163,7 +170,11 @@ test("a chart drag batches rendering, captures its pointer and commits one trans
     assert.equal(h.changes.length, 0);
     h.flush();
     assert.equal(h.changes.length, 1);
-    assert.deepEqual(h.changes[0], { from: 30, to: 129 });
+    assert.deepEqual(h.changes[0], {
+      from: 30.2,
+      to: 129.2,
+      priceRange: { min: 80, max: 120 },
+    });
     h.event("pointerup", { clientX: 500 });
     assert.equal(h.starts.length, 1);
     assert.equal(h.ends.length, 1);
@@ -175,19 +186,23 @@ test("a chart drag batches rendering, captures its pointer and commits one trans
   }
 });
 
-test("vertical touch motion preserves page scrolling and creates no chart transaction", () => {
+test("vertical touch motion pans the chart and saves one gesture", () => {
   const h = harness();
   try {
     h.event("pointerdown", { pointerType: "touch" });
     const event = h.event("pointermove", {
       pointerType: "touch",
-      clientX: 502,
+      clientX: 500,
       clientY: 230,
     });
-    assert.ok(!event.defaultPrevented);
-    assert.equal(h.controller.isActive(), false);
-    assert.equal(h.starts.length, 0);
-    assert.equal(h.ends.length, 0);
+    assert.ok(event.defaultPrevented && event.stopped);
+    assert.equal(h.controller.isActive(), true);
+    h.event("pointerup", { pointerType: "touch", clientY: 230 });
+    assert.equal(h.starts.length, 1);
+    assert.equal(h.ends.length, 1);
+    assert.deepEqual(h.current().priceRange, { min: 82.4, max: 122.4 });
+    assert.equal(h.current().from, view.from);
+    assert.equal(h.current().to, view.to);
   } finally {
     h.close();
   }
@@ -367,6 +382,112 @@ test("disabled axes do not capture input or reset views", () => {
     h.event("dblclick", { clientX: 950 });
     assert.equal(h.controller.isActive(), false);
     assert.deepEqual(h.resets, []);
+  } finally {
+    h.close();
+  }
+});
+
+test("diagonal panning follows pixel deltas without whole-bar snapping or price rescaling", () => {
+  const g = { ...view, L: 10, R: 1000, T: 10, B: 410, low: 80, high: 120 };
+  assert.deepEqual(panChartPlane(g, 1.25, 5.5), {
+    from: 49.875,
+    to: 148.875,
+    priceRange: { min: 80.55, max: 120.55 },
+  });
+  const shifted = panChartPlane(
+    { ...g, priceRange: { min: 90, max: 110 } },
+    0,
+    -20,
+  );
+  assert.deepEqual(shifted.priceRange, { min: 89, max: 109 });
+});
+
+test("touches outside the price canvas and simple taps leave the view and page scrolling alone", () => {
+  const h = harness();
+  try {
+    assert.ok(
+      !h.event("pointerdown", { clientY: 550, pointerType: "touch" })
+        .defaultPrevented,
+    );
+    assert.equal(h.controller.isActive(), false);
+    h.event("pointerdown", { pointerType: "touch" });
+    h.event("pointerup", { pointerType: "touch" });
+    assert.equal(h.ends.length, 0);
+    assert.equal(h.captures.size, 0);
+    assert.equal(h.interactions.at(-1), false);
+  } finally {
+    h.close();
+  }
+});
+
+test("touch drag, pinch and remaining-finger drag share one save with no transition jump", () => {
+  const h = harness();
+  try {
+    h.event("pointerdown", { pointerType: "touch", clientX: 400 });
+    h.event("pointermove", {
+      pointerType: "touch",
+      clientX: 450,
+      clientY: 250,
+    });
+    // Join before the scheduled render: this pending frame must become the pinch base.
+    h.event("pointerdown", {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 650,
+      clientY: 250,
+    });
+    assert.deepEqual(h.current().priceRange, { min: 84, max: 124 });
+    const before = structuredClone(h.current());
+    h.event("pointermove", {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 650,
+      clientY: 250,
+    });
+    h.flush();
+    assert.deepEqual(h.current(), before);
+    h.event("pointermove", {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 750,
+      clientY: 300,
+    });
+    h.event("pointerup", { pointerId: 2, pointerType: "touch" });
+    const after = structuredClone(h.current());
+    h.event("pointermove", {
+      pointerType: "touch",
+      clientX: 450,
+      clientY: 250,
+    });
+    h.flush();
+    assert.deepEqual(h.current(), after);
+    h.event("pointermove", {
+      pointerType: "touch",
+      clientX: 450,
+      clientY: 275,
+    });
+    h.event("pointerup", { pointerType: "touch" });
+    assert.ok(h.current().priceRange.min > after.priceRange.min);
+    assert.equal(h.starts.length, 1);
+    assert.equal(h.ends.length, 1);
+    assert.equal(h.captures.size, 0);
+  } finally {
+    h.close();
+  }
+});
+
+test("cancelled two-axis drag preserves its original price and time state for rollback", () => {
+  const h = harness();
+  try {
+    h.event("pointerdown");
+    h.event("pointermove", { clientX: 550, clientY: 250 });
+    h.flush();
+    h.event("pointercancel");
+    assert.equal(h.ends.length, 1);
+    assert.equal(h.ends[0].cancelled, true);
+    assert.equal(h.ends[0].initial.from, view.from);
+    assert.equal(h.ends[0].initial.priceRange, undefined);
+    assert.equal(h.captures.size, 0);
   } finally {
     h.close();
   }

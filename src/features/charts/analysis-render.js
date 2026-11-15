@@ -3,6 +3,10 @@ import {
   fibonacciLevels,
   measureRange,
 } from "../../domain/technical-analysis.js";
+import {
+  observationIndex,
+  restoreChartWindow,
+} from "../../domain/chart-viewport.js";
 import { esc } from "../../shared/format.js";
 export const indicatorLabels = {
   sma20: "SMA 20",
@@ -53,16 +57,14 @@ export function chartGeometry(data, state, indicators, width, totalHeight) {
   const all = data.points;
   if (!Array.isArray(all) || all.length < 2)
     throw Error("At least two chart observations required.");
-  let from = 0,
-    to = all.length - 1;
-  if (state.viewport) {
-    const a = all.findIndex((p) => p.time >= state.viewport.from);
-    let b = all.findLastIndex((p) => p.time <= state.viewport.to);
-    if (a >= 0 && b - a >= 2) {
-      from = a;
-      to = b;
-    }
-  }
+  const window = restoreChartWindow(all, state.viewport);
+  const start = window.from,
+    end = window.to;
+  // Include adjacent observations so line segments meet the plot clip cleanly.
+  const from = Math.max(0, Math.floor(start)),
+    to = Math.min(all.length - 1, Math.ceil(end));
+  const visibleFrom = Math.max(0, Math.ceil(start - 1e-8)),
+    visibleTo = Math.min(all.length - 1, Math.floor(end + 1e-8));
   const points = all.slice(from, to + 1),
     W = Math.max(280, width),
     paneCount = state.indicators.filter((id) =>
@@ -124,26 +126,16 @@ export function chartGeometry(data, state, indicators, width, totalHeight) {
         ? min - padding
         : Math.max(0, min - padding),
     high = state.priceRange ? transform(state.priceRange.max) : max + padding;
-  const x = (i) => L + ((i - from) / (to - from)) * (R - L),
+  const x = (i) => L + ((i - start) / (end - start)) * (R - L),
     y = (v) => T + ((high - transform(v)) / (high - low)) * (B - T);
-  function indexAt(time) {
-    let lo = 0,
-      hi = all.length - 1;
-    while (lo < hi) {
-      const m = Math.floor((lo + hi) / 2);
-      if (all[m].time < time) lo = m + 1;
-      else hi = m;
-    }
-    if (!lo) return (time - all[0].time) / (all[1].time - all[0].time);
-    const a = all[lo - 1],
-      b = all[lo];
-    return lo - 1 + (time - a.time) / (b.time - a.time || 1);
-  }
-  const timeX = (time) => x(indexAt(time));
+  const timeX = (time) => x(observationIndex(all, time));
   const anchor = (px, py) => {
     const i = Math.max(
-      from,
-      Math.min(to, Math.round(from + ((px - L) / (R - L)) * (to - from))),
+      visibleFrom,
+      Math.min(
+        visibleTo,
+        Math.round(start + ((px - L) / (R - L)) * (end - start)),
+      ),
     );
     return {
       time: all[i].time,
@@ -157,8 +149,11 @@ export function chartGeometry(data, state, indicators, width, totalHeight) {
   };
   const at = (px) =>
     Math.max(
-      from,
-      Math.min(to, Math.round(from + ((px - L) / (R - L)) * (to - from))),
+      visibleFrom,
+      Math.min(
+        visibleTo,
+        Math.round(start + ((px - L) / (R - L)) * (end - start)),
+      ),
     );
   return {
     W,
@@ -172,6 +167,10 @@ export function chartGeometry(data, state, indicators, width, totalHeight) {
     B,
     from,
     to,
+    start,
+    end,
+    visibleFrom,
+    visibleTo,
     points,
     all,
     x,
@@ -310,18 +309,19 @@ function renderPane(id, series, g) {
         )
         .join("") + line(series, "#bba6df");
   else if (id === "macd") {
-    const bw = Math.max(1, ((r - l) / (g.to - g.from + 1)) * 0.65);
+    const bw = Math.max(1, ((r - l) / (g.end - g.start + 1)) * 0.65);
     for (let i = g.from; i <= g.to; i++)
       if (finite(series.histogram[i]))
         content += `<rect x="${g.x(i) - bw / 2}" y="${Math.min(y(0), y(series.histogram[i]))}" width="${bw}" height="${Math.max(0.7, Math.abs(y(0) - y(series.histogram[i])))}" fill="${series.histogram[i] >= 0 ? "#72b795" : "#c68e80"}" opacity=".5"/>`;
     content += line(series.line, "#9fbde3") + line(series.signal, "#d5b97a");
   } else {
-    const bw = Math.max(1, ((r - l) / (g.to - g.from + 1)) * 0.7);
+    const bw = Math.max(1, ((r - l) / (g.end - g.start + 1)) * 0.7);
     for (let i = g.from; i <= g.to; i++)
       if (finite(series[i]))
         content += `<rect x="${g.x(i) - bw / 2}" y="${y(series[i])}" width="${bw}" height="${Math.max(0.5, bottom - y(series[i]))}" fill="${g.all[i].price >= (g.all[i - 1]?.price || g.all[i].price) ? "#72b795" : "#c68e80"}" opacity=".5"/>`;
   }
-  return `<svg viewBox="0 0 ${w} ${h}" class="ta-pane ${compactPane ? "is-compact" : ""}" aria-label="${indicatorLabels[id]}"><text x="${l}" y="${compactPane ? 9 : 12}" class="ta-pane-label">${indicatorLabels[id]}</text>${compactPane ? "" : `<text x="${r + 7}" y="${top + 7}" class="ta-axis">${id === "volume" ? compact(hi) : hi.toFixed(id === "rsi" ? 0 : 2)}</text><text x="${r + 7}" y="${bottom}" class="ta-axis">${id === "volume" ? "0" : lo.toFixed(id === "rsi" ? 0 : 2)}</text>`}${content}</svg>`;
+  const clipId = newChartInkId("pane");
+  return `<svg viewBox="0 0 ${w} ${h}" class="ta-pane ${compactPane ? "is-compact" : ""}" aria-label="${indicatorLabels[id]}"><defs><clipPath id="${clipId}"><rect x="${l}" y="0" width="${r - l}" height="${h}"/></clipPath></defs><text x="${l}" y="${compactPane ? 9 : 12}" class="ta-pane-label">${indicatorLabels[id]}</text>${compactPane ? "" : `<text x="${r + 7}" y="${top + 7}" class="ta-axis">${id === "volume" ? compact(hi) : hi.toFixed(id === "rsi" ? 0 : 2)}</text><text x="${r + 7}" y="${bottom}" class="ta-axis">${id === "volume" ? "0" : lo.toFixed(id === "rsi" ? 0 : 2)}</text>`}<g clip-path="url(#${clipId})">${content}</g></svg>`;
 }
 export function renderAnalysisPlot(
   data,
@@ -343,7 +343,7 @@ export function renderAnalysisPlot(
     hasCandles = false;
   const candleWidth = Math.max(
     1,
-    Math.min(12, ((g.R - g.L) / (g.to - g.from + 1)) * 0.65),
+    Math.min(12, ((g.R - g.L) / (g.end - g.start + 1)) * 0.65),
   );
   if (state.chartType === "candle")
     for (let i = g.from; i <= g.to; i++) {
@@ -381,15 +381,17 @@ export function renderAnalysisPlot(
       day: "numeric",
       timeZone: data.timeZone || "UTC",
     }).format(t * 1000);
-  const dates = [g.from, Math.floor((g.from + g.to) / 2), g.to]
+  const dates = [
+    ...new Set([g.visibleFrom, Math.round((g.start + g.end) / 2), g.visibleTo]),
+  ]
     .map(
-      (i, k) =>
-        `<text x="${g.x(i)}" y="${g.H - 7}" text-anchor="${k === 0 ? "start" : k === 2 ? "end" : "middle"}" class="ta-axis">${date(data.points[i].time)}</text>`,
+      (i, k, ticks) =>
+        `<text x="${g.x(i)}" y="${g.H - 7}" text-anchor="${k === 0 ? "start" : k === ticks.length - 1 ? "end" : "middle"}" class="ta-axis">${date(data.points[i].time)}</text>`,
     )
     .join("");
   const axes = `<rect class="ta-axis-hit" data-ta-axis="price" x="${g.R}" y="${g.T}" width="${g.W - g.R}" height="${g.B - g.T}"><title>Drag to scale price · Double-click to reset</title></rect><rect class="ta-axis-hit" data-ta-axis="time" x="${g.L}" y="${g.B}" width="${g.R - g.L}" height="${g.H - g.B}"><title>Drag to scale time · Double-click to reset</title></rect>`;
   const gradientId = inkId;
-  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs>${hasCandles ? "" : ink.defs}<clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : ink.bodyMarkup}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0" pointer-events="none"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${hasCandles || g.y(latest.price) < g.T || g.y(latest.price) > g.B ? "" : `<g class="ta-line-endpoint" pointer-events="none">${ink.endpointMarkup}</g>`}${dates}${axes}</svg>`;
+  const svg = `<svg class="ta-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs>${hasCandles ? "" : ink.defs}<clipPath id="${gradientId}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${gradientId}-clip)">${hasCandles ? candles : ink.bodyMarkup}${overlays}<g class="ta-ai-layer">${aiLayer}</g><g class="ta-drawings">${renderDrawings(state.drawings, g, selected)}</g><g class="ta-preview"></g><g class="ta-crosshair" opacity="0" pointer-events="none"><path class="ta-cross-v" stroke="#9eb3a080" stroke-dasharray="3 4"/><path class="ta-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="ta-cross-dot" r="3.5" fill="${color}"/></g></g>${hasCandles || g.x(g.to) > g.R || g.x(g.to) < g.L || g.y(latest.price) < g.T || g.y(latest.price) > g.B ? "" : `<g class="ta-line-endpoint" pointer-events="none">${ink.endpointMarkup}</g>`}${dates}${axes}</svg>`;
   const panes = state.indicators
     .filter((id) => ["rsi", "macd", "volume"].includes(id))
     .map((id) => renderPane(id, indicators[id], g))

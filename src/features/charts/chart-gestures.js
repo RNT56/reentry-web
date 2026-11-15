@@ -2,11 +2,13 @@ import {
   axisDragFactor,
   chartAxisAt,
   scalePriceRange,
+  panPriceRange,
 } from "../../domain/chart-axis.js";
+import { panChartWindow } from "../../domain/chart-viewport.js";
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-/** Viewports use inclusive observation indices, never fabricated time intervals. */
+/** Inclusive bar coordinates allow sub-bar positioning without inventing observations. */
 export function zoomChartView(view, factor, anchor = 0.5) {
   const { length, from, to } = view;
   if (!Number.isFinite(factor) || factor <= 0 || length < 2)
@@ -19,26 +21,24 @@ export function zoomChartView(view, factor, anchor = 0.5) {
   );
   const ratio = clamp(Number.isFinite(anchor) ? anchor : 0.5, 0, 1);
   const fixed = from + ratio * (count - 1);
-  const start = clamp(
-    Math.round(fixed - ratio * (nextCount - 1)),
-    0,
-    length - nextCount,
-  );
-  return { from: start, to: start + nextCount - 1 };
+  if (nextCount === length) return { from: 0, to: length - 1 };
+  const start = fixed - ratio * (nextCount - 1);
+  return panChartWindow({ length, from: start, to: start + nextCount - 1 }, 0);
 }
 
-export function panChartView(view, deltaBars) {
-  const { length, from, to } = view;
-  if (!Number.isFinite(deltaBars) || length < 2) return { from, to };
-  const start = clamp(
-    Math.round(from + deltaBars),
-    0,
-    length - (to - from + 1),
+export const panChartView = panChartWindow;
+
+export function panChartPlane(view, dx, dy) {
+  const next = panChartView(
+    view,
+    (-dx / (view.R - view.L)) * (view.to - view.from),
   );
-  return { from: start, to: start + to - from };
+  const priceRange = panPriceRange(view, dy / (view.B - view.T));
+  return priceRange ? { ...next, priceRange } : next;
 }
 
-export const sameChartView = (a, b) => a?.from === b?.from && a?.to === b?.to;
+export const sameChartView = (a, b) =>
+  Math.abs(a?.from - b?.from) < 1e-7 && Math.abs(a?.to - b?.to) < 1e-7;
 const sameGestureView = (a, b) =>
   sameChartView(a, b) &&
   (a?.priceRange?.min ?? null) === (b?.priceRange?.min ?? null) &&
@@ -47,8 +47,8 @@ const sameGestureView = (a, b) =>
 /**
  * Gestures mutate no workspace state. A transaction begins only when its first
  * changed viewport is flushed, and ends once, so the host can retain one undo.
- * Keep touch-action: pan-y on the plot: vertical single-finger motion remains
- * page scrolling; horizontal drags and two-finger pinch belong to this chart.
+ * The price canvas owns touch motion in both directions. Surrounding chrome
+ * and auxiliary panes remain available for page scrolling.
  */
 export function mountChartGestures(
   plot,
@@ -164,6 +164,7 @@ export function mountChartGestures(
     return {
       distance: Math.max(1, Math.hypot(b.x - a.x, b.y - a.y)),
       center: (a.x + b.x) / 2,
+      centerY: (a.y + b.y) / 2,
     };
   }
   function down(event) {
@@ -195,7 +196,8 @@ export function mountChartGestures(
       return;
     if (!point?.inside) return;
     if (wheelTimer) finish();
-    if (event.pointerType !== "touch" && pointers.size) return;
+    if ((event.pointerType !== "touch" && pointers.size) || pointers.size >= 2)
+      return;
     pointers.set(event.pointerId, {
       ...point,
       startX: point.x,
@@ -210,9 +212,14 @@ export function mountChartGestures(
         x: point.x,
         y: point.y,
       };
-      if (event.pointerType !== "touch") capture(event.pointerId);
+      capture(event.pointerId);
       onInteraction(true);
     } else if (pointers.size === 2) {
+      if (frame) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        flush();
+      }
       begin();
       const p = pair();
       gesture = { kind: "pinch", base: effectiveView(), ...p };
@@ -251,11 +258,6 @@ export function mountChartGestures(
       const dx = point.x - gesture.x;
       const dy = point.y - gesture.y;
       if (Math.max(Math.abs(dx), Math.abs(dy)) < 5) return;
-      if (saved.type === "touch" && Math.abs(dy) > Math.abs(dx)) {
-        // Let the browser own vertical scrolling; do not start an undo entry.
-        finish();
-        return;
-      }
       gesture.kind = "pan";
       begin();
       capture(event.pointerId);
@@ -263,12 +265,7 @@ export function mountChartGestures(
     if (gesture.kind === "pan") {
       claim(event, "pan");
       const view = gesture.base;
-      schedule(
-        panChartView(
-          view,
-          (-(point.x - gesture.x) / (view.R - view.L)) * (view.to - view.from),
-        ),
-      );
+      schedule(panChartPlane(view, point.x - gesture.x, point.y - gesture.y));
     } else if (gesture.kind === "pinch") {
       claim(event, "pinch");
       const current = pair();
@@ -281,10 +278,10 @@ export function mountChartGestures(
       );
       // Translate the zoomed viewport with the pinch midpoint as well.
       schedule(
-        panChartView(
+        panChartPlane(
           { ...view, ...zoomed },
-          (-(current.center - gesture.center) / (view.R - view.L)) *
-            (zoomed.to - zoomed.from),
+          current.center - gesture.center,
+          current.centerY - gesture.centerY,
         ),
       );
     }

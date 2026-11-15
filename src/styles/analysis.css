@@ -744,8 +744,9 @@
   cursor: crosshair;
   touch-action: none;
 }
-.ta-plot.is-panning {
-  cursor: grabbing;
+.ta-plot.is-panning,
+.ta-plot.is-panning * {
+  cursor: grabbing !important;
 }
 .ta-axis-hit {
   fill: transparent;
@@ -783,6 +784,11 @@
   outline: 1px solid #8bbf8a66;
   outline-offset: 3px;
   border-radius: 6px;
+}
+.ta-canvas {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .ta-canvas,
 .ta-pane {

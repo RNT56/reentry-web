@@ -43,5 +43,40 @@ export function chartAxisAt({ x, y }, view) {
   return null;
 }
 
+/** Positive movement follows a downward pointer drag without changing scale. */
+export function panPriceRange(
+  { low, high, log = false, priceRange },
+  fraction,
+) {
+  low = priceRange?.min ?? low;
+  high = priceRange?.max ?? high;
+  if (
+    !Number.isFinite(fraction) ||
+    !Number.isFinite(low) ||
+    !Number.isFinite(high) ||
+    low >= high ||
+    (log && low <= 0)
+  )
+    return null;
+  const transform = log ? Math.log : (n) => n;
+  const inverse = log ? Math.exp : (n) => n;
+  const floor = log ? Math.log(MIN_LOG_PRICE) : -MAX_AXIS_PRICE;
+  const ceiling = log ? Math.log(MAX_AXIS_PRICE) : MAX_AXIS_PRICE;
+  const a = transform(low),
+    span = Math.min(transform(high) - a, ceiling - floor);
+  const start = clamp(a + span * fraction, floor, ceiling - span);
+  const min = clamp(
+    inverse(start),
+    log ? MIN_LOG_PRICE : floor,
+    MAX_AXIS_PRICE,
+  );
+  const max = clamp(
+    inverse(start + span),
+    log ? MIN_LOG_PRICE : floor,
+    MAX_AXIS_PRICE,
+  );
+  return min < max ? { min, max } : null;
+}
+
 /** CSS pixels give the same drag sensitivity at every chart size and density. */
 export const axisDragFactor = (pixels) => Math.exp(clamp(pixels / 180, -8, 8));
