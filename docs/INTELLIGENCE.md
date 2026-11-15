@@ -38,6 +38,20 @@ Studio draft cards expose a delete control on hover or keyboard focus, and keep 
 
 The author allowlist grants publishing rights, not access to other users’ accounts. There is no global administrator UI for reading users’ private research or API keys.
 
+## Studio writing and article presentation
+
+Studio offers a rich text editor and an editable Markdown source view. Both use the same safe Markdown renderer as published articles: headings, emphasis, lists, block quotes, links, dividers, code and tables. Raw HTML is escaped, unsafe links are rejected, and image syntax displays its description without loading remote images. The toolbar includes table editing, find and replace, word count, reading time and undo/redo. Save remains explicit, with optimistic revision checks; saving preserves the active editor and its undo history. Mapped passages can match visible text across Markdown emphasis.
+
+**Preview** renders the current unsaved draft through the published-article template in a private desktop or mobile viewport. It does not save, publish, create an edition or expose a public URL. Incomplete mappings and source rows are omitted with a visible warning. Preview pages are marked noindex and use the author-only, no-store API.
+
+The writing partner uses the author's configured Gemini or Claude model, credentials, consent and existing spending limits. It supports articles, paragraphs, theories, theses, assumptions, scenarios, rewrites, grammar checks and structure reviews. The default direction requests one central idea, separate competing theses, explicit assumptions and no em dashes. Voice and target length can be adjusted for each task.
+
+Writing jobs preserve the exact unsaved text, selected passage, title, public source references and saved revision. They do not include portfolio details or unrelated private research. Unlike source collection, writing does not browse or fetch linked pages: links are references, not evidence supplied to the model. The author must provide relevant facts or excerpts and check generated claims. Writing snapshots accept up to 40,000 characters without the research mapper's 18,000-character truncation; generated content is bounded to 30,000 characters and the existing provider output ceiling.
+
+Suggestions remain separate until the author explicitly appends, inserts or replaces text. Grammar and structure checks return anchored proposed corrections and advice, not an implicit rewrite. Changed text blocks stale applications; ambiguous quotes require manual review. Writing can never publish or create scenario mappings. Tasks, cancellation, history, usage accounting, queue recovery and provider failures use the existing durable job pipeline. Draft revision, provider settings and budget are rechecked before dispatch. Reported usage is retained even when a response fails validation.
+
+Published articles and previews share heading navigation, formatted tables, passage links and a once-per-passage word reveal on scroll. Text is visible before JavaScript runs. The reading toolbar's reduced-motion preference persists locally, and the operating system's reduced-motion setting always takes precedence. Selection and keyboard focus cancel active text animations.
+
 ## Data connectors
 
 Portfolio holdings are resolved across every depot and deduplicated by symbol, excluding demo holdings. They appear in the owner's Research list without creating a manual research preference or enabling scheduled AI. `server/intelligence/portfolio-sources.js` independently collects their public evidence when `ENABLE_BACKGROUND_JOBS=true`, including for accounts without a provider key and while paid AI is paused. Existing portfolios are scanned on worker startup; portfolio saves queue new holdings. Symbols and asset names go to the existing public connectors; quantities and buy-in prices do not.

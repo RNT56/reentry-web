@@ -1,8 +1,31 @@
 import { installSurfaceMotion } from "../../shared/surface-motion.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { icon } from "../../shared/icons.js";
+import { installReadingMotion } from "./reading-motion.js";
 
-installSurfaceMotion();
+const readingMotion = installReadingMotion();
+let surfaceMotion;
+function syncSurfaceMotion() {
+  surfaceMotion?.destroy();
+  surfaceMotion = readingMotion.reduced() ? null : installSurfaceMotion();
+}
+syncSurfaceMotion();
+addEventListener("reentry:reading-motion", syncSurfaceMotion);
+matchMedia("(prefers-reduced-motion: reduce)").addEventListener(
+  "change",
+  syncSurfaceMotion,
+);
+
+// srcdoc inherits the workspace URL, so preview passage links need local scrolling.
+document.addEventListener("click", (event) => {
+  const link = event.target.closest('a[href^="#"]');
+  if (!link || !document.body.classList.contains("journal-preview")) return;
+  const target = document.getElementById(link.getAttribute("href").slice(1));
+  if (!target) return;
+  event.preventDefault();
+  target.scrollIntoView({ block: "start", behavior: "instant" });
+  queueReading();
+});
 
 for (const map of document.querySelectorAll(".journal-map")) {
   map.style.setProperty(

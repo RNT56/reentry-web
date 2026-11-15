@@ -1,3 +1,9 @@
+import { createHash } from "node:crypto";
+import {
+  makeWritingPrompt,
+  writingSchema,
+  validateWritingResult,
+} from "./writing-contract.js";
 import { effectiveModel, priceFor, reservationFor } from "./catalog.js";
 import { id, fail, transaction } from "../platform/util.js";
 import { preferences, spending, reserve, settle, release } from "./billing.js";
@@ -34,10 +40,10 @@ export function createEngine({
   const chartQuotes = new Map();
   const chartSchemaInput = JSON.stringify(chartResultSchema);
   const sourceMonitor = createSourceMonitor({ db, vault, enabled, paused });
-  function chartAccess(user) {
+  function chartAccess(user, { scenario = true } = {}) {
     if (paused()) throw fail("AI is paused by the owner.", 503);
     const p = preferences(db, user);
-    if (!enabled) throw fail("Chart AI is unavailable on this server.", 503);
+    if (!enabled) throw fail("AI is unavailable on this server.", 503);
     if (!vault.available || !p.enabled || !p.consent_at)
       throw fail("Connect your key and enable AI in settings.", 409);
     if (
@@ -63,6 +69,7 @@ export function createEngine({
     )
       throw fail("Daily research limit reached. Try again tomorrow.", 429);
     if (
+      scenario &&
       db
         .prepare("SELECT COUNT(*) AS n FROM scenario_sets WHERE user_id=?")
         .get(user).n >= 500
@@ -266,6 +273,72 @@ export function createEngine({
     );
     return { id: job, status: "queued" };
   }
+  function writingBudget(user, prompt, model) {
+    const p = preferences(db, user);
+    let maximum;
+    try {
+      maximum = reservationFor(
+        prompt + JSON.stringify(writingSchema),
+        priceFor(model),
+      );
+    } catch (error) {
+      throw fail(error.message, 409);
+    }
+    const totals = spending(db, user);
+    if (
+      maximum > p.run_limit ||
+      maximum + totals.spent + totals.held > p.monthly_limit
+    )
+      throw fail("Spending limit reached. No AI request was sent.", 409);
+    return maximum;
+  }
+  function enqueueWriting(user, request, requestKey) {
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify(request))
+      .digest("hex");
+    const previous = db
+      .prepare(
+        "SELECT id,status,kind,input FROM ai_jobs WHERE user_id=? AND request_key=?",
+      )
+      .get(user, requestKey);
+    if (previous) {
+      if (
+        previous.kind !== "studio-writing" ||
+        JSON.parse(previous.input).requestHash !== requestHash
+      )
+        throw fail(
+          "Request key already used for a different writing task.",
+          409,
+        );
+      return { id: previous.id, status: previous.status };
+    }
+    const p = chartAccess(user, { scenario: false });
+    const { article, ...writing } = request;
+    const input = {
+      kind: "studio-writing",
+      article,
+      writing,
+      requestHash,
+      promptVersion: "studio-writing-v1",
+    };
+    const maximum = writingBudget(user, makeWritingPrompt(input), p.model);
+    const job = id();
+    db.prepare(
+      "INSERT INTO ai_jobs(id,user_id,kind,symbol,provider,model,status,input,request_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+    ).run(
+      job,
+      user,
+      "studio-writing",
+      article.symbol,
+      p.provider,
+      p.model,
+      "queued",
+      JSON.stringify(input),
+      requestKey,
+      Date.now(),
+    );
+    return { id: job, status: "queued", model: p.model, maxCost: maximum };
+  }
   function recover() {
     const rows = db
       .prepare(
@@ -297,7 +370,9 @@ export function createEngine({
       if (paused()) throw fail("AI is paused by the owner.", 503);
       const resolvedModel = effectiveModel(job.provider, job.model);
       if (
-        ["chart-analysis", "source-monitor"].includes(job.kind) &&
+        ["chart-analysis", "source-monitor", "studio-writing"].includes(
+          job.kind,
+        ) &&
         resolvedModel !== job.model
       )
         throw fail("Quoted model is no longer available. Preview again.", 409);
@@ -311,9 +386,10 @@ export function createEngine({
       const input = JSON.parse(job.input),
         chartJob = job.kind === "chart-analysis",
         sourceJob = job.kind === "source-monitor",
+        writingJob = job.kind === "studio-writing",
         collected = sourceJob
           ? { sources: input.sources, coverage: [] }
-          : chartJob
+          : chartJob || writingJob
             ? { sources: [], coverage: [] }
             : await collectSources(db, connectors, job.user_id, input.asset);
       if (
@@ -327,7 +403,7 @@ export function createEngine({
           "No evidence available. Add a source or try again later.",
           409,
         );
-      if (input.article) {
+      if (input.article && !writingJob) {
         input.article.truncated = input.article.body.length > 18000;
         input.article.body = input.article.body.slice(0, 18000);
         collected.sources.unshift({
@@ -343,7 +419,7 @@ export function createEngine({
       }
       const watched = sourceJob
         ? input.watched
-        : chartJob
+        : chartJob || writingJob
           ? []
           : db
               .prepare(
@@ -360,14 +436,16 @@ export function createEngine({
                 })),
               }));
       const snapshot =
-          chartJob || sourceJob
+          chartJob || sourceJob || writingJob
             ? input
             : { ...input, ...collected, watched, asOf: Date.now() },
-        prompt = sourceJob
-          ? makeSourceMonitorPrompt(snapshot)
-          : chartJob
-            ? makeChartPrompt(snapshot)
-            : makePrompt(snapshot);
+        prompt = writingJob
+          ? makeWritingPrompt(snapshot)
+          : sourceJob
+            ? makeSourceMonitorPrompt(snapshot)
+            : chartJob
+              ? makeChartPrompt(snapshot)
+              : makePrompt(snapshot);
       db.prepare("UPDATE ai_jobs SET input=? WHERE id=?").run(
         JSON.stringify(snapshot),
         job.id,
@@ -379,6 +457,20 @@ export function createEngine({
         .get(job.user_id, job.provider);
       if (!credential) throw fail("Provider key was removed.", 409);
       if (paused()) throw fail("AI is paused by the owner.", 503);
+      if (writingJob) {
+        const p = preferences(db, job.user_id);
+        if (p.provider !== job.provider || p.model !== job.model)
+          throw fail("AI settings changed. Run this writing task again.", 409);
+        const article = db
+          .prepare("SELECT revision FROM articles WHERE id=? AND user_id=?")
+          .get(input.article.id, job.user_id);
+        if (!article || article.revision !== input.article.revision)
+          throw fail(
+            "The draft changed or was deleted before this writing task ran. No AI request was sent.",
+            409,
+          );
+        writingBudget(job.user_id, prompt, job.model);
+      }
       if (chartJob) {
         const p = preferences(db, job.user_id);
         if (p.provider !== job.provider || p.model !== job.model)
@@ -400,7 +492,7 @@ export function createEngine({
         chartBudget(job.user_id, prompt, job.model, input.approvedMaximum);
       }
       if (
-        researchHidden(db, job.user_id, job.symbol) ||
+        (!writingJob && researchHidden(db, job.user_id, job.symbol)) ||
         (["research", "chart-analysis"].includes(job.kind) &&
           !researchAsset(db, job.user_id, job.symbol))
       )
@@ -412,11 +504,13 @@ export function createEngine({
         job,
         prompt,
         Date.now(),
-        sourceJob
-          ? sourceMonitor.schemaInput
-          : chartJob
-            ? chartSchemaInput
-            : "",
+        writingJob
+          ? JSON.stringify(writingSchema)
+          : sourceJob
+            ? sourceMonitor.schemaInput
+            : chartJob
+              ? chartSchemaInput
+              : "",
       );
       db.prepare("UPDATE ai_jobs SET dispatched_at=? WHERE id=?").run(
         Date.now(),
@@ -428,11 +522,13 @@ export function createEngine({
         model: job.model,
         key,
         prompt,
-        ...(sourceJob
-          ? { schema: sourceMonitorSchema }
-          : chartJob
-            ? { schema: chartResultSchema }
-            : {}),
+        ...(writingJob
+          ? { schema: writingSchema }
+          : sourceJob
+            ? { schema: sourceMonitorSchema }
+            : chartJob
+              ? { schema: chartResultSchema }
+              : {}),
         signal: aborter.signal,
       });
       // Charge valid usage even if the response is refused, truncated or fails our content checks.
@@ -451,11 +547,13 @@ export function createEngine({
           409,
         );
       }
-      const result = sourceJob
-        ? validateSourceMonitorResult(parsed, snapshot)
-        : chartJob
-          ? validateChartResult(parsed, snapshot)
-          : validateResult(parsed, snapshot);
+      const result = writingJob
+        ? validateWritingResult(parsed, snapshot)
+        : sourceJob
+          ? validateSourceMonitorResult(parsed, snapshot)
+          : chartJob
+            ? validateChartResult(parsed, snapshot)
+            : validateResult(parsed, snapshot);
       if (input.article?.truncated)
         result.limitations.push(
           "Only the first 18,000 characters of this article were mapped. Later passages were excluded.",
@@ -597,6 +695,7 @@ export function createEngine({
     enqueue,
     estimateChart,
     enqueueChart,
+    enqueueWriting,
     tick,
     start() {
       if (!enabled || timer) return;

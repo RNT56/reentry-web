@@ -1,3 +1,6 @@
+import { createWritingEditor, writingEditorMarkup } from "./writing-editor.js";
+import { createWritingAssistant } from "./writing-assistant.js";
+import { openArticlePreview } from "./article-preview.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
 import { icon, modal, close, toast, associateLabels } from "../../shared/ui.js";
@@ -10,6 +13,10 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     loadVersion = 0,
     destroyed = false,
     items = [];
+  let writer,
+    assistant,
+    preview,
+    assistOpen = true;
   const warn = (e) => {
     if (dirty || saving || deleting) {
       e.preventDefault();
@@ -49,7 +56,7 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     return {
       ...draft,
       title: form.elements.namedItem("article-title").value,
-      body: form.elements.namedItem("article-body").value,
+      body: writer?.getBody() ?? form.elements.namedItem("article-body").value,
       symbol: form.elements.namedItem("article-symbol").value.toUpperCase(),
       branches,
       sources: [...form.querySelectorAll("[data-source-row]")]
@@ -62,21 +69,45 @@ export function createStudio({ root, onMapped, refreshJournal }) {
   }
   function editor() {
     if (destroyed || !root.isConnected) return;
-    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>${icon("plus")} New article</button>${items.map((a) => `<div class="studio-card"><button type="button" class="studio-item ${draft?.id === a.id ? "selected" : ""} ${a.canDelete ? "deletable" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : a.canDelete ? "Draft" : "Unpublished"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>${a.canDelete ? `<button type="button" class="studio-delete" data-delete-article="${esc(a.id)}" aria-label="Delete draft: ${esc(a.title)}" title="Delete draft">${icon("close")}</button>` : ""}</div>`).join("")}</aside><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row article-heading-fields">${field("Asset ticker", "article-symbol", draft.symbol, "text", 'maxlength="32" required')}${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div><div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-map-article>${icon("sparkles")} Map with AI</button><button type="button" class="secondary" data-publish>Publish ${icon("arrow")}</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ${icon("arrow")}</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div><label class="sr-only" for="article-body">Article text</label><textarea class="article-textarea" id="article-body" name="article-body" maxlength="40000" placeholder="Article" required>${esc(draft.body)}</textarea><details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} branches</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>${icon("plus")} Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>${icon("plus")} Source link</button></details></form>` : empty("New article", "", `<button class="primary" data-new-article>Write an article ${icon("arrow")}</button>`)}</div></div>`;
+    writer?.destroy();
+    assistant?.destroy();
+    writer = null;
+    assistant = null;
+    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>${icon("plus")} New article</button>${items.map((a) => `<div class="studio-card"><button type="button" class="studio-item ${draft?.id === a.id ? "selected" : ""} ${a.canDelete ? "deletable" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : a.canDelete ? "Draft" : "Unpublished"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>${a.canDelete ? `<button type="button" class="studio-delete" data-delete-article="${esc(a.id)}" aria-label="Delete draft: ${esc(a.title)}" title="Delete draft">${icon("close")}</button>` : ""}</div>`).join("")}</aside><div class="studio-workbench ${assistOpen ? "" : "assistant-hidden"}"><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row article-heading-fields">${field("Asset ticker", "article-symbol", draft.symbol, "text", 'maxlength="32" required')}${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div><div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-preview-article>Preview ${icon("arrow")}</button><button type="button" class="secondary" data-toggle-writing aria-pressed="${assistOpen}">${icon("sparkles")} Writing partner</button><button type="button" class="secondary" data-map-article>${icon("sparkles")} Map with AI</button><button type="button" class="secondary" data-publish>Publish ${icon("arrow")}</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ${icon("arrow")}</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div>${writingEditorMarkup(draft.body)}<details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} ${draft.branches.length === 1 ? "branch" : "branches"}</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>${icon("plus")} Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>${icon("plus")} Source link</button></details></form>` : empty("New article", "", `<button class="primary" data-new-article>Write an article ${icon("arrow")}</button>`)}</div>${draft ? '<aside class="writing-assistant" aria-label="AI writing partner"></aside>' : ""}</div></div>`;
     associateLabels(root);
     const form = root.querySelector("#article-form");
     if (form) {
-      const body = form.elements.namedItem("article-body");
-      const resizeBody = () => {
-        if (!body.isConnected) return;
-        body.style.height = "auto";
-        body.style.height = Math.max(380, body.scrollHeight) + "px";
-      };
-      requestAnimationFrame(resizeBody);
-      form.oninput = (event) => {
-        if (event.target === body) resizeBody();
+      const markDirty = () => {
         dirty = true;
         root.querySelector("#draft-status").textContent = "Unsaved changes";
+      };
+      writer = createWritingEditor(root.querySelector(".writing-surface"), {
+        body: draft.body,
+        onChange: markDirty,
+      });
+      assistant = createWritingAssistant(
+        root.querySelector(".writing-assistant"),
+        {
+          getDraft: read,
+          getWriter: () => writer,
+          canEdit: () => !saving && !deleting,
+          onTitle: (title) => {
+            form.elements.namedItem("article-title").value = title;
+            markDirty();
+          },
+        },
+      );
+      form.oninput = (event) => {
+        if (!event.target.closest(".writing-surface")) markDirty();
+      };
+      form.onkeydown = (event) => {
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          event.key.toLowerCase() === "s"
+        ) {
+          event.preventDefault();
+          action(form.querySelector('[type="submit"]'), save);
+        }
       };
       form.onsubmit = (e) => {
         e.preventDefault();
@@ -92,6 +123,10 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     if (form && !form.reportValidity())
       throw Error("Complete the article and scenario fields first.");
     const data = read();
+    if (data.body.length > 40000)
+      throw Error(
+        "The article exceeds 40,000 characters. Shorten it before saving.",
+      );
     saving = true;
     if (form) form.inert = true;
     try {
@@ -99,7 +134,15 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       dirty = false;
       // A list refresh failure must not disguise a successful, revision-advancing save.
       items = items.map((a) => (a.id === draft.id ? draft : a));
-      editor();
+      root.querySelector("#draft-status").textContent =
+        "Saved · revision " + draft.revision;
+      const card = [...root.querySelectorAll("[data-edit-article]")].find(
+        (b) => b.dataset.editArticle === draft.id,
+      );
+      if (card) {
+        card.querySelector("b").textContent = draft.title;
+        card.querySelector("small").textContent = when(draft.updatedAt);
+      }
       toast("Draft saved.");
     } finally {
       saving = false;
@@ -172,6 +215,23 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       );
       return;
     }
+    if (b.hasAttribute("data-preview-article")) {
+      preview?.close();
+      preview = openArticlePreview(read);
+      return;
+    }
+    if (b.hasAttribute("data-toggle-writing")) {
+      assistOpen = !assistOpen;
+      root
+        .querySelector(".studio-workbench")
+        .classList.toggle("assistant-hidden", !assistOpen);
+      b.setAttribute("aria-pressed", String(assistOpen));
+      if (assistOpen)
+        root
+          .querySelector(".writing-assistant")
+          .scrollIntoView({ block: "nearest", behavior: "instant" });
+      return;
+    }
     if (b.dataset.deleteArticle) {
       action(b, () => removeDraft(b));
       return;
@@ -209,15 +269,11 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       load(b.dataset.editArticle);
     }
     if (b.hasAttribute("data-add-branch")) {
-      const textarea = root.querySelector("#article-body"),
-        passage = textarea.value.slice(
-          textarea.selectionStart,
-          textarea.selectionEnd,
-        );
+      const passage = writer?.selection().text || "";
       draft = read();
       if (!passage) {
         toast("Select a passage in your article first.");
-        textarea.focus();
+        writer?.focus();
         return;
       }
       if (draft.branches.length >= 12) {
@@ -319,6 +375,9 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     },
     destroy() {
       destroyed = true;
+      writer?.destroy();
+      assistant?.destroy();
+      preview?.close();
       loadVersion++;
       window.removeEventListener("beforeunload", warn);
       root.onclick = null;

@@ -10,6 +10,11 @@ import {
 import { validateBranches, validatePublicSources } from "../ai/contract.js";
 import { createSet, setView } from "../intelligence/scenarios.js";
 import { publicDocument } from "./public.js";
+import {
+  formatArticle,
+  articleContainsPassage,
+} from "../../src/domain/article-format.js";
+import { writingRequest } from "../ai/writing-contract.js";
 export function registerJournalRoutes(
   app,
   { db, engine, isAuthor, authorName },
@@ -58,7 +63,7 @@ export function registerJournalRoutes(
         slug: a.slug,
         symbol: a.symbol,
         title: a.title,
-        excerpt: a.body.slice(0, 180),
+        excerpt: formatArticle(a.body).plainText.slice(0, 180),
         publishedAt: a.published_at,
         author: a.author,
         revision: a.revision,
@@ -151,6 +156,116 @@ export function registerJournalRoutes(
     return { id: a };
   });
   app.get("/api/journal/:id", author, async (req) => draft(owned(req)));
+  app.post("/api/journal/:id/preview", author, async (req) => {
+    const a = owned(req),
+      b = req.body || {};
+    const body = text(b.body ?? a.body, 40000, 0);
+    const warnings = [];
+    const rawBranches = b.branches ?? JSON.parse(a.branches);
+    if (!Array.isArray(rawBranches) || rawBranches.length > 12)
+      throw fail("Use at most twelve scenario branches.");
+    const branches = rawBranches.flatMap((branch) => {
+      try {
+        return validateBranches([branch]);
+      } catch {
+        warnings.push("An unfinished scenario was omitted from this preview.");
+        return [];
+      }
+    });
+    if (
+      branches.some(
+        (branch) =>
+          branch.passage && !articleContainsPassage(body, branch.passage),
+      )
+    )
+      warnings.push(
+        "A mapped passage no longer matches the article. Review the scenario map before publishing.",
+      );
+    const rawSources = b.sources ?? JSON.parse(a.sources);
+    if (!Array.isArray(rawSources) || rawSources.length > 20)
+      throw fail("Use at most twenty source references.");
+    const sources = rawSources.flatMap((source) => {
+      try {
+        return validatePublicSources([source]);
+      } catch {
+        warnings.push(
+          "An unfinished source reference was omitted from this preview.",
+        );
+        return [];
+      }
+    });
+    const article = {
+      slug: a.slug,
+      title: text(b.title || a.title, 200),
+      symbol: symbol(b.symbol || a.symbol),
+      body,
+      author: authorName,
+      revision: a.revision,
+      publishedAt: Date.now(),
+      sources,
+      editions: [],
+      scenario: {
+        branches: branches.map((branch) => ({
+          ...branch,
+          status: { status: "watching", evidence: [] },
+        })),
+        observations: [],
+      },
+    };
+    return {
+      html: publicDocument({ article, authorName, preview: true }),
+      warnings: [...new Set(warnings)],
+    };
+  });
+  app.post("/api/journal/:id/assist", author, async (req) => {
+    const a = owned(req),
+      b = req.body || {};
+    if (b.revision !== a.revision)
+      throw fail(
+        "This draft changed on another device. Reload before requesting writing help.",
+        409,
+      );
+    return engine.enqueueWriting(
+      req.auth.user_id,
+      writingRequest(b, a),
+      text(b.requestKey, 100),
+    );
+  });
+  app.get("/api/journal/:id/assist", author, async (req) => {
+    const a = owned(req);
+    return {
+      jobs: db
+        .prepare(
+          "SELECT id,status,model,error,created_at,input FROM ai_jobs WHERE user_id=? AND kind='studio-writing' AND json_extract(input,'$.article.id')=? ORDER BY created_at DESC LIMIT 20",
+        )
+        .all(req.auth.user_id, a.id)
+        .map(({ input, ...job }) => ({
+          ...job,
+          task: JSON.parse(input).writing.task,
+        })),
+    };
+  });
+  app.get("/api/journal/:id/assist/:job", author, async (req) => {
+    const a = owned(req);
+    const job = db
+      .prepare(
+        "SELECT id,status,model,error,created_at,input,result FROM ai_jobs WHERE id=? AND user_id=? AND kind='studio-writing'",
+      )
+      .get(req.params.job, req.auth.user_id);
+    if (!job) throw fail("Writing task not found.", 404);
+    const input = JSON.parse(job.input);
+    if (input.article.id !== a.id) throw fail("Writing task not found.", 404);
+    return {
+      id: job.id,
+      status: job.status,
+      model: job.model,
+      error: job.error,
+      createdAt: job.created_at,
+      article: input.article,
+      writing: input.writing,
+      result: job.result ? JSON.parse(job.result) : null,
+    };
+  });
   app.delete("/api/journal/:id", author, async (req) =>
     transaction(db, () => {
       const a = owned(req);
@@ -178,7 +293,11 @@ export function registerJournalRoutes(
       branches = validateBranches(b.branches),
       body = text(b.body, 40000, 0),
       sources = validatePublicSources(b.sources);
-    if (branches.some((s) => s.passage && !body.includes(s.passage)))
+    if (
+      branches.some(
+        (s) => s.passage && !articleContainsPassage(body, s.passage),
+      )
+    )
       throw fail("Each mapped passage must appear in the article.");
     const changed = db
       .prepare(
@@ -223,7 +342,11 @@ export function registerJournalRoutes(
       if (a.body.trim().length < 20)
         throw fail("Add the article text before publishing.");
       const branches = validateBranches(JSON.parse(a.branches));
-      if (branches.some((b) => !b.passage || !a.body.includes(b.passage)))
+      if (
+        branches.some(
+          (b) => !b.passage || !articleContainsPassage(a.body, b.passage),
+        )
+      )
         throw fail(
           "Every public scenario must link to an exact article passage.",
         );
