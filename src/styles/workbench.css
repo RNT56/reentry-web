@@ -596,9 +596,11 @@
     margin: 0;
     white-space: normal;
   }
-  .studio-item {
+  .studio-card {
     flex: 0 0 190px;
     width: 190px;
+  }
+  .studio-item {
     padding: 12px;
     border: 1px solid var(--line);
     border-radius: 10px;

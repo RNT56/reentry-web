@@ -822,9 +822,14 @@ input[type="checkbox"] {
   width: 100%;
   margin-bottom: 20px;
 }
+.studio-card {
+  position: relative;
+  min-width: 0;
+}
 .studio-item {
   display: block;
   width: 100%;
+  height: 100%;
   text-align: left;
   padding: 18px 14px;
   border-bottom: 1px solid var(--line);
@@ -843,6 +848,57 @@ input[type="checkbox"] {
 .studio-item small {
   font-size: 9px;
   color: var(--muted);
+}
+.studio-item.deletable {
+  padding-right: 48px;
+}
+.studio-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  transition:
+    opacity 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+}
+.studio-delete .icon {
+  width: 16px;
+  height: 16px;
+}
+.studio-delete:hover,
+.studio-delete:focus-visible {
+  color: #e7b7aa;
+  background: #df9c8614;
+  border-color: #df9c8633;
+}
+@media (hover: hover) and (pointer: fine) {
+  .studio-delete {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .studio-card:hover .studio-delete,
+  .studio-card:focus-within .studio-delete,
+  .studio-delete[aria-busy="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .studio-delete {
+    top: 0;
+    right: 0;
+    width: 44px;
+    height: 44px;
+  }
 }
 .studio-editor {
   border: 1px solid var(--line);
@@ -1257,9 +1313,12 @@ textarea:focus {
     min-width: 125px;
     margin: 0;
   }
-  .studio-item {
+  .studio-card {
+    flex: 0 0 auto;
     min-width: 180px;
     max-width: 200px;
+  }
+  .studio-item {
     border: 1px solid var(--line);
     padding: 12px;
   }

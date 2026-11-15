@@ -6,9 +6,12 @@ export function createStudio({ root, onMapped, refreshJournal }) {
   let draft = null,
     dirty = false,
     saving = false,
+    deleting = false,
+    loadVersion = 0,
+    destroyed = false,
     items = [];
   const warn = (e) => {
-    if (dirty || saving) {
+    if (dirty || saving || deleting) {
       e.preventDefault();
       e.returnValue = "";
     }
@@ -58,8 +61,8 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     };
   }
   function editor() {
-    if (!root.isConnected) return;
-    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>${icon("plus")} New article</button>${items.map((a) => `<button class="studio-item ${draft?.id === a.id ? "selected" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : "Draft"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>`).join("")}</aside><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row article-heading-fields">${field("Asset ticker", "article-symbol", draft.symbol, "text", 'maxlength="32" required')}${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div><div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-map-article>${icon("sparkles")} Map with AI</button><button type="button" class="secondary" data-publish>Publish ${icon("arrow")}</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ${icon("arrow")}</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div><label class="sr-only" for="article-body">Article text</label><textarea class="article-textarea" id="article-body" name="article-body" maxlength="40000" placeholder="Article" required>${esc(draft.body)}</textarea><details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} branches</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>${icon("plus")} Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>${icon("plus")} Source link</button></details></form>` : empty("New article", "", `<button class="primary" data-new-article>Write an article ${icon("arrow")}</button>`)}</div></div>`;
+    if (destroyed || !root.isConnected) return;
+    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>${icon("plus")} New article</button>${items.map((a) => `<div class="studio-card"><button type="button" class="studio-item ${draft?.id === a.id ? "selected" : ""} ${a.canDelete ? "deletable" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : a.canDelete ? "Draft" : "Unpublished"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>${a.canDelete ? `<button type="button" class="studio-delete" data-delete-article="${esc(a.id)}" aria-label="Delete draft: ${esc(a.title)}" title="Delete draft">${icon("close")}</button>` : ""}</div>`).join("")}</aside><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row article-heading-fields">${field("Asset ticker", "article-symbol", draft.symbol, "text", 'maxlength="32" required')}${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div><div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-map-article>${icon("sparkles")} Map with AI</button><button type="button" class="secondary" data-publish>Publish ${icon("arrow")}</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ${icon("arrow")}</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div><label class="sr-only" for="article-body">Article text</label><textarea class="article-textarea" id="article-body" name="article-body" maxlength="40000" placeholder="Article" required>${esc(draft.body)}</textarea><details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} branches</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>${icon("plus")} Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>${icon("plus")} Source link</button></details></form>` : empty("New article", "", `<button class="primary" data-new-article>Write an article ${icon("arrow")}</button>`)}</div></div>`;
     associateLabels(root);
     const form = root.querySelector("#article-form");
     if (form) {
@@ -83,6 +86,8 @@ export function createStudio({ root, onMapped, refreshJournal }) {
   }
   async function save() {
     if (saving) throw Error("A draft save is already in progress.");
+    if (deleting) throw Error("Wait for the draft deletion to finish.");
+    loadVersion++;
     const form = root.querySelector("#article-form");
     if (form && !form.reportValidity())
       throw Error("Complete the article and scenario fields first.");
@@ -102,19 +107,73 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     }
   }
   async function load(id) {
+    const version = ++loadVersion;
     try {
-      items = (await request("/api/journal")).articles;
-      if (id) draft = await request("/api/journal/" + id);
+      const list = (await request("/api/journal")).articles;
+      const selected = id ? await request("/api/journal/" + id) : draft;
+      if (destroyed || version !== loadVersion) return;
+      items = list;
+      draft = selected;
       editor();
     } catch (e) {
-      toast(e.message);
+      if (!destroyed && version === loadVersion) toast(e.message);
+    }
+  }
+  async function removeDraft(button) {
+    const id = button.dataset.deleteArticle;
+    const item = items.find((a) => a.id === id);
+    if (!item?.canDelete)
+      throw Error("This article cannot be deleted as a draft.");
+    const selected = draft?.id === id;
+    const revision = selected ? draft.revision : item.revision;
+    const form = selected ? root.querySelector("#article-form") : null;
+    const wasInert = form?.inert;
+    const card = button.closest(".studio-card");
+    deleting = true;
+    loadVersion++;
+    if (form) form.inert = true;
+    try {
+      try {
+        await request("/api/journal/" + id, "DELETE", { revision });
+      } catch (error) {
+        // A retry after a lost successful response, or deletion in another tab.
+        if (error.status !== 404) throw error;
+      }
+      const index = items.findIndex((a) => a.id === id);
+      items = items.filter((a) => a.id !== id);
+      if (selected) {
+        draft = null;
+        dirty = false;
+        editor();
+      } else {
+        // Preserve the active editor, including its unsaved text and selection.
+        card?.remove();
+      }
+      if (destroyed || !root.isConnected) return;
+      const next = items[Math.min(index, items.length - 1)];
+      const focus = next
+        ? [...root.querySelectorAll("[data-edit-article]")].find(
+            (b) => b.dataset.editArticle === next.id,
+          )
+        : root.querySelector("[data-new-article]");
+      focus?.focus({ preventScroll: true });
+      toast("Draft deleted.");
+    } finally {
+      deleting = false;
+      if (form) form.inert = wasInert;
     }
   }
   root.onclick = (e) => {
     const b = e.target.closest("button");
     if (!b) return;
-    if (saving) {
-      toast("The draft is being saved.");
+    if (saving || deleting) {
+      toast(
+        deleting ? "The draft is being deleted." : "The draft is being saved.",
+      );
+      return;
+    }
+    if (b.dataset.deleteArticle) {
+      action(b, () => removeDraft(b));
       return;
     }
     if (b.hasAttribute("data-new-article")) {
@@ -231,9 +290,13 @@ export function createStudio({ root, onMapped, refreshJournal }) {
   };
   load();
   return {
-    isDirty: () => dirty || saving,
+    isDirty: () => dirty || saving || deleting,
     async apply(job) {
+      if (deleting || saving)
+        throw Error("Wait for the current draft change to finish.");
+      const version = ++loadVersion;
       const current = await request("/api/journal/" + job.article.id);
+      if (destroyed || version !== loadVersion) return;
       if (current.revision !== job.article.revision || dirty)
         throw Error(
           "The draft changed since this mapping. Save and map the latest version.",
@@ -255,6 +318,8 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       toast("Mapping applied to the draft. Review and save before publishing.");
     },
     destroy() {
+      destroyed = true;
+      loadVersion++;
       window.removeEventListener("beforeunload", warn);
       root.onclick = null;
     },

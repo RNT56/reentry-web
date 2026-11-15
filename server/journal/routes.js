@@ -30,6 +30,11 @@ export function registerJournalRoutes(
     if (!a) throw fail("Article not found.", 404);
     return a;
   }
+  const canDelete = (a) =>
+    a.published_revision === null &&
+    !db
+      .prepare("SELECT 1 FROM article_revisions WHERE article_id=? LIMIT 1")
+      .get(a.id);
   const draft = (a) => ({
     id: a.id,
     slug: a.slug,
@@ -40,6 +45,7 @@ export function registerJournalRoutes(
     sources: JSON.parse(a.sources),
     revision: a.revision,
     publishedRevision: a.published_revision,
+    canDelete: canDelete(a),
     updatedAt: a.updated_at,
   });
   function listings(asset) {
@@ -145,6 +151,27 @@ export function registerJournalRoutes(
     return { id: a };
   });
   app.get("/api/journal/:id", author, async (req) => draft(owned(req)));
+  app.delete("/api/journal/:id", author, async (req) =>
+    transaction(db, () => {
+      const a = owned(req);
+      if (!canDelete(a))
+        throw fail(
+          "Articles with published editions cannot be deleted as drafts.",
+          409,
+        );
+      if (integer(req.body?.revision, 1, 100000) !== a.revision)
+        throw fail(
+          "This draft changed on another device. Reload before deleting.",
+          409,
+        );
+      db.prepare("DELETE FROM articles WHERE id=? AND user_id=?").run(
+        a.id,
+        req.auth.user_id,
+      );
+      audit(db, req.auth.user_id, "article-draft-deleted", { article: a.id });
+      return { ok: true };
+    }),
+  );
   app.put("/api/journal/:id", author, async (req) => {
     const a = owned(req),
       b = req.body || {},

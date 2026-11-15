@@ -34,6 +34,8 @@ On the configured VPS, the installed Compose file and deployment runner live out
 
 Publication snapshots the article, source references, author name and mapped branches in one transaction. Editing a draft leaves published editions unchanged. Publishing requires the latest draft revision and an explicit reviewed flag. Stale saves fail with 409. Every public branch must point to an exact passage in the article. AI output can never publish or verify an event. Unpublishing hides all editions from public routes while preserving the internal record and any independently created private copies.
 
+Studio draft cards expose a delete control on hover or keyboard focus, and keep it visible on touch devices. Deletion permanently removes a never-published draft, including its stored mappings and source links. The author-only endpoint checks ownership and the current saved revision in a transaction; stale revisions fail with 409. Published and previously published articles retain their edition history and cannot be deleted through this control. Deleting another card preserves unsaved work in the active editor.
+
 The author allowlist grants publishing rights, not access to other users’ accounts. There is no global administrator UI for reading users’ private research or API keys.
 
 ## Data connectors
