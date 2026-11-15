@@ -2,6 +2,8 @@ import { articleAssetsMarkup, mountArticleAssets } from "./article-assets.js";
 import { createWritingEditor, writingEditorMarkup } from "./writing-editor.js";
 import { createWritingAssistant } from "./writing-assistant.js";
 import { openArticlePreview } from "./article-preview.js";
+import { openMediaComposer } from "./media-composer.js";
+import { mediaMarkdown } from "../../domain/article-media.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
 import { icon, modal, close, toast, associateLabels } from "../../shared/ui.js";
@@ -19,6 +21,7 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     writer,
     assistant,
     preview,
+    mediaComposer,
     assistOpen = true;
   const warn = (e) => {
     if (dirty || saving || deleting) {
@@ -74,6 +77,7 @@ export function createStudio({ root, onMapped, refreshJournal }) {
   function editor() {
     if (destroyed || !root.isConnected) return;
     writer?.destroy();
+    mediaComposer?.destroy();
     assistant?.destroy();
     assetPicker?.destroy();
     writer = null;
@@ -106,6 +110,19 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       writer = createWritingEditor(root.querySelector(".writing-surface"), {
         body: draft.body,
         onChange: markDirty,
+        onMedia: (initial, context) => {
+          if (!assetPicker.validate()) return;
+          mediaComposer?.destroy();
+          mediaComposer = openMediaComposer({
+            getDraft: read,
+            initial,
+            onInsert: (media) => {
+              if (!assetPicker.validate())
+                throw Error("Choose an article asset first.");
+              writer.apply(mediaMarkdown(media), "selection", context);
+            },
+          });
+        },
       });
       assistant = createWritingAssistant(
         root.querySelector(".writing-assistant"),
@@ -251,6 +268,7 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       return;
     if (b.hasAttribute("data-preview-article")) {
       preview?.close();
+      mediaComposer?.destroy();
       preview = openArticlePreview(read);
       return;
     }

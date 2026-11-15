@@ -2,6 +2,10 @@ import { installSurfaceMotion } from "../../shared/surface-motion.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { icon } from "../../shared/icons.js";
 import { installReadingMotion } from "./reading-motion.js";
+import { installArticleMedia } from "../../shared/article-media-runtime.js";
+import { installTooltips } from "../../shared/tooltips.js";
+installTooltips();
+installArticleMedia();
 
 const readingMotion = installReadingMotion();
 let surfaceMotion;

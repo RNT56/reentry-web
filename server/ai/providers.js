@@ -1,5 +1,5 @@
 import { resultSchema } from "./contract.js";
-import { MAX_OUTPUT, models } from "./catalog.js";
+import { MAX_OUTPUT, models, imageModels } from "./catalog.js";
 // Errors intentionally contain no upstream body, request headers or prompt.
 export class ProviderError extends Error {
   constructor(message, uncertain = true) {
@@ -8,7 +8,7 @@ export class ProviderError extends Error {
     this.uncertain = uncertain;
   }
 }
-async function boundedJSON(response) {
+async function boundedJSON(response, maximum = 2 * 1024 * 1024) {
   const reader = response.body.getReader();
   let size = 0;
   const chunks = [];
@@ -17,7 +17,7 @@ async function boundedJSON(response) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.length;
-      if (size > 2 * 1024 * 1024) throw Error("Response limit");
+      if (size > maximum) throw Error("Response limit");
       chunks.push(value);
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -81,8 +81,16 @@ export function createProviders({ fetcher = fetch } = {}) {
     prompt,
     signal,
     schema = resultSchema,
+    imageConfig,
   }) {
-    if (!models.some((m) => m.id === model && m.provider === provider))
+    const imageModel = imageModels.find(
+      (m) => m.id === model && m.provider === provider,
+    );
+    if (
+      ![...models, ...imageModels].some(
+        (m) => m.id === model && m.provider === provider,
+      )
+    )
       throw new ProviderError("Unsupported model or provider.", false);
     let response;
     const gemini = provider === "gemini";
@@ -92,12 +100,21 @@ export function createProviders({ fetcher = fetch } = {}) {
     const body = gemini
       ? {
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: MAX_OUTPUT,
-            thinkingConfig: { thinkingLevel: "low" },
-            responseMimeType: "application/json",
-            responseJsonSchema: schema,
-          },
+          generationConfig: imageModel
+            ? {
+                maxOutputTokens: imageModel.maxOutput,
+                responseModalities: ["TEXT", "IMAGE"],
+                imageConfig: {
+                  aspectRatio: imageConfig?.aspectRatio || "16:9",
+                  imageSize: "1K",
+                },
+              }
+            : {
+                maxOutputTokens: MAX_OUTPUT,
+                thinkingConfig: { thinkingLevel: "low" },
+                responseMimeType: "application/json",
+                responseJsonSchema: schema,
+              },
         }
       : {
           model,
@@ -147,7 +164,10 @@ export function createProviders({ fetcher = fetch } = {}) {
     }
     let data;
     try {
-      data = await boundedJSON(response);
+      data = await boundedJSON(
+        response,
+        imageModel ? 16 * 1024 * 1024 : undefined,
+      );
     } catch {
       throw new ProviderError(
         "Provider response was incomplete; usage is unconfirmed.",
@@ -156,8 +176,33 @@ export function createProviders({ fetcher = fetch } = {}) {
     const usage = gemini
       ? geminiUsage(data.usageMetadata)
       : claudeUsage(data.usage);
+    let images;
+    if (imageModel) {
+      if (usage.cached)
+        throw new ProviderError(
+          "Unpriced image cache usage. Reconcile this request in AI settings.",
+        );
+      const parts = (data.candidates?.[0]?.content?.parts || []).filter(
+        (p) => !p.thought && p.inlineData,
+      );
+      const details = data.usageMetadata?.candidatesTokensDetails || [];
+      const imageTokens = details
+        .filter((d) => d.modality === "IMAGE")
+        .reduce((n, d) => n + count(d.tokenCount), 0);
+      if ((parts.length && !imageTokens) || imageTokens > usage.output)
+        throw new ProviderError(
+          "Image token usage is unavailable. Reconcile this request in AI settings.",
+        );
+      usage.output -= imageTokens;
+      usage.imageOutput = imageTokens;
+      images = parts.map((p) => ({
+        mime: p.inlineData.mimeType,
+        data: p.inlineData.data,
+      }));
+    }
     return {
       usage,
+      ...(imageModel ? { images } : {}),
       reportedUsage: gemini ? data.usageMetadata : data.usage,
       text: gemini
         ? (data.candidates?.[0]?.content?.parts || [])

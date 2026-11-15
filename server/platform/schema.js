@@ -74,6 +74,15 @@ export const platformMigrations = [
       CREATE INDEX article_revision_asset_symbol ON article_revision_assets(symbol,revision_id);
     `,
   },
+  {
+    version: 10,
+    sql: `
+      CREATE TABLE journal_media(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,symbol TEXT NOT NULL,name TEXT NOT NULL,mime TEXT NOT NULL,width INTEGER NOT NULL,height INTEGER NOT NULL,bytes INTEGER NOT NULL,content BLOB NOT NULL,provenance TEXT NOT NULL,created_at INTEGER NOT NULL,archived INTEGER NOT NULL DEFAULT 0);
+      CREATE INDEX journal_media_owner ON journal_media(user_id,created_at);
+      CREATE TABLE article_revision_media(revision_id TEXT NOT NULL REFERENCES article_revisions(id) ON DELETE CASCADE,media_id TEXT NOT NULL REFERENCES journal_media(id),PRIMARY KEY(revision_id,media_id));
+      CREATE TABLE ai_media_preferences(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,image_model TEXT NOT NULL DEFAULT 'gemini-3.1-flash-image',run_limit INTEGER NOT NULL DEFAULT 500000);
+    `,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

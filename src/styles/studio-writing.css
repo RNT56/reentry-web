@@ -148,7 +148,7 @@
   background: linear-gradient(160deg, #19211c, #121813 65%);
   border-color: #d1e8c41a;
 }
-.studio-workbench .article-heading-fields {
+.studio-workbench .studio-editor .article-heading-fields {
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
@@ -806,7 +806,7 @@
   .studio-workbench .studio-editor {
     padding: 14px;
   }
-  .studio-workbench .article-heading-fields {
+  .studio-workbench .studio-editor .article-heading-fields {
     grid-template-columns: 1fr;
   }
   .writing-canvas {
@@ -871,4 +871,9 @@
   pointer-events: none;
   float: left;
   height: 0;
+}
+
+.studio-workbench .studio-editor .article-heading-fields input {
+  font-size: 16px;
+  letter-spacing: -0.02em;
 }

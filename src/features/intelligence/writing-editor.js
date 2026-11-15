@@ -2,6 +2,8 @@ import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { TableKit } from "@tiptap/extension-table";
+import { ArticleMediaNode } from "./media-node.js";
+import { mediaMarkdown } from "../../domain/article-media.js";
 import { formatArticle, safeArticleLink } from "../../domain/article-format.js";
 import { esc } from "../../shared/format.js";
 import { modal, close, toast, icon } from "../../shared/ui.js";
@@ -15,14 +17,14 @@ export function writingEditorMarkup(body) {
       <label class="sr-only" for="writing-block">Text style</label><select id="writing-block" aria-label="Text style"><option value="paragraph">Paragraph</option><option value="2">Heading 2</option><option value="3">Heading 3</option><option value="4">Heading 4</option></select>
       <span class="writing-tool-group">${button("bold", "<b>B</b>", "Bold (⌘/Ctrl+B)")}${button("italic", "<i>I</i>", "Italic (⌘/Ctrl+I)")}${button("strike", "<s>S</s>", "Strikethrough")}</span>
       <span class="writing-tool-group">${button("bulletList", "• List", "Bullet list")}${button("orderedList", "1. List", "Numbered list")}${button("blockquote", "❝", "Block quote")}${button("link", "Link", "Add or edit link")}</span>
-      <span class="writing-tool-group">${button("table", "Table", "Insert table")}${button("horizontalRule", "Divider", "Insert divider")}${button("code", "&lt;/&gt;", "Inline code")}${button("clear", "Tx", "Clear formatting")}</span>
+      <span class="writing-tool-group">${button("media", "+ Insert", "Images, charts, tables, statistics, diagrams and video")}${button("table", "Table", "Insert table")}${button("horizontalRule", "Divider", "Insert divider")}${button("code", "&lt;/&gt;", "Inline code")}${button("clear", "Tx", "Clear formatting")}</span>
       <span class="writing-tool-group">${button("undo", icon("undo"), "Undo (⌘/Ctrl+Z)")}${button("redo", icon("redo"), "Redo (⌘/Ctrl+Shift+Z)")}</span>
     </div>
     <div class="writing-table-tools" hidden><span>Table</span>${button("addRowAfter", "+ Row", "Add row below")}${button("addColumnAfter", "+ Column", "Add column after")}${button("deleteRow", "− Row", "Delete table row")}${button("deleteColumn", "− Column", "Delete table column")}${button("deleteTable", "Remove", "Remove table")}</div>
     <div class="writing-find" hidden><label>Find<input name="writing-find" maxlength="500" placeholder="Find in article"></label><label>Replace with<input name="writing-replace" maxlength="1000" placeholder="Replacement"></label><button type="button" data-writing-find-next>Find next</button><button type="button" data-writing-replace-one>Replace</button><button type="button" data-writing-find-close aria-label="Close find and replace">${icon("close")}</button></div>
     <div class="writing-canvas" data-writing-canvas></div>
     <label class="sr-only" for="article-body">Article Markdown</label><textarea class="article-textarea writing-source" id="article-body" name="article-body" maxlength="40000" spellcheck="true" hidden>${esc(body)}</textarea>
-    <div class="writing-footer"><span data-writing-selection>Select text to revise or map a passage.</span><span data-writing-limit></span></div>
+    <div class="writing-footer"><span data-writing-selection></span><span data-writing-limit></span></div>
   </section>`;
 }
 
@@ -46,7 +48,7 @@ function textPositions(doc) {
 
 export function createWritingEditor(
   root,
-  { body = "", onChange = () => {} } = {},
+  { body = "", onChange = () => {}, onMedia = () => {} } = {},
 ) {
   const source = root.querySelector("#article-body"),
     canvas = root.querySelector("[data-writing-canvas]");
@@ -74,6 +76,7 @@ export function createWritingEditor(
   const editor = new Editor({
     element: canvas,
     extensions: [
+      ArticleMediaNode,
       StarterKit.configure({
         heading: { levels: [2, 3, 4] },
         underline: false,
@@ -148,11 +151,12 @@ export function createWritingEditor(
   function refreshTools() {
     const selected = capture();
     root.querySelector("[data-writing-selection]").textContent = selected.text
-      ? `${selected.text.trim().split(/\s+/).length} words selected · ready for AI or scenario mapping`
-      : "Select text to revise or map a passage.";
+      ? `${selected.text.trim().split(/\s+/).length} words selected`
+      : "";
     root.querySelectorAll("[data-write-command]").forEach((b) => {
       const command = b.dataset.writeCommand;
       b.disabled = mode === "source";
+      if (command === "media") b.disabled = false;
       if (
         [
           "bold",
@@ -233,7 +237,19 @@ export function createWritingEditor(
       throw Error(
         "The article changed since this suggestion. Review it again or copy the text.",
       );
-    if (markdown.length + content.length > 40000 && destination !== "replace")
+    const selectedNode =
+      mode === "rich" && context ? editor.state.doc.nodeAt(context.from) : null;
+    const replacedLength =
+      destination === "selection" && context?.mode === mode
+        ? selectedNode?.type.name === "articleMedia" &&
+          context.to - context.from === selectedNode.nodeSize
+          ? mediaMarkdown(selectedNode.attrs.media).length
+          : context.to - context.from
+        : 0;
+    if (
+      markdown.length + content.length - replacedLength > 40000 &&
+      destination !== "replace"
+    )
       throw Error("This would exceed the 40,000-character article limit.");
     if (destination === "replace") {
       if (content.length > 40000)
@@ -333,6 +349,10 @@ export function createWritingEditor(
       }
     }
     const command = b.dataset.writeCommand;
+    if (command === "media") {
+      onMedia(null, capture());
+      return;
+    }
     if (mode === "source" && ["undo", "redo"].includes(command)) {
       sourceHistory(command);
       return;
@@ -418,6 +438,8 @@ export function createWritingEditor(
     selection = capture();
     refreshTools();
   };
+  const editMedia = (event) => onMedia(event.detail.media, capture());
+  root.addEventListener("reentry:edit-media", editMedia);
   stats();
   refreshTools();
   return {
@@ -452,6 +474,7 @@ export function createWritingEditor(
     },
     focus: () => (mode === "rich" ? editor.commands.focus() : source.focus()),
     destroy() {
+      root.removeEventListener("reentry:edit-media", editMedia);
       clearTimeout(statTimer);
       editor.destroy();
       root.onclick = null;

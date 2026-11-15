@@ -46,6 +46,30 @@ const legacyModels = [
 ];
 const google = "https://aistudio.google.com/docs/pricing";
 const claude = "https://platform.claude.com/docs/en/about-claude/pricing";
+export const imageModels = Object.freeze([
+  {
+    id: "gemini-3.1-flash-image",
+    provider: "gemini",
+    label: "Nano Banana 2",
+    input: 0.5,
+    output: 3,
+    imageOutput: 60,
+    cached: 0,
+    maxOutput: 4096,
+    source: google,
+  },
+  {
+    id: "gemini-3.1-flash-lite-image",
+    provider: "gemini",
+    label: "Nano Banana 2 Lite",
+    input: 0.25,
+    output: 1.5,
+    imageOutput: 30,
+    cached: 0,
+    maxOutput: 4096,
+    source: google,
+  },
+]);
 export const defaultModels = Object.freeze({
   gemini: "gemini-4-hydrogen",
   anthropic: "claude-sonnet-5-5",
@@ -115,7 +139,9 @@ export function effectiveModel(provider, model) {
     : defaultModels[provider] || defaultModels.gemini;
 }
 export function priceFor(model, now = Date.now(), inputTokens = 0) {
-  const base = [...models, ...legacyModels].find((m) => m.id === model);
+  const base = [...models, ...legacyModels, ...imageModels].find(
+    (m) => m.id === model,
+  );
   if (!base || now >= expires)
     throw Error(
       "Model pricing needs an operator update before new AI requests.",
@@ -154,7 +180,8 @@ export function costFor(usage, price) {
       usage.output * price.output +
       usage.cached * price.cached +
       usage.write5m * (price.write5m || 0) +
-      usage.write1h * (price.write1h || 0),
+      usage.write1h * (price.write1h || 0) +
+      (usage.imageOutput || 0) * (price.imageOutput || 0),
   );
 }
 export const MAX_OUTPUT = 8192;
@@ -163,5 +190,9 @@ export function reservationFor(prompt, price) {
   const inputBound = Buffer.byteLength(prompt, "utf8") + 12000;
   if (inputBound > MAX_INPUT)
     throw Error("Research input exceeds the safe context budget.");
-  return Math.ceil(inputBound * price.input + MAX_OUTPUT * price.output);
+  return Math.ceil(
+    inputBound * price.input +
+      (price.maxOutput || MAX_OUTPUT) *
+        Math.max(price.output, price.imageOutput || 0),
+  );
 }

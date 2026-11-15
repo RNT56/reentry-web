@@ -78,6 +78,7 @@ export function registerPlatform(app, db, market, options = {}) {
     isAuthor,
     authorName,
     controls: options.controls,
+    commons: options.commons,
   };
   if (options.controls) registerAdminRoutes(app, services);
   registerAIRoutes(app, services);

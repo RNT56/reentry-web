@@ -22,9 +22,11 @@ import {
 } from "./assets.js";
 import { writingRequest } from "../ai/writing-contract.js";
 import { collectWritingContext } from "../ai/writing-context.js";
+import { registerMediaRoutes } from "./media-routes.js";
+import { validateArticleMedia, snapshotArticleMedia } from "./media-store.js";
 export function registerJournalRoutes(
   app,
-  { db, engine, isAuthor, authorName },
+  { db, engine, isAuthor, authorName, market, connectors, commons },
 ) {
   const auth = { preHandler: app.requireUser };
   const author = {
@@ -42,6 +44,15 @@ export function registerJournalRoutes(
     if (!a) throw fail("Article not found.", 404);
     return a;
   }
+  registerMediaRoutes(app, {
+    db,
+    engine,
+    market,
+    connectors,
+    commons,
+    author,
+    owned,
+  });
   const canDelete = (a) =>
     a.published_revision === null &&
     !db
@@ -154,6 +165,7 @@ export function registerJournalRoutes(
         "-" +
         a.slice(0, 8);
       const assets = validateArticleAssets(b.assets, b.symbol);
+      validateArticleMedia(db, user, b.body || "");
       db.prepare(
         "INSERT INTO articles(id,user_id,slug,symbol,title,body,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
       ).run(
@@ -175,6 +187,7 @@ export function registerJournalRoutes(
     const a = owned(req),
       b = req.body || {};
     const body = text(b.body ?? a.body, 40000, 0);
+    validateArticleMedia(db, req.auth.user_id, body);
     const warnings = [];
     const rawBranches = b.branches ?? JSON.parse(a.branches);
     if (!Array.isArray(rawBranches) || rawBranches.length > 12)
@@ -362,6 +375,7 @@ export function registerJournalRoutes(
         )
       )
         throw fail("Each mapped passage must appear in the article.");
+      validateArticleMedia(db, req.auth.user_id, body);
       const changed = db
         .prepare(
           "UPDATE articles SET symbol=?,title=?,body=?,branches=?,sources=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=?",
@@ -452,6 +466,7 @@ export function registerJournalRoutes(
           now,
         );
         saveArticleAssets(db, edition, articleAssets(db, a.id, a.symbol), true);
+        snapshotArticleMedia(db, req.auth.user_id, edition, a.body);
       }
       db.prepare("UPDATE articles SET published_revision=? WHERE id=?").run(
         a.revision,

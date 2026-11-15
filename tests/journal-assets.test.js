@@ -237,7 +237,7 @@ test("asset input rejects duplicate, mismatched, unbounded or malformed associat
 test("additive asset migration leaves existing articles and editions unchanged", async (t) => {
   const f = await fixture(t);
   f.db.exec(
-    "DROP TABLE article_revision_assets; DROP TABLE article_assets; UPDATE module_migrations SET version=8 WHERE module='intelligence';",
+    "DROP TABLE article_revision_media; DROP TABLE journal_media; DROP TABLE ai_media_preferences; DROP TABLE article_revision_assets; DROP TABLE article_assets; UPDATE module_migrations SET version=8 WHERE module='intelligence';",
   );
   f.db
     .prepare(

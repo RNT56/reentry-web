@@ -124,7 +124,7 @@ export function bindAccount({ modal, close, toast, onLogout }) {
   document.querySelector("#sign-out-all").onclick = () => onLogout(true);
   document.querySelector("#change-password").onclick = () => {
     modal(
-      `<h2>Change password</h2><form id="password-form"><div class="field"><label>Current password</label><input name="currentPassword" type="password" autocomplete="current-password" maxlength="128" required></div><div class="field"><label>New password</label><input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></div><p class="small">Other sessions will be signed out.</p><p class="error" id="pw-error" role="alert"></p><div class="actions"><button class="primary">Save password</button></div></form>`,
+      `<h2 data-tooltip="Saving a new password signs out your other sessions.">Change password</h2><form id="password-form"><div class="field"><label>Current password</label><input name="currentPassword" type="password" autocomplete="current-password" maxlength="128" required></div><div class="field"><label>New password</label><input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></div><p class="error" id="pw-error" role="alert"></p><div class="actions"><button class="primary">Save password</button></div></form>`,
     );
     document.querySelector("#password-form").onsubmit = async (e) => {
       e.preventDefault();
@@ -211,7 +211,7 @@ export async function openPasskeys({ modal, close, toast }) {
         const id = b.dataset.keyRemove;
         close();
         modal(
-          `<h2>Remove this passkey?</h2><p class="sub">You can still sign in with your password or another passkey.</p><p class="error" id="remove-key-error"></p><div class="actions"><button class="secondary" id="keep-key">Keep</button><button class="danger" id="remove-key">Remove</button></div>`,
+          `<h2>Remove this passkey?</h2><p class="error" id="remove-key-error"></p><div class="actions"><button class="secondary" id="keep-key">Keep</button><button class="danger" id="remove-key">Remove</button></div>`,
         );
         document.querySelector("#keep-key").onclick = () => {
           close();

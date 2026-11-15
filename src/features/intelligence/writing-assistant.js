@@ -29,20 +29,20 @@ export function createWritingAssistant(
   const articleId = getDraft().id;
   const presetState = createWritingPresetState();
   let currentTask = "article";
-  root.innerHTML = `<header class="writing-ai-head"><span class="eyebrow">WRITING PARTNER</span><h3>Develop the idea.</h3><p>Your voice. Your final say.</p></header>
+  root.innerHTML = `<header class="writing-ai-head"><span class="eyebrow">WRITING PARTNER</span><h3>Develop the idea.</h3></header>
     <div class="writing-ai-model" data-writing-model>Loading your AI settings…</div>
     <label for="writing-task">I want to work on</label><select id="writing-task">${Object.entries(
       tasks,
     )
       .map(([key, label]) => `<option value="${key}">${label}</option>`)
       .join("")}</select>
-    <div class="writing-prompt-label"><label for="writing-prompt">Your prompt</label><button type="button" class="link" data-reset-writing-prompt>Reset preset</button></div><textarea id="writing-prompt" rows="10" maxlength="6000">${esc(writingPresets.article.prompt)}</textarea><p class="writing-ai-note">This preset is editable. The instructions above are sent as you write them.</p><label for="writing-format">Return as</label><select id="writing-format"><option value="text">Text suggestion</option><option value="review">Corrections & advice</option></select>
-    <div class="writing-ai-selection" data-assistant-selection>Uses the current article as context. Select a passage to work on just that text.</div>
+    <div class="writing-prompt-label"><label for="writing-prompt">Your prompt</label><button type="button" class="link" data-reset-writing-prompt>Reset preset</button></div><textarea id="writing-prompt" rows="10" maxlength="6000">${esc(writingPresets.article.prompt)}</textarea><label for="writing-format">Return as</label><select id="writing-format"><option value="text">Text suggestion</option><option value="review">Corrections & advice</option></select>
+    <div class="writing-ai-selection" data-assistant-selection>Whole article</div>
     <details class="writing-voice"><summary>Voice & length</summary><label for="writing-voice">Writing direction</label><textarea id="writing-voice" rows="6" maxlength="2000">${esc(style)}</textarea><label for="writing-length">Target words</label><input id="writing-length" type="number" min="50" max="2600" value="1600" step="50"></details>
     <div data-writing-context></div>
     <button type="button" class="secondary writing-request-preview" data-review-writing-request>Review full request</button>
     <button type="button" class="primary writing-generate" data-writing-generate>${icon("sparkles")} Generate suggestion</button>
-    <p class="writing-ai-note">Uses your connected model and existing spending limits. Nothing is inserted or published automatically.</p>
+
     <div class="writing-ai-status" role="status" aria-live="polite" data-writing-job-status></div>
     <div data-writing-result></div>
     <details class="writing-history"><summary>Recent writing tasks</summary><div data-writing-history>Loading…</div></details>`;
@@ -123,7 +123,7 @@ export function createWritingAssistant(
     const stale =
       getWriter().getBody() !== job.article.body ||
       getDraft().symbol !== job.article.symbol;
-    resultRoot.innerHTML = `<section class="writing-proposal"><div class="writing-result-heading"><span class="eyebrow">${esc(tasks[job.writing.task])}</span><span>${esc(job.model)}</span></div><p class="writing-result-summary">${esc(r.summary)}</p>${applied ? '<p class="writing-review-clear">Applied to this draft. Use Undo in the editor to revert.</p>' : stale ? '<p class="writing-stale">The article has changed since this request. Copy the suggestion or run a new check against the current text.</p>' : ""}${r.content ? `<div class="writing-proposal-text">${formatArticle(r.content).html}</div><div class="writing-apply-actions"><button type="button" class="secondary" data-writing-apply="append" ${stale || applied ? "disabled" : ""}>Append to article</button>${context ? `<button type="button" class="secondary" data-writing-apply="selection" ${stale || applied ? "disabled" : ""}>${context.text ? "Replace selection" : "Insert at cursor"}</button>` : ""}<button type="button" class="secondary" data-writing-apply="replace" ${stale || applied ? "disabled" : ""}>Replace article</button><button type="button" class="link" data-writing-copy>Copy suggestion</button></div>${r.title ? `<div class="writing-suggested-title"><span>Suggested title</span><b>${esc(r.title)}</b><button type="button" class="link" data-writing-title>Use title</button></div>` : ""}` : ""}<button type="button" class="link" data-inspect-writing-job="${esc(job.id)}">Inspect the context and prompt used</button>${r.issues.length ? `<div class="writing-review-issues">${r.issues.map((issue, i) => `<article class="writing-review-issue"><span class="eyebrow">${esc(issue.category)}</span>${issue.quote ? `<blockquote>${esc(issue.quote)}</blockquote>` : ""}<p>${esc(issue.explanation)}</p>${issue.replacement ? `<div class="writing-correction">${esc(issue.replacement)}</div><button type="button" class="link" data-writing-correct="${i}" ${stale ? "disabled" : ""}>Apply correction ${icon("arrow")}</button>` : ""}</article>`).join("")}</div>` : !r.content ? '<p class="writing-review-clear">No issues identified in this check.</p>' : ""}<p class="writing-ai-note">AI suggestions can contain mistakes. Check facts and sources before publishing.</p></section>`;
+    resultRoot.innerHTML = `<section class="writing-proposal"><div class="writing-result-heading"><span class="eyebrow">${esc(tasks[job.writing.task])}</span><span>${esc(job.model)}</span></div><p class="writing-result-summary">${esc(r.summary)}</p>${applied ? '<p class="writing-review-clear">Applied · Undo to revert</p>' : stale ? '<p class="writing-stale">The article has changed since this request. Copy the suggestion or run a new check against the current text.</p>' : ""}${r.content ? `<div class="writing-proposal-text">${formatArticle(r.content).html}</div><div class="writing-apply-actions"><button type="button" class="secondary" data-writing-apply="append" ${stale || applied ? "disabled" : ""}>Append to article</button>${context ? `<button type="button" class="secondary" data-writing-apply="selection" ${stale || applied ? "disabled" : ""}>${context.text ? "Replace selection" : "Insert at cursor"}</button>` : ""}<button type="button" class="secondary" data-writing-apply="replace" ${stale || applied ? "disabled" : ""}>Replace article</button><button type="button" class="link" data-writing-copy>Copy suggestion</button></div>${r.title ? `<div class="writing-suggested-title"><span>Suggested title</span><b>${esc(r.title)}</b><button type="button" class="link" data-writing-title>Use title</button></div>` : ""}` : ""}<button type="button" class="link" data-inspect-writing-job="${esc(job.id)}">Inspect the context and prompt used</button>${r.issues.length ? `<div class="writing-review-issues">${r.issues.map((issue, i) => `<article class="writing-review-issue"><span class="eyebrow">${esc(issue.category)}</span>${issue.quote ? `<blockquote>${esc(issue.quote)}</blockquote>` : ""}<p>${esc(issue.explanation)}</p>${issue.replacement ? `<div class="writing-correction">${esc(issue.replacement)}</div><button type="button" class="link" data-writing-correct="${i}" ${stale ? "disabled" : ""}>Apply correction ${icon("arrow")}</button>` : ""}</article>`).join("")}</div>` : !r.content ? '<p class="writing-review-clear">No issues identified in this check.</p>' : ""}</section>`;
   }
   async function history() {
     const data = await request(`/api/journal/${articleId}/assist`);
@@ -135,7 +135,7 @@ export function createWritingAssistant(
               `<button type="button" data-writing-job="${esc(j.id)}"><b>${esc(tasks[j.task])}</b><span>${esc(j.status)} · ${esc(when(j.created_at))}</span></button>`,
           )
           .join("")
-      : '<p class="small">Your writing tasks will appear here.</p>';
+      : '<p class="small">No writing tasks yet</p>';
     if (!job) {
       const pending = data.jobs.find((j) =>
         ["queued", "running"].includes(j.status),

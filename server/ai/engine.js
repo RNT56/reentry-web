@@ -8,7 +8,18 @@ import {
   writingSchema,
   validateWritingResult,
 } from "./writing-contract.js";
-import { effectiveModel, priceFor, reservationFor } from "./catalog.js";
+import {
+  effectiveModel,
+  priceFor,
+  reservationFor,
+  imageModels,
+} from "./catalog.js";
+import {
+  prepareMedia,
+  validateMediaResult,
+  mediaSchema,
+} from "./media-contract.js";
+import { storeImage } from "../journal/media-store.js";
 import { id, fail, transaction } from "../platform/util.js";
 import { preferences, spending, reserve, settle, release } from "./billing.js";
 import { makePrompt, validateResult, PROMPT_VERSION } from "./contract.js";
@@ -309,6 +320,96 @@ export function createEngine({
     };
     return { input, prompt: makeWritingPrompt(input) };
   }
+  function mediaPreferences(user) {
+    db.prepare(
+      "INSERT OR IGNORE INTO ai_media_preferences(user_id) VALUES(?)",
+    ).run(user);
+    return db
+      .prepare("SELECT * FROM ai_media_preferences WHERE user_id=?")
+      .get(user);
+  }
+  function previewMedia(user, article, value) {
+    const input = prepareMedia(db, user, article, value),
+      p = preferences(db, user),
+      mp = mediaPreferences(user);
+    const model = input.task === "image" ? mp.image_model : p.model;
+    const maximum = reservationFor(
+      input.renderedPrompt +
+        (input.task === "image" ? "" : JSON.stringify(mediaSchema)),
+      priceFor(model),
+    );
+    return {
+      input,
+      prompt: input.renderedPrompt,
+      contextHash: input.contextHash,
+      model,
+      provider: input.task === "image" ? "gemini" : p.provider,
+      maximum,
+      runLimit:
+        input.task === "image"
+          ? Math.min(p.run_limit, mp.run_limit)
+          : p.run_limit,
+    };
+  }
+  function enqueueMedia(user, article, value) {
+    const key = String(value.requestKey || "");
+    if (!key || key.length > 100) throw fail("A request key is required.");
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify(value))
+      .digest("hex");
+    const previous = db
+      .prepare(
+        "SELECT id,status,input FROM ai_jobs WHERE user_id=? AND request_key=?",
+      )
+      .get(user, key);
+    if (previous) {
+      if (JSON.parse(previous.input).requestHash !== requestHash)
+        throw fail("This request key was already used.", 409);
+      return { id: previous.id, status: previous.status };
+    }
+    chartAccess(user, { scenario: false });
+    const preview = previewMedia(user, article, value),
+      p = preferences(db, user),
+      totals = spending(db, user);
+    if (value.contextHash !== preview.contextHash)
+      throw fail("Asset context changed. Preview again.", 409);
+    if (value.model !== preview.model || value.maximum !== preview.maximum)
+      throw fail("Model or price changed. Preview again.", 409);
+    if (
+      !db
+        .prepare("SELECT 1 FROM ai_credentials WHERE user_id=? AND provider=?")
+        .get(user, preview.provider)
+    )
+      throw fail("Connect a Gemini key for image generation.", 409);
+    if (
+      preview.maximum > preview.runLimit ||
+      preview.maximum + totals.spent + totals.held > p.monthly_limit
+    )
+      throw fail(
+        "Raise the per-run cap or reduce the request. No AI call was sent.",
+        409,
+      );
+    const job = id();
+    db.prepare(
+      "INSERT INTO ai_jobs(id,user_id,kind,symbol,provider,model,status,input,request_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+    ).run(
+      job,
+      user,
+      preview.input.task === "image" ? "studio-image" : "studio-media",
+      preview.input.article.symbol,
+      preview.provider,
+      preview.model,
+      "queued",
+      JSON.stringify({
+        ...preview.input,
+        requestHash,
+        approvedMaximum: preview.maximum,
+      }),
+      key,
+      Date.now(),
+    );
+    return { id: job, status: "queued" };
+  }
   function previewWriting(user, request) {
     const p = preferences(db, user);
     const prepared = prepareWriting(user, request);
@@ -396,11 +497,19 @@ export function createEngine({
     let dispatched = false;
     try {
       if (paused()) throw fail("AI is paused by the owner.", 503);
-      const resolvedModel = effectiveModel(job.provider, job.model);
+      const resolvedModel =
+        job.kind === "studio-image" &&
+        imageModels.some((m) => m.id === job.model)
+          ? job.model
+          : effectiveModel(job.provider, job.model);
       if (
-        ["chart-analysis", "source-monitor", "studio-writing"].includes(
-          job.kind,
-        ) &&
+        [
+          "chart-analysis",
+          "source-monitor",
+          "studio-writing",
+          "studio-media",
+          "studio-image",
+        ].includes(job.kind) &&
         resolvedModel !== job.model
       )
         throw fail("Quoted model is no longer available. Preview again.", 409);
@@ -415,9 +524,11 @@ export function createEngine({
         chartJob = job.kind === "chart-analysis",
         sourceJob = job.kind === "source-monitor",
         writingJob = job.kind === "studio-writing",
+        mediaJob = ["studio-media", "studio-image"].includes(job.kind),
+        imageJob = job.kind === "studio-image",
         collected = sourceJob
           ? { sources: input.sources, coverage: [] }
-          : chartJob || writingJob
+          : chartJob || writingJob || mediaJob
             ? { sources: [], coverage: [] }
             : await collectSources(db, connectors, job.user_id, input.asset);
       if (
@@ -431,7 +542,7 @@ export function createEngine({
           "No evidence available. Add a source or try again later.",
           409,
         );
-      if (input.article && !writingJob) {
+      if (input.article && !writingJob && !mediaJob) {
         input.article.truncated = input.article.body.length > 18000;
         input.article.body = input.article.body.slice(0, 18000);
         collected.sources.unshift({
@@ -447,7 +558,7 @@ export function createEngine({
       }
       const watched = sourceJob
         ? input.watched
-        : chartJob || writingJob
+        : chartJob || writingJob || mediaJob
           ? []
           : db
               .prepare(
@@ -464,16 +575,18 @@ export function createEngine({
                 })),
               }));
       const snapshot =
-          chartJob || sourceJob || writingJob
+          chartJob || sourceJob || writingJob || mediaJob
             ? input
             : { ...input, ...collected, watched, asOf: Date.now() },
-        prompt = writingJob
-          ? snapshot.renderedPrompt || makeWritingPrompt(snapshot)
-          : sourceJob
-            ? makeSourceMonitorPrompt(snapshot)
-            : chartJob
-              ? makeChartPrompt(snapshot)
-              : makePrompt(snapshot);
+        prompt = mediaJob
+          ? input.renderedPrompt
+          : writingJob
+            ? snapshot.renderedPrompt || makeWritingPrompt(snapshot)
+            : sourceJob
+              ? makeSourceMonitorPrompt(snapshot)
+              : chartJob
+                ? makeChartPrompt(snapshot)
+                : makePrompt(snapshot);
       db.prepare("UPDATE ai_jobs SET input=? WHERE id=?").run(
         JSON.stringify(snapshot),
         job.id,
@@ -485,9 +598,13 @@ export function createEngine({
         .get(job.user_id, job.provider);
       if (!credential) throw fail("Provider key was removed.", 409);
       if (paused()) throw fail("AI is paused by the owner.", 503);
-      if (writingJob) {
+      if (writingJob || mediaJob) {
         const p = preferences(db, job.user_id);
-        if (p.provider !== job.provider || p.model !== job.model)
+        if (
+          imageJob
+            ? mediaPreferences(job.user_id).image_model !== job.model
+            : p.provider !== job.provider || p.model !== job.model
+        )
           throw fail("AI settings changed. Run this writing task again.", 409);
         const article = db
           .prepare("SELECT revision FROM articles WHERE id=? AND user_id=?")
@@ -497,7 +614,20 @@ export function createEngine({
             "The draft changed or was deleted before this writing task ran. No AI request was sent.",
             409,
           );
-        writingBudget(job.user_id, prompt, job.model);
+        if (mediaJob) {
+          const cost = reservationFor(
+            prompt + (imageJob ? "" : JSON.stringify(mediaSchema)),
+            priceFor(job.model),
+          );
+          if (
+            cost > input.approvedMaximum ||
+            (imageJob && cost > mediaPreferences(job.user_id).run_limit)
+          )
+            throw fail(
+              "Image cap or model pricing changed. Preview again.",
+              409,
+            );
+        } else writingBudget(job.user_id, prompt, job.model);
       }
       if (chartJob) {
         const p = preferences(db, job.user_id);
@@ -520,7 +650,9 @@ export function createEngine({
         chartBudget(job.user_id, prompt, job.model, input.approvedMaximum);
       }
       if (
-        (!writingJob && researchHidden(db, job.user_id, job.symbol)) ||
+        (!writingJob &&
+          !mediaJob &&
+          researchHidden(db, job.user_id, job.symbol)) ||
         (["research", "chart-analysis"].includes(job.kind) &&
           !researchAsset(db, job.user_id, job.symbol))
       )
@@ -532,13 +664,17 @@ export function createEngine({
         job,
         prompt,
         Date.now(),
-        writingJob
-          ? JSON.stringify(writingSchema)
-          : sourceJob
-            ? sourceMonitor.schemaInput
-            : chartJob
-              ? chartSchemaInput
-              : "",
+        mediaJob
+          ? imageJob
+            ? ""
+            : JSON.stringify(mediaSchema)
+          : writingJob
+            ? JSON.stringify(writingSchema)
+            : sourceJob
+              ? sourceMonitor.schemaInput
+              : chartJob
+                ? chartSchemaInput
+                : "",
       );
       db.prepare("UPDATE ai_jobs SET dispatched_at=? WHERE id=?").run(
         Date.now(),
@@ -550,13 +686,17 @@ export function createEngine({
         model: job.model,
         key,
         prompt,
-        ...(writingJob
-          ? { schema: writingSchema }
-          : sourceJob
-            ? { schema: sourceMonitorSchema }
-            : chartJob
-              ? { schema: chartResultSchema }
-              : {}),
+        ...(mediaJob
+          ? imageJob
+            ? { imageConfig: { aspectRatio: input.aspectRatio } }
+            : { schema: mediaSchema }
+          : writingJob
+            ? { schema: writingSchema }
+            : sourceJob
+              ? { schema: sourceMonitorSchema }
+              : chartJob
+                ? { schema: chartResultSchema }
+                : {}),
         signal: aborter.signal,
       });
       // Charge valid usage even if the response is refused, truncated or fails our content checks.
@@ -566,6 +706,42 @@ export function createEngine({
           "AI response was truncated or declined. Reported usage was recorded.",
           409,
         );
+      if (imageJob) {
+        if (response.images?.length !== 1)
+          throw fail(
+            "The provider did not return exactly one image. Usage recorded.",
+            409,
+          );
+        const generated = response.images[0];
+        if (
+          typeof generated.data !== "string" ||
+          generated.data.length > 12 * 1024 * 1024
+        )
+          throw fail("The generated image is too large. Usage recorded.", 409);
+        const image = await storeImage(
+          db,
+          job.user_id,
+          {
+            symbol: job.symbol,
+            name: (input.article.title + " · illustration").slice(0, 200),
+            provenance: {
+              kind: "ai",
+              model: job.model,
+              jobId: job.id,
+              credit: "AI illustration · " + job.model,
+            },
+          },
+          Buffer.from(generated.data, "base64"),
+        );
+        db.prepare(
+          "UPDATE ai_jobs SET status='completed',result=?,finished_at=?,lease_until=NULL WHERE id=?",
+        ).run(
+          JSON.stringify({ image, summary: "Illustration ready" }),
+          Date.now(),
+          job.id,
+        );
+        return;
+      }
       let parsed;
       try {
         parsed = JSON.parse(response.text);
@@ -575,13 +751,15 @@ export function createEngine({
           409,
         );
       }
-      const result = writingJob
-        ? validateWritingResult(parsed, snapshot)
-        : sourceJob
-          ? validateSourceMonitorResult(parsed, snapshot)
-          : chartJob
-            ? validateChartResult(parsed, snapshot)
-            : validateResult(parsed, snapshot);
+      const result = mediaJob
+        ? validateMediaResult(parsed, snapshot)
+        : writingJob
+          ? validateWritingResult(parsed, snapshot)
+          : sourceJob
+            ? validateSourceMonitorResult(parsed, snapshot)
+            : chartJob
+              ? validateChartResult(parsed, snapshot)
+              : validateResult(parsed, snapshot);
       if (input.article?.truncated)
         result.limitations.push(
           "Only the first 18,000 characters of this article were mapped. Later passages were excluded.",
@@ -725,6 +903,8 @@ export function createEngine({
     enqueueChart,
     enqueueWriting,
     previewWriting,
+    previewMedia,
+    enqueueMedia,
     tick,
     start() {
       if (!enabled || timer) return;

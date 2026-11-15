@@ -79,7 +79,7 @@ export function createAssetLookup({
           );
           onStatus(
             unique.length
-              ? `${Math.min(unique.length, 12)} matching listings. Choose the exact symbol and exchange.`
+              ? `${Math.min(unique.length, 12)} matches`
               : "No matching assets. Try a company name or ticker.",
           );
         } catch (error) {
@@ -99,7 +99,7 @@ export function articleAssetsMarkup(prefix) {
     <label for="${prefix}-asset-search">Primary asset</label>
     <div class="article-asset-search" data-asset-search="primary"><input id="${prefix}-asset-search" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="${prefix}-primary-results" aria-describedby="${prefix}-primary-status" maxlength="80" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Company name, ticker or ISIN"><div class="article-asset-popup" hidden><div id="${prefix}-primary-results" role="listbox" aria-label="Matching primary assets"></div><p id="${prefix}-primary-status" role="status" aria-live="polite"></p></div></div>
     <div class="article-asset-selected" data-primary-asset></div>
-    <p class="article-asset-note">The scenario map belongs to the primary asset. Related assets link this article to their pages.</p>
+
     <div class="article-related-assets" data-related-assets></div>
     <button type="button" class="link" data-link-asset>${icon("plus")} Link a related asset</button>
     <div class="article-related-search" hidden><label for="${prefix}-related-search">Related asset</label><div class="article-asset-search" data-asset-search="related"><input id="${prefix}-related-search" type="text" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="${prefix}-related-results" aria-describedby="${prefix}-related-status" maxlength="80" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Search another asset"><div class="article-asset-popup" hidden><div id="${prefix}-related-results" role="listbox" aria-label="Matching related assets"></div><p id="${prefix}-related-status" role="status" aria-live="polite"></p></div></div><button type="button" class="link" data-cancel-related>Done</button></div>
@@ -180,7 +180,12 @@ export function mountArticleAssets(
         list.innerHTML = results
           .map(
             (a, i) =>
-              `<div role="option" id="${list.id}-${i}" aria-selected="false" data-asset-index="${i}"><span class="article-asset-option-logo" aria-hidden="true">${monogram(a)}</span><span class="article-asset-option-name"><b>${esc(a.name)}</b><small><strong>${esc(a.symbol)}</strong>${esc([a.exchange, assetTypeLabel(a.assetType)].filter(Boolean).map((value) => " · " + value).join(""))}</small></span></div>`,
+              `<div role="option" id="${list.id}-${i}" aria-selected="false" data-asset-index="${i}"><span class="article-asset-option-logo" aria-hidden="true">${monogram(a)}</span><span class="article-asset-option-name"><b>${esc(a.name)}</b><small><strong>${esc(a.symbol)}</strong>${esc(
+                [a.exchange, assetTypeLabel(a.assetType)]
+                  .filter(Boolean)
+                  .map((value) => " · " + value)
+                  .join(""),
+              )}</small></span></div>`,
           )
           .join("");
         bindLogos();

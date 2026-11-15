@@ -4,6 +4,7 @@ import {
   defaultModels,
   MAX_OUTPUT,
   MAX_INPUT,
+  imageModels,
 } from "./catalog.js";
 import { preferences, spending } from "./billing.js";
 import { fail, text, integer, audit, transaction } from "../platform/util.js";
@@ -25,6 +26,18 @@ export function registerAIRoutes(
       author: isAuthor(req.auth.username),
       authorName,
       defaultModels,
+      imageModels: imageModels.map((m) => {
+        try {
+          return priceFor(m.id);
+        } catch {
+          return { ...m, expired: true };
+        }
+      }),
+      imagePreferences: db
+        .prepare(
+          "SELECT image_model AS model,run_limit AS runLimit FROM ai_media_preferences WHERE user_id=?",
+        )
+        .get(user) || { model: imageModels[0].id, runLimit: 500000 },
       reservationLimits: { input: MAX_INPUT, output: MAX_OUTPUT },
       vaultAvailable: vault.available,
       workerEnabled: engine.enabled,
@@ -102,6 +115,15 @@ export function registerAIRoutes(
       monthlyLimit: limit,
       runLimit: perRun,
     });
+    return { ok: true };
+  });
+  app.put("/api/ai/media-preferences", auth, async (req) => {
+    const model = imageModels.find((m) => m.id === req.body?.model);
+    if (!model) throw fail("Choose an image model.");
+    const limit = integer(req.body.runLimit, 1000, 10000000);
+    db.prepare(
+      "INSERT INTO ai_media_preferences(user_id,image_model,run_limit) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET image_model=excluded.image_model,run_limit=excluded.run_limit",
+    ).run(req.auth.user_id, model.id, limit);
     return { ok: true };
   });
   app.put(

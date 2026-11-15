@@ -21,9 +21,8 @@ const safe = (value) => {
   }
 };
 export function writingContextMarkup(context) {
-  if (!context)
-    return '<p class="writing-ai-note">This older request contains draft context only.</p>';
-  return `<p class="writing-ai-note">Stored knowledge as of ${esc(context.asOf)}. Dates below describe the records, not live market data.</p>${context.assets
+  if (!context) return '<p class="writing-ai-note">Draft context only</p>';
+  return `<p class="writing-ai-note">Snapshot · ${esc(context.asOf)}</p>${context.assets
     .map(
       (asset) =>
         `<section class="writing-context-asset"><h4>${esc(asset.symbol)} <span>${esc(asset.role)}</span></h4><p>${esc(asset.name)}</p>${Object.entries(
@@ -31,11 +30,11 @@ export function writingContextMarkup(context) {
         )
           .map(
             ([key, group]) =>
-              `<details class="writing-context-group"><summary>${esc(group.label)} <span>${group.included} / ${group.available}</span></summary>${group.items.length ? group.items.map((item) => `<article><strong>${esc(item.title)}</strong><small>${esc(item.epistemic)} · ${date(item.updatedAt)}${item.publishedAt ? ` · Published ${date(item.publishedAt)}` : ""}</small>${safe(item.url) ? `<a href="${esc(safe(item.url))}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}<pre>${esc(item.content)}</pre>${item.truncated ? '<p class="writing-context-limit">Excerpt shortened for this request.</p>' : ""}</article>`).join("") : `<p class="writing-ai-note">No ${esc(key)} included for this listing.</p>`}${group.omitted ? `<p class="writing-context-limit">${group.omitted} additional record${group.omitted === 1 ? "" : "s"} omitted to keep the request bounded.</p>` : ""}</details>`,
+              `<details class="writing-context-group"><summary>${esc(group.label)} <span>${group.included} / ${group.available}</span></summary>${group.items.length ? group.items.map((item) => `<article><strong>${esc(item.title)}</strong><small>${esc(item.epistemic)} · ${date(item.updatedAt)}${item.publishedAt ? ` · Published ${date(item.publishedAt)}` : ""}</small>${safe(item.url) ? `<a href="${esc(safe(item.url))}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}<pre>${esc(item.content)}</pre>${item.truncated ? '<span class="writing-context-limit" tabindex="0" data-tooltip="Excerpt shortened for this request.">Excerpt</span>' : ""}</article>`).join("") : `<p class="writing-ai-note">No ${esc(key)} included for this listing.</p>`}${group.omitted ? `<p class="writing-context-limit">${group.omitted} omitted</p>` : ""}</details>`,
           )
           .join("")}</section>`,
     )
-    .join("")}<p class="writing-ai-note">${esc(context.limits.source)}</p>`;
+    .join("")}`;
 }
 
 export function createWritingContextPanel(root, { getDraft, articleId }) {
@@ -46,7 +45,7 @@ export function createWritingContextPanel(root, { getDraft, articleId }) {
     controller,
     prepared = null,
     preparedKey = "";
-  root.innerHTML = `<details class="writing-context"><summary>Asset context <span data-context-count>Loading…</span></summary><div class="writing-context-tools"><span>Included automatically with your prompt.</span><button type="button" class="link" data-refresh-context>Refresh</button></div><div data-context-records></div></details><details class="writing-full-request" hidden><summary data-request-heading>Full request</summary><p class="writing-ai-note">Your editable prompt and voice settings are above. The remaining instructions specify the response format, evidence handling and review requirements.</p><label for="writing-request-text">Instructions sent to the model</label><textarea id="writing-request-text" rows="16" readonly></textarea><button type="button" class="link" data-copy-writing-request>Copy full request</button><details><summary>Response format</summary><pre data-writing-response-schema></pre></details></details>`;
+  root.innerHTML = `<details class="writing-context"><summary>Asset context <span data-context-count>Loading…</span></summary><div class="writing-context-tools"><button type="button" class="link" data-refresh-context>Refresh</button></div><div data-context-records></div></details><details class="writing-full-request" hidden><summary data-request-heading>Full request</summary><label for="writing-request-text">Instructions sent to the model</label><textarea id="writing-request-text" rows="16" readonly></textarea><button type="button" class="link" data-copy-writing-request>Copy full request</button><details><summary>Response format</summary><pre data-writing-response-schema></pre></details></details>`;
   const count = root.querySelector("[data-context-count]"),
     records = root.querySelector("[data-context-records]"),
     full = root.querySelector(".writing-full-request");

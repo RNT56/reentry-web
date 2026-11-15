@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import { validateMedia, renderMedia, mediaText } from "./article-media.js";
 
 const markdown = new MarkdownIt({
   html: false,
@@ -7,6 +8,24 @@ const markdown = new MarkdownIt({
   typographer: false,
 });
 const escape = markdown.utils.escapeHtml;
+const renderFence = markdown.renderer.rules.fence;
+markdown.renderer.rules.fence = (tokens, index, options, env, self) => {
+  if (tokens[index].info.trim() !== "reentry-media")
+    return renderFence(tokens, index, options, env, self);
+  try {
+    const html = renderMedia(JSON.parse(tokens[index].content));
+    const id = tokens[index].attrGet("id");
+    return id ? html.replace("<figure ", `<figure id="${escape(id)}" `) : html;
+  } catch {
+    return '<p class="media-empty">Invalid media block</p>';
+  }
+};
+export function articleMedia(body) {
+  return markdown
+    .parse(String(body), {})
+    .filter((t) => t.type === "fence" && t.info.trim() === "reentry-media")
+    .map((t) => validateMedia(JSON.parse(t.content)));
+}
 export function safeArticleLink(value) {
   if (
     typeof value !== "string" ||
@@ -88,8 +107,15 @@ export function formatArticle(body = "") {
     if (token.type === "heading_close" && token.tag === "h1") token.tag = "h2";
     if (block && token.type === "inline")
       block.text += (block.text ? "\n" : "") + inlineText(token.children || []);
-    if (block && ["fence", "code_block"].includes(token.type))
-      block.text += token.content;
+    if (block && ["fence", "code_block"].includes(token.type)) {
+      if (token.info?.trim() === "reentry-media") {
+        try {
+          block.text += mediaText(validateMedia(JSON.parse(token.content)));
+        } catch {
+          block.text += "Invalid media";
+        }
+      } else block.text += token.content;
+    }
   }
   const plainText = blocks.map((b) => b.text).join("\n\n");
   const wordCount = plainText.trim()
