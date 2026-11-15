@@ -29,6 +29,7 @@
     [data-phase="pending"],
     [data-phase="saving"],
     [data-phase="loading"],
+    [data-phase="reconnecting"],
     [data-phase="retrying"]
   )
   .ta-sync-mark {
@@ -60,6 +61,18 @@
   to {
     transform: rotate(360deg);
   }
+}
+.ta-conflict-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 4px 24px;
+}
+.ta-conflict-fields span {
+  color: #d5b97a;
+  border-bottom: 1px solid #d5b97a40;
+  padding-block: 6px;
+  font-size: 12px;
 }
 @media (any-pointer: coarse) {
   .ta-sync {

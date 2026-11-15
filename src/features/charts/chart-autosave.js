@@ -2,16 +2,13 @@ import {
   defaultChartWorkspaceState,
   validateChartWorkspaceState,
 } from "../../domain/chart-workspace.js";
+import {
+  chartStateVersion,
+  mergeChartStates,
+} from "../../domain/chart-merge.js";
+export { chartStateVersion } from "../../domain/chart-merge.js";
 
 const clone = (value) => structuredClone(value);
-export const chartStateVersion = (value) =>
-  JSON.stringify(value, (_key, item) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
-        )
-      : item,
-  );
 const equal = (a, b) => chartStateVersion(a) === chartStateVersion(b);
 const initial = (slot) => defaultChartWorkspaceState("Analysis " + slot);
 
@@ -25,6 +22,7 @@ export function createChartAutosave({
   delay = 350,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
+  onSubscribers = () => {},
 }) {
   const storageKey =
     "reentry.chart-drafts.v1:" + JSON.stringify([String(ownerId), symbol]);
@@ -41,18 +39,22 @@ export function createChartAutosave({
     flight: null,
     retries: 0,
     exclusive: false,
+    holds: 0,
+    remote: null,
+    conflicts: [],
   }));
   let loaded = false,
     loading = null,
     selected = null,
     journalSafe = true;
+  let connection = "live";
   const record = (slot) => {
     if (![1, 2, 3].includes(slot)) throw Error("Choose an analysis slot.");
     return records[slot - 1];
   };
   const changed = (r) => !equal(r.state, r.base || initial(r.slot));
   const pending = (r) => changed(r) || !!r.flight || r.attempts.length > 0;
-  const notify = () => listeners.forEach((fn) => fn());
+  const notify = (event = {}) => listeners.forEach((fn) => fn(event));
   const cancel = (r) => {
     if (r.timer !== null) clearTimer(r.timer);
     r.timer = null;
@@ -121,6 +123,9 @@ export function createChartAutosave({
     ).slots;
   }
   function adopt(r, remote, keepDraft) {
+    if (r.remote?.revision > remote.revision) remote = r.remote;
+    if (remote.revision < r.revision) return true;
+    const previous = r.state;
     const oldRevision = r.revision;
     const safe =
       !keepDraft ||
@@ -128,10 +133,21 @@ export function createChartAutosave({
       equal(remote.state, r.base) ||
       equal(remote.state, r.state) ||
       r.attempts.some((attempt) => equal(remote.state, attempt));
-    if (!safe) {
-      r.phase = "conflict";
-      r.error = "Changed on another device. Reload the saved analysis.";
-      return false;
+    const clearedSinceBase =
+      keepDraft &&
+      remote.state === null &&
+      remote.revision > r.revision &&
+      changed(r);
+    if (!safe || clearedSinceBase) {
+      const merged = mergeChartStates(r.base, r.state, remote.state, r.slot);
+      if (merged.conflicts.length) {
+        r.remote = clone(remote);
+        r.conflicts = merged.conflicts;
+        r.phase = "conflict";
+        r.error = "Concurrent edits · review changes";
+        return false;
+      }
+      r.state = clone(merged.state || initial(r.slot));
     }
     r.revision = remote.revision;
     r.base = clone(remote.state);
@@ -140,8 +156,33 @@ export function createChartAutosave({
     // their snapshots until the server advances, so a subsequent 409 is resolvable.
     if (!keepDraft || remote.revision !== oldRevision) r.attempts = [];
     r.error = null;
+    r.remote = null;
+    r.conflicts = [];
     r.phase = changed(r) ? "pending" : "saved";
+    if (!equal(previous, r.state)) notify({ type: "remote", slot: r.slot });
     return true;
+  }
+  function receive(remote) {
+    const r = record(remote.slot);
+    if (remote.revision <= r.revision) {
+      if (r.remote?.revision <= r.revision) r.remote = null;
+      return;
+    }
+    if (remote.revision < (r.remote?.revision || 0)) return;
+    r.remote = clone(remote);
+    if (!loaded || r.holds || r.flight || r.exclusive) return;
+    adopt(r, remote, pending(r));
+    journal();
+    notify();
+    schedule(r);
+  }
+  function reconcile(r, remote) {
+    if (r.holds) {
+      r.remote = clone(remote);
+      r.phase = "pending";
+      return false;
+    }
+    return adopt(r, remote, true);
   }
   function schedule(r, wait = delay) {
     // Editing or leaving a chart must not cancel its existing retry backoff.
@@ -151,6 +192,7 @@ export function createChartAutosave({
       !loaded ||
       !canWrite() ||
       r.exclusive ||
+      (r.holds && r.remote) ||
       r.flight ||
       r.phase === "conflict" ||
       r.phase === "error" ||
@@ -185,6 +227,7 @@ export function createChartAutosave({
       !loaded ||
       !canWrite() ||
       r.exclusive ||
+      (r.holds && r.remote) ||
       ["conflict", "error", "retrying"].includes(r.phase)
     )
       return !pending(r);
@@ -196,7 +239,7 @@ export function createChartAutosave({
         // before retrying instead of overwriting a newer device's revision.
         if (r.attempts.length) {
           const remote = (await read())[slot - 1];
-          if (!adopt(r, remote, true)) return;
+          if (!reconcile(r, remote)) return;
           if (!changed(r) && !r.attempts.length) return;
         }
         if (!canWrite()) {
@@ -225,7 +268,7 @@ export function createChartAutosave({
       } catch (error) {
         if (error.status === 409 && canWrite()) {
           try {
-            if (adopt(r, (await read())[slot - 1], true) && ++r.retries > 5) {
+            if (reconcile(r, (await read())[slot - 1]) && ++r.retries > 5) {
               r.phase = "error";
               r.error = "Could not synchronize this analysis. Retry.";
             }
@@ -240,9 +283,16 @@ export function createChartAutosave({
     notify();
     await operation;
     r.flight = null;
+    if (r.remote) receive(r.remote);
     journal();
     notify();
-    if (r.phase === "pending" && canWrite() && !r.exclusive) return flush(slot);
+    if (
+      r.phase === "pending" &&
+      canWrite() &&
+      !r.exclusive &&
+      !(r.holds && r.remote)
+    )
+      return flush(slot);
     else if (r.phase === "retrying") {
       const wait = Math.min(15000, 1000 * 2 ** (r.retries - 1));
       if (canWrite())
@@ -262,7 +312,14 @@ export function createChartAutosave({
       loading = (async () => {
         await Promise.all(records.map((r) => r.flight));
         const remote = await read();
-        for (const r of records) adopt(r, remote[r.slot - 1], pending(r));
+        for (const r of records)
+          adopt(
+            r,
+            r.remote?.revision > remote[r.slot - 1].revision
+              ? r.remote
+              : remote[r.slot - 1],
+            pending(r),
+          );
         selected ||= remote.find((r) => r.state)?.slot || 1;
         loaded = true;
         journal();
@@ -282,6 +339,24 @@ export function createChartAutosave({
         revision: r.revision,
         state: clone(r.base),
       })),
+    revisions: () =>
+      records.map((r) => Math.max(r.revision, r.remote?.revision || 0)),
+    receive(slots) {
+      if (!canWrite()) return;
+      slots.forEach(receive);
+    },
+    hold(slot) {
+      const r = record(slot);
+      r.holds++;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        r.holds--;
+        if (r.remote) receive(r.remote);
+        schedule(r);
+      };
+    },
     get(slot) {
       const r = record(slot);
       return {
@@ -292,6 +367,8 @@ export function createChartAutosave({
         phase: r.phase,
         error: r.error,
         saved: r.base !== null,
+        conflicts: [...r.conflicts],
+        connection,
       };
     },
     get selected() {
@@ -337,6 +414,47 @@ export function createChartAutosave({
       r.error = null;
       return flush(slot);
     },
+    async keepBoth(slot) {
+      const r = record(slot);
+      if (r.phase !== "conflict")
+        throw Error("This analysis has no conflicting edits.");
+      const remote = await read();
+      const target = remote.find(
+        (s) =>
+          s.slot !== slot &&
+          !s.state &&
+          !pending(record(s.slot)) &&
+          !record(s.slot).exclusive,
+      );
+      if (!target)
+        throw Error(
+          "All three slots are in use. Download your version or free a slot.",
+        );
+      const destination = record(target.slot);
+      destination.exclusive = true;
+      try {
+        const result = await request(
+          path(target.slot),
+          "PUT",
+          {
+            revision: target.revision,
+            state: {
+              ...clone(r.state),
+              name: r.state.name.slice(0, 33) + " · Copy",
+            },
+          },
+          options,
+        );
+        adopt(destination, result, false);
+        await api.reset(slot);
+        api.select(target.slot);
+        return api.get(target.slot);
+      } finally {
+        destination.exclusive = false;
+        journal();
+        notify();
+      }
+    },
     async reset(slot, clear = false) {
       const r = record(slot);
       cancel(r);
@@ -365,7 +483,16 @@ export function createChartAutosave({
     },
     subscribe(fn) {
       listeners.add(fn);
-      return () => listeners.delete(fn);
+      onSubscribers(listeners.size);
+      return () => {
+        listeners.delete(fn);
+        onSubscribers(listeners.size);
+      };
+    },
+    connection(value) {
+      if (connection === value) return;
+      connection = value;
+      notify();
     },
     pause() {
       records.forEach(cancel);

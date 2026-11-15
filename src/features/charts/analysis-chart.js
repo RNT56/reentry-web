@@ -1,5 +1,7 @@
 import { chartWorkspaceSync } from "./chart-sync.js";
 import { chartStateVersion as versionOf } from "./chart-autosave.js";
+import { mergeChartStates } from "../../domain/chart-merge.js";
+import { download } from "../intelligence/shared.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { esc } from "../../shared/format.js";
 import { modal, close, toast, icon } from "../../shared/ui.js";
@@ -85,6 +87,10 @@ export function mountAnalysisChart(
     fetchGeneration = 0,
     storageGeneration = 0,
     resizeFrame = 0;
+  let releaseRemote = null,
+    remoteSlot = null,
+    editorOpen = false,
+    releaseQueued = false;
   let undo = [],
     redo = [],
     aiLayer = null,
@@ -101,6 +107,36 @@ export function mountAnalysisChart(
     instances.get(key) === instance &&
     root.analysisChartInstance === instance;
   const editable = () => live() && ready && !busy && !managing;
+  const interactionActive = () =>
+    busy ||
+    managing ||
+    drag ||
+    gestureBefore ||
+    pendingAnchor ||
+    editorOpen ||
+    document.activeElement === root.querySelector(".ta-name");
+  function protectInteraction() {
+    if (!live()) return;
+    if (releaseRemote && remoteSlot !== slot) {
+      const release = releaseRemote;
+      releaseRemote = null;
+      release();
+    }
+    if (interactionActive() && !releaseRemote) {
+      remoteSlot = slot;
+      releaseRemote = sync.hold(slot);
+    } else if (!interactionActive() && releaseRemote && !releaseQueued) {
+      releaseQueued = true;
+      queueMicrotask(() => {
+        releaseQueued = false;
+        if (!interactionActive() && releaseRemote) {
+          const release = releaseRemote;
+          releaseRemote = null;
+          release();
+        }
+      });
+    }
+  }
   const remember = () => {
     if (disposed || !ready || instances.get(key) !== instance) return;
     sync.update(slot, state);
@@ -238,7 +274,7 @@ export function mountAnalysisChart(
     });
     root.querySelector("[data-ta-manage]").disabled = locked;
     root.querySelector("[data-ta-manage]").title = conflict
-      ? "Reload the saved analysis to resolve this conflict"
+      ? "Review concurrent chart edits"
       : "Manage saved analysis";
     root.querySelector("[data-ta-currency]").textContent = state.currency;
     root.querySelector("[data-ta-type]").textContent =
@@ -325,15 +361,23 @@ export function mountAnalysisChart(
     const savingState = sync.get(slot);
     dirty = savingState.dirty;
     conflict = savingState.phase === "conflict";
-    const phase = !ready ? "loading" : managing ? "saving" : savingState.phase;
+    const phase = !ready
+      ? "loading"
+      : managing
+        ? "saving"
+        : savingState.phase === "saved" &&
+            savingState.connection === "reconnecting"
+          ? "reconnecting"
+          : savingState.phase;
     const labels = {
       loading: "Loading…",
       pending: "Saving…",
       saving: "Saving…",
       saved: "Saved",
       retrying: "Retrying…",
+      reconnecting: "Connecting…",
       error: "Not synced",
-      conflict: "Conflict",
+      conflict: "Review",
     };
     status(labels[phase] || "Saved", ["error", "conflict"].includes(phase));
     const syncUI = root.querySelector(".ta-sync"),
@@ -341,7 +385,11 @@ export function mountAnalysisChart(
     syncUI.dataset.phase = phase;
     syncUI.title =
       savingState.error ||
-      (phase === "saved" ? "All chart changes saved" : "Saving chart changes");
+      (phase === "saved"
+        ? "All chart changes saved"
+        : phase === "reconnecting"
+          ? "Reconnecting live chart updates"
+          : "Saving chart changes");
     retry.hidden = !["error", "retrying", "conflict"].includes(phase);
     retry.setAttribute(
       "aria-label",
@@ -354,6 +402,7 @@ export function mountAnalysisChart(
       onContextChange(context);
     }
     updateAIRail();
+    protectInteraction();
   }
   const view = () =>
     geometry && data ? { ...geometry, length: data.points.length } : null;
@@ -368,6 +417,7 @@ export function mountAnalysisChart(
     enabled: () => editable() && !!geometry && tool === "inspect" && !drag,
     onStart: () => {
       gestureBefore = clone(state);
+      protectInteraction();
     },
     onChange: (next) => {
       applyViewport(next);
@@ -516,7 +566,7 @@ export function mountAnalysisChart(
         root.querySelector("[data-ta-time]").textContent,
     );
   }
-  async function loadHistory({ rollback = null } = {}) {
+  async function loadHistory({ rollback = null, remote = false } = {}) {
     const generation = ++fetchGeneration;
     if (!data) {
       geometry = null;
@@ -561,7 +611,7 @@ export function mountAnalysisChart(
       data = result;
       indicators = technicalIndicators(data.points);
       busy = false;
-      remember();
+      if (!remote) remember();
       draw(true);
       return true;
     } catch (e) {
@@ -569,7 +619,10 @@ export function mountAnalysisChart(
       busy = false;
       plot.setAttribute("aria-busy", "false");
       plot.classList.remove("is-loading");
-      if (retained) {
+      if (remote) {
+        data = null;
+        geometry = null;
+      } else if (retained) {
         data = retainedData;
         indicators = retainedIndicators;
         if (rollback) state = clone(rollback);
@@ -718,6 +771,16 @@ export function mountAnalysisChart(
         .join(
           "",
         )}</select></div><div class="error" role="alert" id="ta-edit-error"></div><div class="actions"><button class="primary">Apply</button></div></form>`,
+    );
+    editorOpen = true;
+    protectInteraction();
+    document.querySelector("#modal").addEventListener(
+      "close",
+      () => {
+        editorOpen = false;
+        protectInteraction();
+      },
+      { once: true },
     );
     document.querySelector("#ta-drawing-form").onsubmit = (e) => {
       e.preventDefault();
@@ -998,6 +1061,57 @@ export function mountAnalysisChart(
   function manage() {
     if (!editable()) return;
     const managedSlot = slot;
+    if (sync.get(slot).phase === "conflict") {
+      const local = sync.get(slot);
+      modal(
+        `<h2>Concurrent edits</h2><div class="ta-conflict-fields">${local.conflicts.map((field) => `<span>${esc(field)}</span>`).join("")}</div><div class="actions"><button class="secondary" id="ta-use-latest">Use latest</button><button class="primary" id="ta-keep-both">Keep both</button></div><button class="link" id="ta-export-draft">Download my version ${icon("download")}</button><div class="error" id="ta-conflict-error" role="alert"></div>`,
+      );
+      document.querySelector("#ta-export-draft").onclick = () =>
+        download(
+          {
+            symbol: asset.symbol,
+            slot: managedSlot,
+            state: sync.get(managedSlot).state,
+          },
+          asset.symbol + "-analysis-draft.json",
+        );
+      const resolve = async (both) => {
+        managing = true;
+        updateChrome();
+        document
+          .querySelectorAll("#ta-use-latest,#ta-keep-both")
+          .forEach((b) => (b.disabled = true));
+        try {
+          const result = both
+            ? await sync.keepBoth(managedSlot)
+            : await sync.reset(managedSlot);
+          if (!live()) return;
+          slot = result.slot;
+          sync.select(slot);
+          state = result.state;
+          undo = [];
+          redo = [];
+          selected = null;
+          pendingAnchor = null;
+          root.querySelector(".ta-name").value = state.name;
+          close();
+          managing = false;
+          await loadHistory({ remote: true });
+        } catch (error) {
+          const node = document.querySelector("#ta-conflict-error");
+          if (node) node.textContent = error.message;
+        } finally {
+          managing = false;
+          if (live()) updateChrome();
+          document
+            .querySelectorAll("#ta-use-latest,#ta-keep-both")
+            .forEach((b) => (b.disabled = false));
+        }
+      };
+      document.querySelector("#ta-use-latest").onclick = () => resolve(false);
+      document.querySelector("#ta-keep-both").onclick = () => resolve(true);
+      return;
+    }
     async function applyAction(action, control) {
       if (!editable() || slot !== managedSlot) return;
       managing = true;
@@ -1270,11 +1384,42 @@ export function mountAnalysisChart(
       plot.setAttribute("aria-busy", "false");
     }
   }
-  const unsubscribe = sync.subscribe(() => {
+  const unsubscribe = sync.subscribe((event) => {
     if (!live()) return;
     slots = sync.slots();
+    if (
+      event.type === "remote" &&
+      event.slot === slot &&
+      ready &&
+      !busy &&
+      !managing
+    ) {
+      const next = sync.get(slot).state;
+      const rebase = (history) =>
+        history
+          .map((entry) => mergeChartStates(state, entry, next, slot))
+          .filter((result) => !result.conflicts.length)
+          .map((result) => result.state);
+      undo = rebase(undo);
+      redo = rebase(redo);
+      state = next;
+      if (!state.drawings.some((d) => d.id === selected)) selected = null;
+      const input = root.querySelector(".ta-name");
+      if (input.value !== state.name) input.value = state.name;
+      if (
+        !data ||
+        data.range !== state.range ||
+        data.currency !== state.currency
+      )
+        void loadHistory({ remote: true });
+      else draw();
+    }
     updateChrome();
   });
+  root.querySelector(".ta-name").addEventListener("focus", protectInteraction);
+  root
+    .querySelector(".ta-name")
+    .addEventListener("blur", () => queueMicrotask(protectInteraction));
   updateChrome();
   loadWorkspaces();
   return {
@@ -1296,6 +1441,8 @@ export function mountAnalysisChart(
       finishDrag();
       remember();
       unsubscribe();
+      releaseRemote?.();
+      releaseRemote = null;
       void sync.flush(slot);
       gestures.destroy();
       disposed = true;

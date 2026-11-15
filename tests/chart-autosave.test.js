@@ -423,3 +423,161 @@ test("edits and navigation during backoff retain the retry and save the newest s
   assert.equal(sync.get(1).phase, "saved");
   assert.equal(f.row("alice", "INTC", 1).state.name, "Edited during outage");
 });
+
+test("live clean updates and clears notify the view without generating echo writes", async () => {
+  const f = fixture(),
+    sync = f.make(),
+    events = [];
+  await sync.load();
+  sync.subscribe((event) => events.push(event));
+  const saved = { ...sync.get(1).state, drawings: [drawing] };
+  f.external("alice", "INTC", 1, saved);
+  sync.receive([f.row("alice", "INTC", 1)]);
+  assert.deepEqual(sync.get(1).state, saved);
+  f.external("alice", "INTC", 1, null);
+  sync.receive([f.row("alice", "INTC", 1)]);
+  assert.deepEqual(sync.get(1).state.drawings, []);
+  assert.equal(sync.get(1).phase, "saved");
+  await f.advance(1000);
+  assert.equal(f.calls.filter((c) => c.method === "PUT").length, 0);
+  assert.equal(events.filter((e) => e.type === "remote").length, 2);
+});
+
+test("live updates merge unsaved independent changes and ignore late older snapshots", async () => {
+  const f = fixture(),
+    sync = f.make();
+  await sync.load();
+  const original = sync.get(1).state;
+  sync.update(1, { ...original, drawings: [drawing] });
+  f.external("alice", "INTC", 1, { ...original, scale: "log" });
+  const old = copy(f.row("alice", "INTC", 1));
+  sync.receive([old]);
+  assert.equal(sync.get(1).state.scale, "log");
+  assert.equal(sync.get(1).state.drawings.length, 1);
+  await sync.flush(1);
+  sync.receive([old]);
+  assert.deepEqual(sync.get(1).state, f.row("alice", "INTC", 1).state);
+  assert.equal(sync.get(1).revision, 2);
+});
+
+test("remote updates wait for a gesture to finish then merge its final position", async () => {
+  const f = fixture(),
+    sync = f.make();
+  await sync.load();
+  sync.update(1, { ...sync.get(1).state, drawings: [drawing] });
+  await sync.flush(1);
+  const before = sync.get(1).state,
+    release = sync.hold(1);
+  f.external("alice", "INTC", 1, { ...before, indicators: ["rsi"] });
+  sync.receive([f.row("alice", "INTC", 1)]);
+  assert.deepEqual(sync.get(1).state.indicators, before.indicators);
+  sync.update(1, {
+    ...before,
+    drawings: [
+      {
+        ...drawing,
+        anchors: [{ time: 1700000000, price: 22 }, drawing.anchors[1]],
+      },
+    ],
+  });
+  release();
+  await sync.flush(1);
+  assert.deepEqual(sync.get(1).state.indicators, ["rsi"]);
+  assert.equal(sync.get(1).state.drawings[0].anchors[0].price, 22);
+});
+
+test("updates received while a write is in flight reconcile after its acknowledgment", async () => {
+  const f = fixture(),
+    sync = f.make(),
+    gate = deferred();
+  await sync.load();
+  const before = sync.get(1).state;
+  let first = true;
+  f.intercept(async ({ method }) => {
+    if (method === "PUT" && first) {
+      first = false;
+      await gate.promise;
+    }
+  });
+  sync.update(1, { ...before, drawings: [drawing] });
+  const flushing = sync.flush(1);
+  f.external("alice", "INTC", 1, { ...before, scale: "log" });
+  sync.receive([f.row("alice", "INTC", 1)]);
+  gate.resolve();
+  await flushing;
+  assert.equal(sync.get(1).state.scale, "log");
+  assert.equal(sync.get(1).state.drawings.length, 1);
+  assert.equal(sync.get(1).phase, "saved");
+});
+
+test("same-field conflicts retain both versions and Keep both uses an empty slot", async () => {
+  const f = fixture(),
+    sync = f.make();
+  await sync.load();
+  const before = sync.get(1).state;
+  sync.update(1, { ...before, name: "Mine" });
+  f.external("alice", "INTC", 1, { ...before, name: "Theirs" });
+  sync.receive([f.row("alice", "INTC", 1)]);
+  assert.equal(sync.get(1).phase, "conflict");
+  assert.deepEqual(sync.get(1).conflicts, ["Name"]);
+  assert.equal(sync.revisions()[0], 1);
+  const result = await sync.keepBoth(1);
+  assert.equal(result.slot, 2);
+  assert.equal(result.state.name, "Mine · Copy");
+  assert.equal(sync.get(1).state.name, "Theirs");
+  assert.equal(f.row("alice", "INTC", 1).state.name, "Theirs");
+});
+
+test("Keep both cannot overwrite a slot taken by another device during the copy", async () => {
+  const f = fixture(),
+    sync = f.make();
+  await sync.load();
+  const before = sync.get(1).state;
+  sync.update(1, { ...before, name: "Mine" });
+  f.external("alice", "INTC", 1, { ...before, name: "Theirs" });
+  sync.receive([f.row("alice", "INTC", 1)]);
+  f.intercept(({ method, slot }) => {
+    if (method === "PUT" && slot === 2)
+      f.external("alice", "INTC", 2, { ...before, name: "Newer" });
+  });
+  await assert.rejects(sync.keepBoth(1), { status: 409 });
+  assert.equal(f.row("alice", "INTC", 2).state.name, "Newer");
+  assert.equal(sync.get(1).state.name, "Mine");
+  assert.equal(sync.get(1).phase, "conflict");
+});
+
+test("a newer deletion tombstone also protects an initially empty slot from resurrection", async () => {
+  const f = fixture(),
+    sync = f.make();
+  await sync.load();
+  sync.update(1, { ...sync.get(1).state, drawings: [drawing] });
+  f.external("alice", "INTC", 1, {
+    ...defaultChartWorkspaceState(),
+    name: "Created elsewhere",
+  });
+  f.external("alice", "INTC", 1, null);
+  sync.receive([f.row("alice", "INTC", 1)]);
+  assert.equal(sync.get(1).phase, "conflict");
+  assert.deepEqual(sync.get(1).conflicts, ["Cleared analysis"]);
+  assert.equal(await sync.flushAll(), false);
+  assert.equal(f.row("alice", "INTC", 1).state, null);
+});
+
+test("resolving from an older read cannot replace a newer revision already received live", async () => {
+  const f = fixture(),
+    sync = f.make();
+  await sync.load();
+  const release = sync.hold(1);
+  sync.receive([
+    {
+      slot: 1,
+      revision: 2,
+      state: { ...defaultChartWorkspaceState(), name: "Newest known" },
+    },
+  ]);
+  // The fixture's read still returns revision zero, simulating a delayed GET.
+  await sync.reset(1);
+  release();
+  assert.equal(sync.get(1).revision, 2);
+  assert.equal(sync.get(1).state.name, "Newest known");
+});

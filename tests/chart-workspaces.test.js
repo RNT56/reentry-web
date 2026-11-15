@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes, createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { createApp } from "../server/app.js";
 import { openStore } from "../server/store.js";
 import {
@@ -428,3 +429,102 @@ test("a stale tab cannot read or autosave into a different signed-in account", a
     await f.close();
   }
 });
+
+test(
+  "live chart requests authenticate, isolate users, wake on saves and include deletion tombstones",
+  { timeout: 5000 },
+  async () => {
+    const f = await fixture();
+    try {
+      const url = "/api/chart-workspaces/watch?symbol=INTC&revisions=0,0,0";
+      assert.equal((await f.call(null, url)).statusCode, 401);
+      assert.equal(
+        (
+          await f.call("first", url, "GET", undefined, {
+            "x-reentry-owner": "second",
+          })
+        ).statusCode,
+        401,
+      );
+      assert.equal(
+        (
+          await f.call(
+            "first",
+            "/api/chart-workspaces/watch?symbol=INTC&revisions=wat",
+          )
+        ).statusCode,
+        400,
+      );
+      let delivered = false;
+      const watching = f.call("first", url).then((r) => {
+        delivered = true;
+        return r;
+      });
+      await delay(20);
+      await f.call("second", "/api/chart-workspaces/INTC/1", "PUT", {
+        revision: 0,
+        state: state("Private second"),
+      });
+      await delay(10);
+      assert.equal(delivered, false);
+      await f.call("first", "/api/chart-workspaces/INTC/1", "PUT", {
+        revision: 0,
+        state: state("Live first"),
+      });
+      const response = await watching;
+      assert.equal(response.statusCode, 200);
+      assert.equal(response.headers["cache-control"], "no-store");
+      assert.equal(response.json().slots[0].state.name, "Live first");
+      const deleting = f.call("first", url.replace("0,0,0", "1,0,0"));
+      await delay(20);
+      await f.call("first", "/api/chart-workspaces/INTC/1", "DELETE", {
+        revision: 1,
+      });
+      const cleared = await deleting;
+      assert.equal(cleared.json().slots[0].revision, 2);
+      assert.equal(cleared.json().slots[0].state, null);
+      const reconnect = await f.call("first", url);
+      assert.equal(reconnect.json().slots[0].revision, 2);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test(
+  "live chart responses recheck sessions revoked while waiting",
+  { timeout: 5000 },
+  async () => {
+    const f = await fixture();
+    try {
+      const watching = f.call(
+        "first",
+        "/api/chart-workspaces/watch?symbol=INTC&revisions=0,0,0",
+      );
+      await delay(20);
+      f.db.prepare("DELETE FROM sessions WHERE user_id='first'").run();
+      const token = randomBytes(32).toString("base64url"),
+        now = Date.now();
+      f.db
+        .prepare("INSERT INTO sessions VALUES(?,?,?,?,?,?)")
+        .run(
+          createHash("sha256").update(token).digest("hex"),
+          "first",
+          now,
+          now,
+          now,
+          now + 86400000,
+        );
+      await f.call(
+        "first",
+        "/api/chart-workspaces/INTC/1",
+        "PUT",
+        { revision: 0, state: state() },
+        { cookie: "reentry_dev=" + token },
+      );
+      assert.equal((await watching).statusCode, 401);
+    } finally {
+      await f.close();
+    }
+  },
+);
