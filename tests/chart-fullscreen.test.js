@@ -150,11 +150,16 @@ class Node {
     this.ownerDocument.activeElement = this;
   }
   showPopover() {
+    if (this._popover) return;
     this._popover = true;
     this.showCount++;
+    this.ownerDocument.topLayer.push(this);
   }
   hidePopover() {
     this._popover = false;
+    this.ownerDocument.topLayer = this.ownerDocument.topLayer.filter(
+      (node) => node !== this,
+    );
   }
   addEventListener(type, handler) {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
@@ -168,6 +173,7 @@ class Node {
 function fixture({
   popover = true,
   nativeMode = "none",
+  preserveNativePopovers = false,
   native = false,
   beforeOpen,
   onChange,
@@ -177,6 +183,7 @@ function fixture({
   let frame = 0,
     resolveNative;
   const doc = {
+    topLayer: [],
     listeners: new Map(),
     fullscreenElement: null,
     fullscreenEnabled: true,
@@ -278,6 +285,13 @@ function fixture({
   }
   doc.nativeRequests = 0;
   doc.nativeExits = 0;
+  function enterNative() {
+    if (!preserveNativePopovers)
+      for (const node of [...doc.topLayer]) node.hidePopover();
+    doc.fullscreenElement = doc.documentElement;
+    doc.topLayer.push(doc.documentElement);
+    emit(doc, "fullscreenchange");
+  }
   if (nativeMode !== "none")
     doc.documentElement.requestFullscreen = () => {
       doc.nativeRequests++;
@@ -285,19 +299,18 @@ function fixture({
       if (nativeMode === "deferred")
         return new Promise((resolve) => {
           resolveNative = () => {
-            for (const node of doc.body.all()) node._popover = false;
-            doc.fullscreenElement = doc.documentElement;
-            emit(doc, "fullscreenchange");
+            enterNative();
             resolve();
           };
         });
-      for (const node of doc.body.all()) node._popover = false;
-      doc.fullscreenElement = doc.documentElement;
-      emit(doc, "fullscreenchange");
+      enterNative();
       return Promise.resolve();
     };
   doc.exitFullscreen = () => {
     doc.nativeExits++;
+    doc.topLayer = doc.topLayer.filter(
+      (node) => node !== doc.fullscreenElement,
+    );
     doc.fullscreenElement = null;
     emit(doc, "fullscreenchange");
     return Promise.resolve();
@@ -520,6 +533,90 @@ test("native transition restores the popover and native Escape restores the page
     h.emit(h.doc, "fullscreenchange");
     assert.equal(h.controller.isActive(), false);
     assert.equal(h.nav.hasAttribute("inert"), false);
+  } finally {
+    h.controller.destroy();
+  }
+});
+
+test("native fullscreen cannot cover an already-open manual chart popover", async () => {
+  const h = fixture({
+    native: true,
+    nativeMode: "deferred",
+    preserveNativePopovers: true,
+  });
+  try {
+    h.controller.open();
+    h.field.focus();
+    h.resolveNative();
+    await settle();
+    h.step();
+    assert.ok(h.root._popover);
+    assert.ok(
+      h.doc.topLayer.at(-1) === h.root,
+      "An open popover below the fullscreen HTML is invisible despite :popover-open",
+    );
+    assert.equal(h.doc.activeElement, h.field);
+    const shows = h.root.showCount;
+    h.controller.refresh();
+    h.emit(h.doc, "fullscreenchange");
+    h.step();
+    assert.equal(
+      h.root.showCount,
+      shows,
+      "Do not restack on every resize or redraw",
+    );
+    h.controller.close();
+    await settle();
+    assert.deepEqual(h.doc.topLayer, []);
+    assert.equal(h.root.getAttribute("popover"), null);
+  } finally {
+    h.controller.destroy();
+  }
+});
+
+test("native restacking waits for an open tool dialog and then recovers", async () => {
+  const h = fixture({
+    native: true,
+    nativeMode: "deferred",
+    preserveNativePopovers: true,
+  });
+  try {
+    h.controller.open();
+    h.modal.setAttribute("open", "");
+    h.resolveNative();
+    await settle();
+    h.step();
+    assert.equal(h.root.showCount, 1, "Do not cover an active tool dialog");
+    h.modal.removeAttribute("open");
+    h.emit(h.doc, "close");
+    h.step();
+    assert.ok(h.doc.topLayer.at(-1) === h.root);
+  } finally {
+    h.controller.destroy();
+  }
+});
+
+test("a rejected popover recovery falls back to a visible chart and restores original attributes", async () => {
+  const h = fixture({ native: true, nativeMode: "deferred" });
+  try {
+    h.controller.open();
+    h.root.showPopover = () => {
+      throw Error("top layer unavailable");
+    };
+    h.resolveNative();
+    await settle();
+    h.step();
+    assert.ok(h.controller.isActive());
+    assert.ok(h.root.classList.contains("chart-fs-fallback"));
+    assert.equal(
+      h.root.hasAttribute("popover"),
+      false,
+      "A closed popover must never hide the fallback chart",
+    );
+    assert.ok(h.root.contains(h.field));
+    h.controller.close();
+    assert.equal(h.nav.hasAttribute("inert"), false);
+    assert.equal(h.root.hasAttribute("popover"), false);
   } finally {
     h.controller.destroy();
   }

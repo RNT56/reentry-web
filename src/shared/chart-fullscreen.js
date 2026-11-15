@@ -66,6 +66,7 @@ export function mountChartFullscreen(
     generation = 0;
   let snapshot = null,
     mode = null,
+    layeredFullscreen = null,
     savedFocus = null,
     releaseScrollLock = null,
     request = null,
@@ -255,19 +256,34 @@ export function mountChartFullscreen(
     toastSnapshot = null;
   }
   function ensurePopover() {
-    if (
-      !active ||
-      mode !== "popover" ||
-      !root.isConnected ||
-      popoverOpen(root) ||
-      modalOpen()
-    )
+    if (!active || mode !== "popover" || !root.isConnected || modalOpen())
       return;
+    const fullscreen = doc.fullscreenElement || null;
+    const restack = fullscreen && fullscreen !== layeredFullscreen;
+    if (popoverOpen(root) && !restack) {
+      layeredFullscreen = fullscreen;
+      return false;
+    }
+    const focus = root.contains(doc.activeElement) ? doc.activeElement : null;
     try {
+      // A manual popover can stay open *below* a newly fullscreen HTML element.
+      // :popover-open alone does not prove visibility. Re-promote it once per
+      // native entry, after HTML joins the top layer, preserving the chart DOM.
+      if (popoverOpen(root)) root.hidePopover();
       root.showPopover();
+      layeredFullscreen = fullscreen;
+      focus?.focus({ preventScroll: true });
       return true;
     } catch {
-      /* A retained chart may be between DOM parents until the next frame. */
+      if (!root.isConnected) return;
+      // A browser refusing top-layer recovery must not leave display:none from
+      // a closed [popover]. The fixed-position layer remains fully usable.
+      root.removeAttribute("popover");
+      mode = "fallback";
+      root.classList.remove("chart-fs-popover");
+      root.classList.add("chart-fs-fallback");
+      fallbackAncestors();
+      focus?.focus({ preventScroll: true });
     }
   }
   function refresh() {
@@ -339,7 +355,7 @@ export function mountChartFullscreen(
         return;
       }
       nativeOwned = doc.fullscreenElement === html;
-      // HTML fullscreen hides existing popovers; restore the chart above it.
+      // Engines may hide popovers or leave them open below the fullscreen HTML.
       refresh();
       schedule();
     };
@@ -420,13 +436,12 @@ export function mountChartFullscreen(
         if (popoverOpen(root)) root.hidePopover();
         root.setAttribute("popover", "manual");
         root.showPopover();
+        layeredFullscreen = doc.fullscreenElement || null;
         mode = "popover";
       } catch {
-        const original = snapshot.attributes.find(
-          ([name]) => name === "popover",
-        )[1];
-        if (original === null) root.removeAttribute("popover");
-        else root.setAttribute("popover", original);
+        // Restore the original attribute on close, not while the fallback is
+        // active: even an original [popover] would hide a closed fallback.
+        root.removeAttribute("popover");
       }
     }
     root.classList.add(
@@ -486,6 +501,7 @@ export function mountChartFullscreen(
     }
     snapshot = null;
     mode = null;
+    layeredFullscreen = null;
     if (nativeOwned || request) exitOwnedNative();
     nativeOwned = false;
     if (
