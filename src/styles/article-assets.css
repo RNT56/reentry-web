@@ -34,7 +34,7 @@
 .article-asset-popup [role="option"] {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 14px;
   min-height: 60px;
   padding: 11px 12px;
@@ -46,10 +46,19 @@
   background: #c6eea614;
   outline: 1px solid #c6eea62d;
 }
-.article-asset-popup [role="option"] > span {
+.article-asset-option-name {
   display: grid;
   gap: 5px;
   min-width: 0;
+  flex: 1;
+}
+.article-asset-option-logo {
+  flex: 0 0 34px;
+}
+.article-asset-option-logo .stock-icon {
+  width: 34px;
+  height: 34px;
+  font-size: 11px;
 }
 .article-asset-popup b {
   font-size: 13px;
@@ -58,7 +67,7 @@
 }
 .article-asset-popup strong {
   font:
-    11px "Geist Mono",
+    10px "Geist Mono",
     monospace;
   color: #c1efa2;
   flex-shrink: 0;

@@ -1,6 +1,7 @@
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
 import { icon } from "../../shared/icons.js";
+import { monogram, bindLogos } from "../../shared/ui.js";
 import {
   assetInfo,
   assetTypeLabel,
@@ -174,9 +175,10 @@ export function mountArticleAssets(
         list.innerHTML = results
           .map(
             (a, i) =>
-              `<div role="option" id="${list.id}-${i}" aria-selected="false" data-asset-index="${i}"><span><b>${esc(a.name)}</b><small>${esc([a.exchange, assetTypeLabel(a.assetType)].filter(Boolean).join(" · "))}</small></span><strong>${esc(a.symbol)}</strong></div>`,
+              `<div role="option" id="${list.id}-${i}" aria-selected="false" data-asset-index="${i}"><span class="article-asset-option-logo" aria-hidden="true">${monogram(a)}</span><span class="article-asset-option-name"><b>${esc(a.name)}</b><small><strong>${esc(a.symbol)}</strong>${esc([a.exchange, assetTypeLabel(a.assetType)].filter(Boolean).map((value) => " · " + value).join(""))}</small></span></div>`,
           )
           .join("");
+        bindLogos();
         activate(-1);
       },
       onStatus(message) {
