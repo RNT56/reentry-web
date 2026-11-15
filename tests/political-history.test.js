@@ -361,3 +361,46 @@ test("A corrupted replacement shard leaves the persisted archive untouched", asy
   );
   await s.stop();
 });
+
+test("The archive reuses healthy five-minute caches until the new twelve-hour deadline", async (t) => {
+  const db = openStore(":memory:");
+  migratePlatform(db);
+  t.after(() => db.close());
+  const put = db.prepare("INSERT INTO political_archives VALUES(?,?,?,?)");
+  put.run(
+    "history:2026",
+    "r",
+    gzipSync(JSON.stringify({ rows: [row()], documents: ["house:20033725"] })),
+    now,
+  );
+  put.run(
+    "history:meta",
+    "r",
+    gzipSync(JSON.stringify({ years: [2026], revision: "r" })),
+    now,
+  );
+  db.prepare(
+    "INSERT INTO political_sync(id,checked_at,attempted_at,next_check_at,etag,failures) VALUES(?,?,?,?,?,0)",
+  ).run("history", now, now, now + 300000, '"r"');
+  let clock = now + 600000,
+    calls = 0;
+  const h = createPoliticalHistory({
+    db,
+    now: () => clock,
+    fetcher: async () => {
+      calls++;
+      return new Response(null, { status: 304 });
+    },
+  });
+  t.after(() => h.stop());
+  assert.equal(h.get().nextCheckAt, now + 12 * 3600000);
+  assert.equal(calls, 0);
+  clock = now + 12 * 3600000 - 1;
+  h.get();
+  assert.equal(calls, 0);
+  clock++;
+  h.get();
+  await h.refresh();
+  assert.equal(calls, 1);
+  assert.equal(h.get().nextCheckAt, clock + 12 * 3600000);
+});

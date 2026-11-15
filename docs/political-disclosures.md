@@ -8,13 +8,13 @@ request. Private holdings/watchlist filters never leave Reentry.
 
 - [Kadoa Congress Trading Monitor](https://github.com/kadoa-org/congress-trading-monitor)
   supplies a recent rolling window, including OGE executive disclosures. JSON files
-  are pinned to one Git commit; conditional revision checks run every five minutes.
+  are pinned to one Git commit; conditional revision checks run every 12 hours.
 - [NexusTrade congressional archive](https://huggingface.co/datasets/austin-starks/congressional-stock-trades)
   supplies House/Senate history from 2012. Reentry imports `political_trade_events`
   and `political_filings`, not the unreconciled raw-trades table. Its
   [methodology](https://huggingface.co/datasets/austin-starks/congressional-stock-trades/blob/main/METHODOLOGY.md)
   distinguishes economic events, amendments and when records became available.
-  The manifest is checked every five minutes; unchanged yearly shards are reused.
+  The manifest is checked every 12 hours; unchanged yearly shards are reused.
   Upstream publishes on its own schedule, so checks do not imply new disclosures.
 - [OptimistFi](https://optimistfi.com/congress/data) was also evaluated. Its free
   House-only current-year feed includes new/amended/deleted source rows. It is not
@@ -85,6 +85,11 @@ strictly allowlisted official-portrait URL until bundled; newly added identities
 require source verification before a missing photo is assigned.
 
 ## Reliability, data preservation and AI
+
+Both sources refresh automatically every 12 hours. Existing healthy caches adopt
+the longer interval on restart. Manual recent-feed checks remain available;
+source rate limits and failure backoff still apply. Open pages check cached server
+status every 15 minutes and when revisited.
 
 ETags, retry backoff and last successful checks persist in SQLite. Rate-limit
 Retry-After is respected. Downloads have time/size/redirect limits. Snapshot

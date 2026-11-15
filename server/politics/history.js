@@ -1,3 +1,4 @@
+import { POLITICAL_CHECK_INTERVAL, applyPoliticalCadence } from "./schedule.js";
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { setImmediate as yieldTurn } from "node:timers/promises";
@@ -7,7 +8,6 @@ import { sourceBytes } from "./network.js";
 export const HISTORY_SOURCE =
   "https://huggingface.co/datasets/austin-starks/congressional-stock-trades";
 const BASE = HISTORY_SOURCE + "/resolve/main/";
-const CHECK_MS = 300000;
 const clean = (v, max = 300) =>
   typeof v === "string" ? v.trim().replace(/\s+/g, " ").slice(0, max) : "";
 function internRows(rows, pool) {
@@ -281,6 +281,7 @@ export function createPoliticalHistory({
       parts.clear();
       sync.etag = null;
     }
+  if (snapshot) applyPoliticalCadence(sync);
   function saveSync() {
     db.prepare(
       "INSERT INTO political_sync(id,checked_at,attempted_at,next_check_at,etag,failures,last_error) VALUES('history',?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,attempted_at=excluded.attempted_at,next_check_at=excluded.next_check_at,etag=excluded.etag,failures=excluded.failures,last_error=excluded.last_error",
@@ -403,7 +404,7 @@ export function createPoliticalHistory({
       }
       Object.assign(sync, {
         checked_at: now(),
-        next_check_at: now() + CHECK_MS,
+        next_check_at: now() + POLITICAL_CHECK_INTERVAL,
         failures: 0,
         last_error: null,
       });

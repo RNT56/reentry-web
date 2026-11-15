@@ -1,9 +1,10 @@
+import { POLITICAL_CHECK_INTERVAL, applyPoliticalCadence } from "./schedule.js";
 import { createHash } from "node:crypto";
 import { politicalPeople } from "./people.js";
 import { portraitURL } from "./portraits.js";
 export { portraitURL } from "./portraits.js";
 
-export const POLITICAL_CHECK_INTERVAL = 5 * 60000;
+export { POLITICAL_CHECK_INTERVAL } from "./schedule.js";
 
 export const POLITICAL_SOURCE =
   "https://github.com/kadoa-org/congress-trading-monitor";
@@ -267,6 +268,7 @@ export function createPoliticalFeed({
       /* Replace a corrupt cache only after a validated fetch. */
     }
   if (!cached || !cached.people) sync.etag = null;
+  if (cached) applyPoliticalCadence(sync);
   const due = () => now() >= sync.next_check_at;
   function schedule() {
     if (!started || stopped) return;

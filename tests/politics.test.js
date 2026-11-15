@@ -6,6 +6,7 @@ import {
   normalizePoliticalFeed,
   portraitURL,
   createPoliticalFeed,
+  POLITICAL_CHECK_INTERVAL,
 } from "../server/politics/feed.js";
 import {
   summarizeDisclosures,
@@ -258,7 +259,7 @@ test("People remain discoverable outside the rolling feed; featured profiles are
   );
 });
 
-test("Five-minute checks use ETags and never redownload unchanged datasets; manual checks share a cooldown", async (t) => {
+test("Twelve-hour checks use ETags and never redownload unchanged datasets; manual checks share a cooldown", async (t) => {
   let clock = now,
     calls = 0;
   const db = openStore(":memory:");
@@ -300,8 +301,8 @@ test("Five-minute checks use ETags and never redownload unchanged datasets; manu
   assert.equal(checked.version, first.version);
   assert.equal(checked.fetchedAt, first.fetchedAt);
   assert.equal(checked.checkedAt, clock);
-  assert.equal(checked.nextCheckAt, clock + 5 * 60000);
-  clock += 5 * 60000;
+  assert.equal(checked.nextCheckAt, clock + POLITICAL_CHECK_INTERVAL);
+  clock += POLITICAL_CHECK_INTERVAL;
   await service.get({ force: true });
   assert.equal(calls, 5);
   const restart = createPoliticalFeed({
@@ -349,7 +350,7 @@ test("New revisions replace snapshots atomically; failed imports keep the last v
     db.close();
   });
   const first = await service.get();
-  clock += 5 * 60000;
+  clock += POLITICAL_CHECK_INTERVAL;
   revision = "b".repeat(40);
   broken = true;
   const failed = await service.get({ force: true });
@@ -443,15 +444,44 @@ test("The background worker checks at the next due time even with no visitors an
   service.start();
   await service.refresh();
   assert.equal(calls, 3);
-  clock += 299999;
-  t.mock.timers.tick(299999);
+  clock += POLITICAL_CHECK_INTERVAL - 1;
+  t.mock.timers.tick(POLITICAL_CHECK_INTERVAL - 1);
   assert.equal(calls, 3);
   clock++;
   t.mock.timers.tick(1);
   await service.refresh();
   assert.equal(calls, 4);
   await service.stop();
-  clock += 300000;
-  t.mock.timers.tick(300000);
+  clock += POLITICAL_CHECK_INTERVAL;
+  t.mock.timers.tick(POLITICAL_CHECK_INTERVAL);
   assert.equal(calls, 4);
+});
+
+test("A deployed five-minute cache adopts the twelve-hour cadence without fetching or rewriting it", async (t) => {
+  const { db, service } = fixture(t, mock);
+  await service.refresh();
+  const oldDue = now + 300000;
+  db.prepare("UPDATE political_sync SET next_check_at=? WHERE id='kadoa'").run(
+    oldDue,
+  );
+  let calls = 0;
+  const restart = createPoliticalFeed({
+    db,
+    now: () => now + 600000,
+    fetcher: async () => {
+      calls++;
+      throw Error("Unexpected fetch");
+    },
+  });
+  t.after(() => restart.stop());
+  const d = await restart.get();
+  assert.equal(calls, 0);
+  assert.equal(d.nextCheckAt, now + 12 * 3600000);
+  assert.equal(d.checkIntervalMs, 12 * 3600000);
+  assert.equal(
+    db
+      .prepare("SELECT next_check_at FROM political_sync WHERE id='kadoa'")
+      .get().next_check_at,
+    oldDue,
+  );
 });
