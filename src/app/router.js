@@ -3,6 +3,7 @@ export const navigation = Object.freeze([
   { id: "activity", label: "Buybacks" },
   { id: "explore", label: "Research" },
   { id: "markets", label: "Markets" },
+  { id: "politics", label: "Capitol" },
 ]);
 export function parseRoute(hash) {
   const [path, query] = hash.replace(/^#\/?/, "").split("?");

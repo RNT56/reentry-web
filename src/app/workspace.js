@@ -1,3 +1,4 @@
+import { mountPolitics } from "../features/politics/workspace.js";
 import { installMotion, setAnimatedText } from "../shared/motion.js";
 import { mountReorder } from "../shared/reorder.js";
 import { mountViewport } from "../shared/viewport.js";
@@ -74,6 +75,7 @@ export function startWorkspace() {
     holdingReorder = null,
     intelligence = null,
     aiSettings = null,
+    politics = null,
     macro = null;
   const queue = createSaveQueue({
     write: (state, revision) =>
@@ -279,6 +281,8 @@ export function startWorkspace() {
     buybackChart = null;
     holdingReorder?.destroy();
     holdingReorder = null;
+    politics?.destroy();
+    politics = null;
     macro?.destroy();
     macro = null;
     intelligence?.destroy();
@@ -413,6 +417,8 @@ export function startWorkspace() {
     if (model.page === "explore")
       intelligence = mountIntelligence($("#intelligence"), { model, navigate });
     if (model.page === "markets") macro = mountMacro($("#macro-workspace"));
+    if (model.page === "politics")
+      politics = mountPolitics($("#capitol-workspace"), { model, navigate });
     if (model.page === "settings") {
       bindSettings();
       aiSettings = mountAISettings($("#ai-settings"));

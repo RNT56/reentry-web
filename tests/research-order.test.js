@@ -292,7 +292,12 @@ test("portfolio membership changes reject stale reorders without modifying holdi
 test("empty lists reset safely and additive initialization rewrites no existing durable rows", async (t) => {
   const f = await fixture(t, { symbols: [] });
   const empty = await f.assets();
-  assert.deepEqual(empty, { assets: [], orderRevision: 0 });
+  assert.deepEqual(empty, {
+    assets: [],
+    orderRevision: 0,
+    watchlists: [],
+    selectedId: null,
+  });
   assert.deepEqual((await f.order([], 0)).json(), { symbols: [], revision: 0 });
   const tables = [
     "users",

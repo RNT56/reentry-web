@@ -1,4 +1,10 @@
 import {
+  watchlistState,
+  ownedList,
+  addToList,
+  writeListOrder,
+} from "../watchlists/store.js";
+import {
   fail,
   id,
   text,
@@ -56,25 +62,49 @@ export function registerIntelligenceRoutes(
   app.get("/api/research/assets", auth, async (req) => {
     const user = req.auth.user_id;
     portfolioSources.sync(user);
+    const state = watchlistState(db, user);
+    const selectedId =
+      req.query.list === "all" ? null : req.query.list || state.selectedId;
+    const list = selectedId ? ownedList(db, user, selectedId) : null;
     const visible = visibleAssets(user);
-    const order = readResearchOrder(
-      db,
-      user,
-      visible.map((asset) => asset.symbol),
-    );
+    // A list membership survives a dismissal from All assets; nothing deletes holdings or evidence.
+    if (list)
+      for (const s of list.symbols)
+        if (!visible.some((a) => a.symbol === s)) {
+          const row = db
+            .prepare(
+              "SELECT symbol,name,metadata,automatic,interval_hours FROM research_assets WHERE user_id=? AND symbol=?",
+            )
+            .get(user, s);
+          if (row) visible.push({ ...row, ...JSON.parse(row.metadata) });
+        }
+    const order = list
+      ? { symbols: list.symbols, revision: list.revision }
+      : readResearchOrder(
+          db,
+          user,
+          visible.map((asset) => asset.symbol),
+        );
     const assets = new Map(visible.map((asset) => [asset.symbol, asset]));
     return {
-      assets: order.symbols.map((symbol) => ({
+      watchlists: state.lists,
+      selectedId,
+      assets: (list
+        ? list.symbols.filter((s) => assets.has(s))
+        : order.symbols
+      ).map((symbol) => ({
         ...assets.get(symbol),
         sourceStatus: portfolioSources.state(user, symbol),
       })),
-      orderRevision: order.revision,
+      orderRevision: list?.revision ?? order.revision,
     };
   });
   app.put("/api/research/order", { ...auth, bodyLimit: 80000 }, async (req) =>
-    writeResearchOrder(db, req.auth.user_id, req.body || {}, () =>
-      visibleAssets(req.auth.user_id).map((asset) => asset.symbol),
-    ),
+    req.body?.listId
+      ? writeListOrder(db, req.auth.user_id, req.body.listId, req.body)
+      : writeResearchOrder(db, req.auth.user_id, req.body || {}, () =>
+          visibleAssets(req.auth.user_id).map((asset) => asset.symbol),
+        ),
   );
   app.put("/api/research/assets/:symbol", auth, async (req) => {
     const s = symbol(req.params.symbol),
@@ -117,15 +147,18 @@ export function registerIntelligenceRoutes(
     }
 
     transaction(db, () => {
+      if (b.watchlistId) addToList(db, user, b.watchlistId, s);
       db.prepare(
         "INSERT INTO research_assets(user_id,symbol,name,automatic,interval_hours,next_run) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,symbol) DO UPDATE SET name=excluded.name,automatic=excluded.automatic,interval_hours=excluded.interval_hours,next_run=excluded.next_run",
       ).run(
         user,
         s,
-        name,
-        Number(b.automatic),
-        hours,
-        Date.now() + hours * 3600000,
+        b.watchlistId && existing ? existing.name : name,
+        b.watchlistId && existing ? existing.automatic : Number(b.automatic),
+        b.watchlistId && existing ? existing.interval_hours : hours,
+        b.watchlistId && existing
+          ? existing.next_run
+          : Date.now() + hours * 3600000,
       );
       db.prepare(
         "UPDATE research_assets SET metadata=? WHERE user_id=? AND symbol=?",
@@ -374,6 +407,8 @@ export function registerIntelligenceRoutes(
   app.get("/api/research/export", auth, async (req) => {
     const user = req.auth.user_id,
       tables = [
+        "watchlists",
+        "watchlist_preferences",
         "research_assets",
         "research_hidden_assets",
         "research_asset_order",

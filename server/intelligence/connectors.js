@@ -72,6 +72,7 @@ export function selectSECMetrics(facts, recent = {}) {
 export function createConnectors({
   market,
   macro,
+  politics,
   fetcher = fetch,
   secAgent = process.env.SEC_USER_AGENT || "",
 } = {}) {
@@ -286,6 +287,12 @@ export function createConnectors({
     label: "Price structure",
     collect: async (asset) => [await createStrategyEvidence(market)(asset)],
   });
+  if (politics)
+    definitions.push({
+      id: "politics",
+      label: "Political disclosures",
+      collect: (asset) => politics.evidence(asset),
+    });
   if (macro)
     definitions.push({
       id: "fred",

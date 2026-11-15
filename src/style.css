@@ -33,3 +33,6 @@
 @import "./styles/mobile-dialogs.css";
 @import "./styles/chart-autosave.css";
 @import "./styles/asset-chart.css";
+
+@import "./styles/watchlists.css";
+@import "./styles/politics.css";

@@ -1,0 +1,118 @@
+.watchlist-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 0 0;
+}
+.watchlist-switch {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.watchlist-switch .eyebrow {
+  margin: 0;
+  white-space: nowrap;
+}
+.watchlist-switch .select-control {
+  min-width: 200px;
+  max-width: 300px;
+}
+.watchlist-switch .select-trigger {
+  background: transparent;
+  border-color: var(--line);
+  min-height: 44px;
+}
+.watchlist-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.watchlist-actions .icon-button {
+  width: 40px;
+  height: 44px;
+}
+.watchlist-actions .link {
+  gap: 7px;
+  display: flex;
+  align-items: center;
+}
+.watchlist-manager {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 24px;
+}
+.watchlist-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 16px;
+  padding: 15px 4px;
+  border-bottom: 1px solid #ffffff0b;
+  text-align: left;
+  min-height: 52px;
+}
+.watchlist-row > span:first-child {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.watchlist-row small {
+  color: var(--muted);
+  font-family: var(--font-numbers);
+}
+.watchlist-row > .icon,
+.watchlist-check > .icon {
+  width: 18px;
+  height: 18px;
+}
+.watchlist-row[aria-pressed="true"] {
+  color: var(--green);
+}
+.watchlist-check {
+  display: grid;
+  place-items: center;
+}
+.watchlist-row:hover {
+  background: #b9f68b05;
+}
+.watchlist-manager + .field {
+  margin-top: 18px;
+}
+@media (max-width: 600px) {
+  .watchlist-bar {
+    gap: 8px;
+    padding-top: 16px;
+  }
+  .watchlist-switch {
+    gap: 8px;
+    flex: 1;
+  }
+  .watchlist-switch > .eyebrow {
+    display: none;
+  }
+  .watchlist-switch .select-control {
+    min-width: 0;
+    width: 100%;
+    max-width: 220px;
+  }
+  .watchlist-actions {
+    gap: 0;
+  }
+  .watchlist-actions .link {
+    font-size: 12px;
+  }
+  .watchlist-actions .link span {
+    display: none;
+  }
+  .watchlist-actions .link {
+    width: 40px;
+    justify-content: center;
+    min-height: 44px;
+  }
+}
+.watchlist-actions .link > .icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}

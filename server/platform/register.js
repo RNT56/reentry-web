@@ -1,3 +1,6 @@
+import { createPoliticalFeed } from "../politics/feed.js";
+import { registerPoliticalRoutes } from "../politics/routes.js";
+import { registerWatchlistRoutes } from "../watchlists/store.js";
 import { registerAdminRoutes } from "../admin/routes.js";
 import { createMacroService } from "../macro/service.js";
 import { registerMacroRoutes } from "../macro/routes.js";
@@ -17,6 +20,7 @@ import { registerJournalRoutes } from "../journal/routes.js";
 import { createPortfolioSources } from "../intelligence/portfolio-sources.js";
 export function registerPlatform(app, db, market, options = {}) {
   migratePlatform(db);
+  registerWatchlistRoutes(app, db);
   const names = (options.authorUsernames ?? process.env.AUTHOR_USERNAMES ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -26,12 +30,21 @@ export function registerPlatform(app, db, market, options = {}) {
       options.authorName || process.env.AUTHOR_PUBLIC_NAME || "RNT",
     ).slice(0, 80);
   const macro = options.macro || createMacroService();
+  const politics =
+    options.politics ||
+    createPoliticalFeed({
+      db,
+      enabled:
+        options.workerEnabled ?? process.env.ENABLE_BACKGROUND_JOBS === "true",
+    });
+  registerPoliticalRoutes(app, { db, politics });
   registerMacroRoutes(app, macro);
   registerStrategyRoutes(app, { market });
   registerChartWorkspaceRoutes(app, db);
   registerChartViewRoutes(app, db);
   const vault = options.vault || createVault(options.masterKey),
-    connectors = options.connectors || createConnectors({ market, macro });
+    connectors =
+      options.connectors || createConnectors({ market, macro, politics });
   const portfolioSources = createPortfolioSources({
     db,
     connectors,
@@ -71,9 +84,11 @@ export function registerPlatform(app, db, market, options = {}) {
     if (options.startWorker !== false) {
       engine.start();
       portfolioSources.start();
+      politics.start?.();
     }
   });
   app.addHook("onClose", async () => {
+    await politics.stop?.();
     await portfolioSources.stop();
     await engine.stop();
   });

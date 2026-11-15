@@ -42,6 +42,15 @@ export const platformMigrations = [
     version: 4,
     sql: `CREATE TABLE chart_views(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, symbol TEXT NOT NULL, surface TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision>0), state TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,symbol,surface));`,
   },
+  {
+    version: 5,
+    sql: `
+    CREATE TABLE watchlists(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,name TEXT NOT NULL,symbols TEXT NOT NULL DEFAULT '[]',revision INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL);
+    CREATE UNIQUE INDEX watchlists_owner_name ON watchlists(user_id,name COLLATE NOCASE);
+    CREATE TABLE watchlist_preferences(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,selected_id TEXT);
+    CREATE TABLE political_feed(id TEXT PRIMARY KEY,payload TEXT NOT NULL,fetched_at INTEGER NOT NULL,version TEXT NOT NULL);
+  `,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

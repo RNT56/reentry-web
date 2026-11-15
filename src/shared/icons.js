@@ -8,6 +8,7 @@ export const iconPaths = {
   arrowUp: '<path d="M12 20V4m-6 6 6-6 6 6"/>',
   arrowDown: '<path d="M12 4v16m-6-6 6 6 6-6"/>',
   arrowUpLeft: '<path d="M19 19 5 5m0 12V5h12"/>',
+  arrowUpRight: '<path d="M5 19 19 5M5 5h14v14"/>',
   arrowDownRight: '<path d="m5 5 14 14M7 19h12V7"/>',
   download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>',
   upload: '<path d="M12 15V3m-5 5 5-5 5 5M4 16v4h16v-4"/>',
@@ -36,6 +37,7 @@ export const iconPaths = {
     '<path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
   lock: '<rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+  bookmark: '<path d="M6 3h12v18l-6-4-6 4V3Z"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5 9-5ZM3 12l9 5 9-5M3 16l9 5 9-5"/>',
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
 };
