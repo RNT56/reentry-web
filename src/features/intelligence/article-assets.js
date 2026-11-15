@@ -163,7 +163,12 @@ export function mountArticleAssets(
       const option = list.querySelector(`[data-asset-index="${active}"]`);
       if (option) {
         input.setAttribute("aria-activedescendant", option.id);
-        option.scrollIntoView({ block: "nearest" });
+        // Scroll only the results, never the surrounding modal or editor.
+        const bounds = list.getBoundingClientRect(),
+          row = option.getBoundingClientRect();
+        if (row.top < bounds.top) list.scrollTop += row.top - bounds.top;
+        else if (row.bottom > bounds.bottom)
+          list.scrollTop += row.bottom - bounds.bottom;
       } else input.removeAttribute("aria-activedescendant");
     }
     const lookup = createAssetLookup({
@@ -179,6 +184,7 @@ export function mountArticleAssets(
           )
           .join("");
         bindLogos();
+        list.scrollTop = 0;
         activate(-1);
       },
       onStatus(message) {
@@ -235,6 +241,8 @@ export function mountArticleAssets(
     input.onfocus = () => {
       if (!isPrimary || input.value !== selected[0]?.symbol) search();
     };
+    // The new-article dialog focuses its first input before this picker mounts.
+    if (input === input.ownerDocument.activeElement) input.onfocus();
     input.onkeydown = (event) => {
       if (event.isComposing) return;
       if (["ArrowDown", "ArrowUp"].includes(event.key)) {

@@ -23,13 +23,25 @@
   left: 0;
   right: 0;
   max-height: min(360px, 50dvh);
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
   background: #172019;
   border: 1px solid #bcec8e45;
   border-radius: 12px;
   box-shadow: 0 20px 55px #0009;
   padding: 6px;
+}
+.article-asset-popup[hidden] {
+  display: none;
+}
+.article-asset-popup [role="listbox"] {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
 }
 .article-asset-popup [role="option"] {
   display: flex;
@@ -78,6 +90,7 @@
   color: #a1b29a;
 }
 .article-asset-popup p {
+  flex: 0 0 auto;
   margin: 4px 10px 8px;
   font-size: 11px;
   line-height: 1.6;
@@ -87,7 +100,32 @@
   position: relative;
   top: auto;
   margin-top: 6px;
-  max-height: min(300px, 38dvh);
+  height: clamp(150px, 32dvh, 260px);
+  max-height: none;
+  box-shadow: none;
+}
+#new-article .article-asset-popup [role="listbox"] {
+  flex: 1;
+}
+#new-article .article-asset-popup p {
+  min-height: 3.2em;
+}
+dialog#modal:has(#new-article) {
+  height: 720px;
+}
+#modal:has(#new-article) .dialog-body {
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
+}
+#new-article {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  margin-bottom: 0;
+}
+#new-article > .actions {
+  margin-top: auto;
+  padding-top: 16px;
 }
 .article-asset-selected {
   display: flex;
