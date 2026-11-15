@@ -31,6 +31,7 @@ import {
 } from "../features/charts/chart-sync.js";
 import { createPlanner } from "../features/planner/controller.js";
 import { createPurchases } from "../features/portfolio/purchases.js";
+import { mountBuybackChart } from "../features/activity/chart.js";
 import { createActivity } from "../features/activity/controller.js";
 import { createSettings } from "../features/settings/controller.js";
 export function startWorkspace() {
@@ -69,6 +70,7 @@ export function startWorkspace() {
     logout,
   });
   let priceChart = null,
+    buybackChart = null,
     holdingReorder = null,
     intelligence = null,
     aiSettings = null,
@@ -273,6 +275,8 @@ export function startWorkspace() {
   }
   function renderWorkspace() {
     destroyPlannerFullscreen();
+    buybackChart?.destroy();
+    buybackChart = null;
     holdingReorder?.destroy();
     holdingReorder = null;
     macro?.destroy();
@@ -306,7 +310,19 @@ export function startWorkspace() {
     });
     const h = current();
     if (model.page === "portfolio" && h)
-      priceChart = mountPriceChart($("#price-history"), h);
+      priceChart = mountPriceChart(
+        $("#price-history"),
+        h,
+        {},
+        { ownerId: model.currentUser.id || model.currentUser.username },
+      );
+    if (model.page === "activity" && model.state.sales.length)
+      buybackChart = mountBuybackChart($("#buyback-chart"), {
+        ownerId: model.currentUser.id || model.currentUser.username,
+        sales: model.state.sales,
+        whole: model.state.settings.whole,
+        quotes: model.quotes,
+      });
     associateLabels($("#app"));
     bindLogos();
     document.querySelectorAll("[data-page]").forEach(

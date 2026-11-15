@@ -16,21 +16,25 @@ export function observationIndex(points, time) {
   return i + (time - a.time) / (b.time - a.time);
 }
 
-export function observationTime(points, index) {
+export function observationTime(
+  points,
+  index,
+  limits = { min: 0, max: MAX_TIME },
+) {
   const i = clamp(Math.floor(index), 0, points.length - 2);
   return clamp(
     points[i].time + (index - i) * (points[i + 1].time - points[i].time),
-    0,
-    MAX_TIME,
+    limits.min,
+    limits.max,
   );
 }
 
-export function savedChartViewport(points, { from, to }) {
+export function savedChartViewport(points, { from, to }, limits) {
   if (Math.abs(from) < 1e-8 && Math.abs(to - points.length + 1) < 1e-8)
     return null;
   return {
-    from: observationTime(points, from),
-    to: observationTime(points, to),
+    from: observationTime(points, from, limits),
+    to: observationTime(points, to, limits),
   };
 }
 

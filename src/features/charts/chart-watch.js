@@ -4,6 +4,7 @@ export function createChartWatch({
   request,
   ownerId,
   symbol,
+  endpoint = "/api/chart-workspaces/watch?symbol=" + encodeURIComponent(symbol),
   setTimer = setTimeout,
   clearTimer = clearTimeout,
 }) {
@@ -17,10 +18,7 @@ export function createChartWatch({
     abort = new AbortController();
     try {
       const response = await request(
-        "/api/chart-workspaces/watch?symbol=" +
-          encodeURIComponent(symbol) +
-          "&revisions=" +
-          sync.revisions().join(","),
+        endpoint + "&revisions=" + sync.revisions().join(","),
         "GET",
         undefined,
         { ownerId, signal: abort.signal, timeout: 35000 },

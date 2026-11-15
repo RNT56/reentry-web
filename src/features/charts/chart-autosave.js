@@ -10,7 +10,6 @@ export { chartStateVersion } from "../../domain/chart-merge.js";
 
 const clone = (value) => structuredClone(value);
 const equal = (a, b) => chartStateVersion(a) === chartStateVersion(b);
-const initial = (slot) => defaultChartWorkspaceState("Analysis " + slot);
 
 /** One account/asset journal; independent, serialized writers for its three slots. */
 export function createChartAutosave({
@@ -23,11 +22,22 @@ export function createChartAutosave({
   setTimer = setTimeout,
   clearTimer = clearTimeout,
   onSubscribers = () => {},
+  policy = {},
 }) {
+  const slots = policy.slots || [1, 2, 3];
+  const initial =
+    policy.initial ||
+    ((slot) => defaultChartWorkspaceState("Analysis " + slot));
+  const validate = policy.validate || validateChartWorkspaceState;
+  const merge = policy.merge || mergeChartStates;
+  const collection =
+    policy.collection ||
+    "/api/chart-workspaces?symbol=" + encodeURIComponent(symbol);
   const storageKey =
+    policy.storageKey ||
     "reentry.chart-drafts.v1:" + JSON.stringify([String(ownerId), symbol]);
   const listeners = new Set();
-  const records = [1, 2, 3].map((slot) => ({
+  const records = slots.map((slot) => ({
     slot,
     revision: 0,
     base: null,
@@ -49,7 +59,7 @@ export function createChartAutosave({
     journalSafe = true;
   let connection = "live";
   const record = (slot) => {
-    if (![1, 2, 3].includes(slot)) throw Error("Choose an analysis slot.");
+    if (!slots.includes(slot)) throw Error("Choose an analysis slot.");
     return records[slot - 1];
   };
   const changed = (r) => !equal(r.state, r.base || initial(r.slot));
@@ -81,18 +91,19 @@ export function createChartAutosave({
   }
   try {
     const raw = JSON.parse(storage?.getItem(storageKey) || "null");
-    if (raw && Array.isArray(raw.entries) && raw.entries.length <= 3) {
-      selected = [1, 2, 3].includes(raw.selected) ? raw.selected : null;
+    if (
+      raw &&
+      Array.isArray(raw.entries) &&
+      raw.entries.length <= slots.length
+    ) {
+      selected = slots.includes(raw.selected) ? raw.selected : null;
       for (const saved of raw.entries) {
         const r = record(saved.slot);
         if (!Number.isSafeInteger(saved.revision) || saved.revision < 0)
           continue;
-        const state = validateChartWorkspaceState(saved.state);
-        const base =
-          saved.base === null ? null : validateChartWorkspaceState(saved.base);
-        const attempts = (saved.attempts || [])
-          .slice(-8)
-          .map(validateChartWorkspaceState);
+        const state = validate(saved.state);
+        const base = saved.base === null ? null : validate(saved.base);
+        const attempts = (saved.attempts || []).slice(-8).map(validate);
         Object.assign(r, {
           state,
           base,
@@ -105,8 +116,10 @@ export function createChartAutosave({
   } catch {
     /* A damaged browser journal never replaces server state. */
   }
-  const path = (slot) =>
-    "/api/chart-workspaces/" + encodeURIComponent(symbol) + "/" + slot;
+  const path =
+    policy.path ||
+    ((slot) =>
+      "/api/chart-workspaces/" + encodeURIComponent(symbol) + "/" + slot);
   const options = { keepalive: true, ownerId: String(ownerId) };
   async function read() {
     if (!canWrite())
@@ -114,12 +127,7 @@ export function createChartAutosave({
         status: 401,
       });
     return (
-      await request(
-        "/api/chart-workspaces?symbol=" + encodeURIComponent(symbol),
-        "GET",
-        undefined,
-        { ownerId: String(ownerId) },
-      )
+      await request(collection, "GET", undefined, { ownerId: String(ownerId) })
     ).slots;
   }
   function adopt(r, remote, keepDraft) {
@@ -139,7 +147,7 @@ export function createChartAutosave({
       remote.revision > r.revision &&
       changed(r);
     if (!safe || clearedSinceBase) {
-      const merged = mergeChartStates(r.base, r.state, remote.state, r.slot);
+      const merged = merge(r.base, r.state, remote.state, r.slot);
       if (merged.conflicts.length) {
         r.remote = clone(remote);
         r.conflicts = merged.conflicts;
@@ -263,6 +271,14 @@ export function createChartAutosave({
         r.revision = result.revision;
         r.attempts = [];
         r.retries = 0;
+        // A mixed-version server may discard a field it does not understand.
+        // Retain the draft for recovery, but never spin on successful writes
+        // that cannot persist the submitted snapshot.
+        if (!equal(result.state, snapshot)) {
+          r.error = "Chart format changed. Reload to resume saving.";
+          r.phase = "error";
+          return;
+        }
         r.error = null;
         r.phase = changed(r) ? "pending" : "saved";
       } catch (error) {
@@ -383,7 +399,7 @@ export function createChartAutosave({
       if (!loaded || !canWrite()) return;
       const r = record(slot);
       if (r.exclusive) return;
-      const normalized = validateChartWorkspaceState({
+      const normalized = validate({
         ...state,
         name: state.name.trim() || r.state.name || "Analysis " + slot,
       });

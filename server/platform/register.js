@@ -2,6 +2,7 @@ import { registerAdminRoutes } from "../admin/routes.js";
 import { createMacroService } from "../macro/service.js";
 import { registerMacroRoutes } from "../macro/routes.js";
 import { registerStrategyRoutes } from "../strategies/routes.js";
+import { registerChartViewRoutes } from "../chart-workspaces/views.js";
 import { registerChartWorkspaceRoutes } from "../chart-workspaces/routes.js";
 import { migratePlatform } from "./schema.js";
 import { createVault } from "../ai/vault.js";
@@ -28,6 +29,7 @@ export function registerPlatform(app, db, market, options = {}) {
   registerMacroRoutes(app, macro);
   registerStrategyRoutes(app, { market });
   registerChartWorkspaceRoutes(app, db);
+  registerChartViewRoutes(app, db);
   const vault = options.vault || createVault(options.masterKey),
     connectors = options.connectors || createConnectors({ market, macro });
   const portfolioSources = createPortfolioSources({

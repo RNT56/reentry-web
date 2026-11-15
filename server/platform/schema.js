@@ -38,6 +38,10 @@ export const platformMigrations = [
       CREATE TABLE chart_workspaces(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, symbol TEXT NOT NULL, slot INTEGER NOT NULL CHECK(slot BETWEEN 1 AND 3), revision INTEGER NOT NULL CHECK(revision > 0), state TEXT, updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,symbol,slot));
     `,
   },
+  {
+    version: 4,
+    sql: `CREATE TABLE chart_views(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, symbol TEXT NOT NULL, surface TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision>0), state TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(user_id,symbol,surface));`,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

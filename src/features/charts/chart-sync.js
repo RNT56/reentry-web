@@ -2,6 +2,13 @@ import { request } from "../../shared/http.js";
 import { createChartAutosave } from "./chart-autosave.js";
 import { createChartWatch } from "./chart-watch.js";
 
+import {
+  defaultChartViewState,
+  validateChartViewState,
+  mergeChartViews,
+  chartViewSurfaces,
+} from "../../domain/chart-view.js";
+
 const workspaces = new Map();
 let activeOwner = null,
   installed = false;
@@ -57,10 +64,12 @@ export function setChartWorkspaceOwner(owner) {
   }
   if (installed) updateWatches();
 }
-export function chartWorkspaceSync(ownerId, symbol) {
+export function chartWorkspaceSync(ownerId, symbol, surface = null) {
+  if (surface && !chartViewSurfaces.includes(surface))
+    throw Error("Unsupported chart view.");
   install();
   const owner = String(ownerId),
-    key = JSON.stringify([owner, symbol]);
+    key = JSON.stringify([owner, symbol, surface]);
   if (!workspaces.has(key)) {
     let storage;
     try {
@@ -69,9 +78,26 @@ export function chartWorkspaceSync(ownerId, symbol) {
       /* Unload guard covers unavailable storage. */
     }
     const workspace = { owner, subscribers: 0 };
+    const query = surface
+      ? new URLSearchParams({ symbol, surface }).toString()
+      : "";
+    const policy = surface
+      ? {
+          slots: [1],
+          initial: () => defaultChartViewState(surface),
+          validate: (state) => validateChartViewState(state, surface),
+          merge: (base, local, remote) =>
+            mergeChartViews(base, local, remote, surface),
+          collection: "/api/chart-views?" + query,
+          path: () =>
+            "/api/chart-views/" + encodeURIComponent(symbol) + "/" + surface,
+          storageKey: "reentry.chart-views.v1:" + key,
+        }
+      : {};
     workspace.sync = createChartAutosave({
       ownerId: owner,
       symbol,
+      policy,
       request,
       storage,
       canWrite: () => activeOwner === owner,
@@ -82,6 +108,7 @@ export function chartWorkspaceSync(ownerId, symbol) {
     });
     workspace.watch = createChartWatch({
       sync: workspace.sync,
+      ...(surface ? { endpoint: "/api/chart-views/watch?" + query } : {}),
       request,
       ownerId: owner,
       symbol,

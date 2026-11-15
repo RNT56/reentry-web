@@ -31,6 +31,12 @@ The app remains framework-light and bundled. A feature can be replaced without r
 - Include visible levels in the Y extent, even far outside recent market prices. Users can hide individual levels to inspect the price curve. Invalid inputs remove the target; they never retain an old valid target.
 - Range changes reuse cached market data; changing a planner input does not issue another market request. Component disposal and generation tokens reject stale range/asset responses. No private cost or target goes to the market provider.
 
+Asset charts share `chart-gestures.js`, fractional observation coordinates, price-axis math and the same fullscreen controller. `mountAssetChart` is the lightweight series/reference renderer for Portfolio, Buybacks, strategy comparisons, asset structure and numeric buyback curves. Research retains its drawing workspace on the same interaction primitives. Plot drag pans both axes; wheel/pinch and buttons zoom; either axis supports drag scaling and double-click reset. Keyboard equivalents and Fit remain available in fullscreen.
+
+Lightweight views live in `chart_views`, keyed by account, symbol and surface (`price`, `strategies`, `structure`, `buyback`). Portfolio and Buybacks share `price`. Other surfaces have different units and independent viewports; Research's three analysis slots remain untouched. `priceCurrency` records the actual axis unit, so an FX fallback cannot restore bounds in the wrong currency. The numeric buyback X axis stores percentage values, not fabricated dates.
+
+`/api/chart-views` and its `/watch` endpoint reuse the chart autosave/watch lifecycle with a one-slot policy: owner-bound requests, revision compare-and-swap, draft recovery, bounded retries and gesture holds. Concurrent independent axis edits can merge; conflicting view edits require the user's explicit choice. New surface integrations must supply a stable owner/symbol and call `destroy()` on unmount.
+
 ## Save semantics
 
 `createSaveQueue` clones snapshots, serializes writes, coalesces later edits, and advances the server revision after acknowledgement. Multiple flush calls await the same in-flight operation. A failed write retains the newest local snapshot. Network failures allow retry; 401 and 409 pause automatic writes until explicit session/conflict resolution. Before-unload protects pending writes, and sign-out waits for the queue. Users can export unsaved edits before reloading newer server data.

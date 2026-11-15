@@ -552,3 +552,161 @@ test(
     }
   },
 );
+
+test("asset views persist independently of private analyses, accounts and surfaces with optimistic concurrency", async () => {
+  const f = await fixture();
+  try {
+    const view = {
+      ...state(),
+      drawings: [],
+      indicators: [],
+      name: "Chart view",
+    };
+    const path = "/api/chart-views/INTC/price";
+    assert.equal(
+      (await f.call(null, path, "PUT", { revision: 0, state: view }))
+        .statusCode,
+      401,
+    );
+    assert.equal(
+      (
+        await f.call(
+          "first",
+          path,
+          "PUT",
+          { revision: 0, state: view },
+          { "x-reentry-owner": "second" },
+        )
+      ).statusCode,
+      401,
+    );
+    assert.equal(
+      (
+        await f.call("first", "/api/chart-workspaces/INTC/1", "PUT", {
+          revision: 0,
+          state: state(),
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (await f.call("first", path, "PUT", { revision: 0, state: view }))
+        .statusCode,
+      200,
+    );
+    assert.equal(
+      (await f.call("first", path, "PUT", { revision: 0, state: view }))
+        .statusCode,
+      409,
+    );
+    const saved = (
+      await f.call("first", "/api/chart-views?symbol=INTC&surface=price")
+    ).json();
+    assert.equal(saved.slots[0].revision, 1);
+    assert.deepEqual(saved.slots[0].state.priceRange, view.priceRange);
+    for (const [owner, symbol, surface] of [
+      ["second", "INTC", "price"],
+      ["first", "AAPL", "price"],
+      ["first", "INTC", "buyback"],
+    ]) {
+      const result = (
+        await f.call(
+          owner,
+          `/api/chart-views?symbol=${symbol}&surface=${surface}`,
+        )
+      ).json();
+      assert.equal(result.slots[0].state, null);
+    }
+    assert.equal(
+      (await f.call("first", "/api/chart-workspaces?symbol=INTC")).json()
+        .slots[0].state.drawings.length,
+      1,
+    );
+    assert.equal(
+      (
+        await f.call("first", "/api/chart-views/INTC/buyback", "PUT", {
+          revision: 0,
+          state: { ...view, viewport: { from: -5, to: 10 } },
+        })
+      ).statusCode,
+      200,
+    );
+    for (const payload of [
+      { revision: 1, state: { ...view, priceRange: { min: 40, max: 20 } } },
+      { revision: -1, state: view },
+      { revision: 1, state: null },
+      { revision: 1, state: { ...view, viewport: { from: -5, to: 10 } } },
+    ])
+      assert.equal(
+        (await f.call("first", path, "PUT", payload)).statusCode,
+        400,
+      );
+    assert.equal(
+      (await f.call("first", "/api/chart-views?symbol=INTC&surface=unknown"))
+        .statusCode,
+      400,
+    );
+    assert.equal(
+      (
+        await f.call("first", path, "PUT", {
+          revision: 1,
+          state: { ...view, name: "x".repeat(5000) },
+        })
+      ).statusCode,
+      413,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("asset view watch wakes only for its owner, symbol and surface and rechecks revoked sessions", async () => {
+  const f = await fixture();
+  try {
+    let settled = false;
+    const watch = f
+      .call(
+        "first",
+        "/api/chart-views/watch?symbol=INTC&surface=price&revisions=0",
+      )
+      .then((r) => {
+        settled = true;
+        return r;
+      });
+    await delay(30);
+    const view = { ...state(), drawings: [], indicators: [], viewport: null };
+    for (const [owner, symbol, surface] of [
+      ["second", "INTC", "price"],
+      ["first", "AAPL", "price"],
+      ["first", "INTC", "buyback"],
+    ])
+      assert.equal(
+        (
+          await f.call(owner, `/api/chart-views/${symbol}/${surface}`, "PUT", {
+            revision: 0,
+            state: view,
+          })
+        ).statusCode,
+        200,
+      );
+    await delay(30);
+    assert.equal(settled, false);
+    await f.call("first", "/api/chart-views/INTC/price", "PUT", {
+      revision: 0,
+      state: view,
+    });
+    const response = await watch;
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().slots[0].revision, 1);
+    const revoked = f.call(
+      "first",
+      "/api/chart-views/watch?symbol=INTC&surface=price&revisions=1",
+    );
+    await delay(30);
+    f.db.prepare("DELETE FROM sessions WHERE user_id=?").run("first");
+    await f.app.close();
+    assert.equal((await revoked).statusCode, 401);
+  } finally {
+    await f.close();
+  }
+});

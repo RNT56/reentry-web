@@ -1,0 +1,385 @@
+/* One chart plane and one control rail across all asset surfaces. */
+.asset-chart {
+  min-width: 0;
+  position: relative;
+  padding: 20px;
+}
+.asset-chart-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  margin-bottom: 12px;
+}
+.asset-readout {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  min-height: 40px;
+}
+.asset-readout strong {
+  font-family: var(--font-numbers);
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 450;
+  letter-spacing: -0.06em;
+}
+.asset-readout > span {
+  color: #a5c8a7;
+  font-family: var(--font-numbers);
+  font-size: 11px;
+}
+.asset-chart-title {
+  color: #c1d2c4;
+  font-size: 13px;
+  font-weight: 550;
+}
+.asset-expand {
+  display: flex;
+  flex-shrink: 0;
+}
+.asset-chart .asset-plot {
+  width: 100%;
+  height: 330px;
+  min-height: 0;
+  margin: 0;
+  touch-action: none;
+  overflow: hidden;
+}
+.asset-chart .asset-canvas {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.asset-chart-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 79px,
+    #a9c6b008 79px 80px
+  );
+}
+.asset-plot[aria-busy="true"] {
+  opacity: 0.5;
+}
+.asset-chart-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  min-height: 48px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.asset-navigation,
+.asset-ranges {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.asset-chart-controls button,
+.asset-reference-legend button {
+  background: none;
+  color: #94aa99;
+  border: 0;
+  padding: 8px;
+  min-height: 40px;
+  font-size: 11px;
+  border-radius: 7px;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+.asset-chart-controls button:hover,
+.asset-reference-legend button:hover {
+  background: #b9edb10a;
+  color: #d2ecc9;
+}
+.asset-chart-controls button[aria-pressed="true"] {
+  color: #c5edb3;
+  background: #b9edb10a;
+}
+.asset-chart-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.asset-navigation svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.asset-chart-controls .asset-sync {
+  margin-left: auto;
+  padding-inline: 4px;
+  font-size: 10px;
+  color: #799380;
+}
+.asset-sync[data-phase="conflict"],
+.asset-sync[data-phase="error"] {
+  color: #e3ba8f;
+}
+.asset-reference-legend {
+  display: flex;
+  gap: 2px 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.asset-reference-legend:empty {
+  display: none;
+}
+.asset-reference-legend button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 10px;
+}
+.asset-reference-legend i {
+  width: 14px;
+  height: 1px;
+  background: var(--level-color);
+}
+.asset-reference-legend b {
+  font-family: var(--font-numbers);
+  font-weight: 450;
+  color: var(--level-color);
+}
+.asset-reference-legend button[aria-pressed="false"] {
+  opacity: 0.4;
+}
+.asset-chart-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #78917f;
+  font-size: 9px;
+  min-height: 14px;
+  margin-top: 5px;
+}
+.asset-chart-caption > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asset-sync-review {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  font-size: 12px;
+}
+.asset-sync-review[hidden] {
+  display: none;
+}
+.asset-pivot-label {
+  fill: #bf9ef0;
+}
+.buyback-chart {
+  margin-bottom: 28px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.buyback-chart-assets {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 16px 0;
+  scrollbar-width: none;
+}
+.buyback-chart-assets > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-bottom: 1px solid transparent;
+  color: var(--muted);
+}
+.buyback-chart-assets > button[aria-pressed="true"] {
+  border-color: #b9f68b;
+  color: #b9f68b;
+}
+.buyback-chart-assets .mono {
+  width: 26px;
+  height: 26px;
+}
+.buyback-curve-chart.asset-chart {
+  padding: 14px 0;
+}
+.buyback-curve-chart .asset-plot {
+  height: 210px;
+}
+.buyback-curve-chart .asset-chart-title {
+  font-size: 11px;
+}
+.strategy-structure-chart {
+  border-top: 1px solid var(--line);
+  margin-top: 30px;
+}
+.strategy-comparison-chart .asset-chart-accessory {
+  margin-bottom: 16px;
+}
+.asset-chart .structure-legend {
+  margin: 0 0 16px;
+}
+
+.asset-chart.chart-fullscreen {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: calc(var(--chart-fs-header-height) + 6px)
+    max(16px, env(safe-area-inset-right, 0px))
+    max(8px, var(--chart-fs-bottom-inset))
+    max(16px, env(safe-area-inset-left, 0px));
+  overflow: hidden;
+  background: #101713;
+}
+.asset-chart.chart-fullscreen > .chart-fs-header {
+  height: var(--chart-fs-header-height);
+  padding: env(safe-area-inset-top, 0px)
+    max(16px, env(safe-area-inset-right, 0px)) 0
+    max(20px, env(safe-area-inset-left, 0px));
+  background: #101713;
+  border-bottom: 1px solid #adceb510;
+  pointer-events: auto;
+}
+.asset-chart.chart-fullscreen .chart-fs-title {
+  display: block;
+}
+.asset-chart.chart-fullscreen .chart-fs-exit {
+  position: static;
+}
+.asset-chart.chart-fullscreen .asset-plot {
+  flex: 1 1 0;
+  min-height: 64px;
+  height: auto;
+}
+.asset-chart.chart-fullscreen > :not(.asset-plot) {
+  flex-shrink: 0;
+}
+.asset-chart.chart-fullscreen .asset-expand {
+  display: none;
+}
+.asset-chart.chart-fullscreen .asset-chart-heading {
+  min-height: 0;
+  margin: 0 0 4px;
+}
+.asset-chart.chart-fullscreen .asset-chart-title {
+  display: none;
+}
+.asset-chart.chart-fullscreen .asset-readout strong {
+  font-size: 28px;
+}
+.asset-chart.chart-fullscreen .asset-readout {
+  min-height: 34px;
+}
+.asset-chart.chart-fullscreen .strategy-scoreboard {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.asset-chart.chart-fullscreen .strategy-score {
+  padding: 7px 4px;
+}
+.asset-chart.chart-fullscreen .strategy-score strong {
+  font-size: 20px;
+  margin: 5px 0;
+}
+
+@media (max-width: 600px) {
+  .asset-chart {
+    padding: 16px 12px;
+  }
+  .asset-chart .asset-plot {
+    height: 290px;
+  }
+  .asset-readout {
+    gap: 4px 10px;
+  }
+  .asset-readout > span {
+    font-size: 10px;
+  }
+  .asset-chart-controls {
+    gap: 0 8px;
+  }
+  .asset-ranges {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .asset-chart-controls button,
+  .asset-reference-legend button {
+    min-height: 44px;
+  }
+  .asset-navigation button {
+    min-width: 38px;
+  }
+  .buyback-curve-chart .asset-plot {
+    height: 210px;
+  }
+  .asset-chart.chart-fullscreen {
+    padding-inline: max(8px, env(safe-area-inset-left, 0px))
+      max(8px, env(safe-area-inset-right, 0px));
+  }
+  .asset-chart.chart-fullscreen .strategy-score span {
+    font-size: 9px;
+  }
+  .asset-chart.chart-fullscreen .strategy-score strong {
+    font-size: 15px;
+    letter-spacing: -0.04em;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .asset-chart.chart-fullscreen .asset-chart-heading {
+    display: none;
+  }
+  .asset-chart.chart-fullscreen .asset-chart-controls {
+    min-height: 40px;
+    margin-top: 2px;
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+  .asset-chart.chart-fullscreen .asset-ranges {
+    width: auto;
+  }
+  .asset-chart.chart-fullscreen .asset-chart-caption {
+    display: none;
+  }
+  .asset-chart.chart-fullscreen .asset-reference-legend button {
+    min-height: 32px;
+    padding-block: 4px;
+  }
+  .asset-chart.chart-fullscreen .strategy-scoreboard {
+    display: flex;
+  }
+  .asset-chart.chart-fullscreen .strategy-score {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px;
+  }
+  .asset-chart.chart-fullscreen .strategy-score strong {
+    font-size: 16px;
+  }
+  .asset-chart.chart-fullscreen .strategy-score small {
+    display: none;
+  }
+  .asset-chart.chart-fullscreen .asset-chart-accessory {
+    margin-bottom: 4px;
+  }
+  .asset-chart.chart-fullscreen .structure-legend {
+    margin-bottom: 4px;
+  }
+}
+@media (any-pointer: coarse) {
+  .asset-chart-controls button,
+  .asset-expand button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

@@ -581,3 +581,34 @@ test("resolving from an older read cannot replace a newer revision already recei
   assert.equal(sync.get(1).revision, 2);
   assert.equal(sync.get(1).state.name, "Newest known");
 });
+
+test("a server that drops a supported field cannot cause an unbounded successful-write loop", async () => {
+  const f = fixture();
+  const sync = f.make("alice", "INTC", {
+    request: async (path, method, body) => {
+      if (method === "GET")
+        return {
+          slots: [1, 2, 3].map((slot) => ({ slot, revision: 0, state: null })),
+        };
+      f.calls.push({ path, method });
+      return {
+        slot: 1,
+        revision: 1,
+        state: { ...body.state, priceRange: null },
+      };
+    },
+  });
+  await sync.load();
+  sync.update(1, {
+    ...defaultChartWorkspaceState(),
+    priceRange: { min: 20, max: 35 },
+  });
+  assert.equal(await sync.flush(1), false);
+  assert.equal(f.calls.length, 1);
+  assert.equal(sync.get(1).phase, "error");
+  assert.deepEqual(sync.get(1).state.priceRange, { min: 20, max: 35 });
+  assert.match(sync.get(1).error, /format changed/);
+  await f.advance(60000);
+  assert.equal(f.calls.length, 1);
+  sync.pause();
+});

@@ -911,6 +911,7 @@ export function mountIntelligence(root, { model, navigate }) {
       strategies = mountStrategies(root.querySelector("#strategy-workspace"), {
         symbol: memory.symbol,
         currency: "EUR",
+        ownerId: model.currentUser.id || model.currentUser.username,
       });
     if (memory.tab === "admin" && info.author)
       admin = mountAdmin(root.querySelector("#owner-workspace"), {

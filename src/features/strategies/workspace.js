@@ -1,8 +1,9 @@
 import { icon } from "../../shared/ui.js";
-import { loadingSurface, revealChart } from "../../shared/motion.js";
+import { loadingSurface } from "../../shared/motion.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
-import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
+import { mountAssetChart } from "../charts/asset-chart.js";
+import { chartWorkspaceSync } from "../charts/chart-sync.js";
 import {
   chartInkPaths,
   renderChartInk,
@@ -98,65 +99,34 @@ export function strategyCurveInk(
       .join(""),
   };
 }
-export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
+export function mountStrategies(
+  root,
+  { symbol, currency = "EUR", ownerId } = {},
+) {
   let disposed = false,
     epoch = 0,
     current = null,
     selected = 0,
-    comparisonFullscreen = null,
-    structureFullscreen = null;
-  const inkId = newChartInkId("strategy-account");
-  let sizing = false;
-  const resize = new ResizeObserver(() => resizePlots());
-  function priceFormat(value) {
-    return new Intl.NumberFormat("de-DE", {
-      style: "currency",
-      currency: current.currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: Math.abs(value) < 0.01 ? 8 : 2,
-    }).format(value);
-  }
-  function resizePlots() {
-    if (disposed || !current || sizing) return;
-    sizing = true;
-    const curve = output.querySelector(".strategy-curve");
-    if (curve) {
-      const width = comparisonFullscreen?.isActive()
-          ? Math.max(200, curve.clientWidth)
-          : 1000,
-        height = comparisonFullscreen?.isActive()
-          ? Math.max(80, curve.clientHeight)
-          : 240,
-        ink = strategyCurveInk(current, selected, inkId, { width, height });
-      curve.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      curve.innerHTML = `<defs>${ink.defs}</defs>${ink.markup}`;
-    }
-    const structure = output.querySelector(".strategy-structure"),
-      svg = structure?.querySelector(".structure-chart");
-    if (svg) {
-      const width = structureFullscreen?.isActive()
-          ? Math.max(200, svg.clientWidth)
-          : 1000,
-        height = structureFullscreen?.isActive()
-          ? Math.max(100, svg.clientHeight)
-          : 260,
-        next = document.createElement("div");
-      next.innerHTML = structureChart(
-        current,
-        priceFormat,
-        inkId + "-structure",
-        { width, height },
-      );
-      const freshSVG = next.querySelector(".structure-chart");
-      svg.setAttribute("viewBox", freshSVG.getAttribute("viewBox"));
-      svg.innerHTML = freshSVG.innerHTML;
-    }
-    sizing = false;
-  }
+    comparison = null,
+    structure = null,
+    currencyRefresh = null;
   const controls = `<form class="strategy-controls"><label>Capital<input name="capital" type="number" min="100" max="10000000" value="10000" step="100"></label><label>Order fee<input name="fee" type="number" min="0" max="1000" value="1" step="0.1"></label><label>Spread · bp<input name="bps" type="number" min="0" max="500" value="0"></label><label>Currency<select name="currency"><option ${currency === "EUR" ? "selected" : ""}>EUR</option><option ${currency === "USD" ? "selected" : ""}>USD</option></select></label><button class="secondary">Compare ${icon("arrow")}</button></form>`;
   root.innerHTML = `<section class="strategy-workspace"><div class="section-line"><h2>Strategies</h2></div><details class="strategy-parameters"><summary>Parameters <span class="strategy-parameters-summary">10,000 ${esc(currency)}</span></summary>${controls}</details><div class="strategy-output" aria-live="polite" aria-busy="true">${loadingSurface("strategies")}</div></section>`;
   const output = root.querySelector(".strategy-output"),
     form = root.querySelector("form");
+  function changeCurrency(value) {
+    if (currencyRefresh && form.elements.currency.value === value)
+      return currencyRefresh;
+    form.elements.currency.value = value;
+    const pending = load().then(() => {
+      if (!disposed && current?.currency !== value)
+        throw Error("Currency unavailable");
+    });
+    currencyRefresh = pending;
+    return pending.finally(() => {
+      if (currencyRefresh === pending) currencyRefresh = null;
+    });
+  }
   function render() {
     if (disposed || !current) return;
     const d = current,
@@ -166,65 +136,100 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
           currency: d.currency,
           maximumFractionDigits: 0,
         }).format(n),
-      curveInk = strategyCurveInk(d, selected, inkId);
+      series = d.strategies.map((strategy, i) => ({
+        points: strategy.curve.map((p) => ({ time: p.time, price: p.value })),
+        color: colors[i],
+        primary: i === selected,
+      }));
     const s = d.strategies[selected];
     const assetPrice = (n) =>
       new Intl.NumberFormat("de-DE", {
         style: "currency",
-        currency: d.currency,
+        currency: current.currency,
         minimumFractionDigits: 2,
         maximumFractionDigits: Math.abs(n) < 0.01 ? 8 : 2,
       }).format(n);
-    if (!output.querySelector(".strategy-comparison")) {
+    if (!comparison) {
       output.innerHTML =
-        '<section class="strategy-comparison"><div class="strategy-comparison-toolbar"></div><div class="strategy-comparison-parameters"></div><div class="strategy-comparison-content"></div></section><div class="strategy-structure-slot"></div><div class="strategy-details"></div>';
+        '<section class="strategy-comparison"><div class="strategy-comparison-parameters"></div><div class="strategy-comparison-chart"></div><div class="strategy-metrics"></div></section><section class="strategy-structure-chart"></section><div class="strategy-details"></div>';
       output
         .querySelector(".strategy-comparison-parameters")
         .append(root.querySelector(".strategy-parameters"));
-      const comparison = output.querySelector(".strategy-comparison");
-      comparisonFullscreen = mountChartFullscreen(comparison, {
-        native: true,
-        label: () => `${symbol} · Strategies`,
-        buttonHost: comparison.querySelector(".strategy-comparison-toolbar"),
-        onChange: () => requestAnimationFrame(resizePlots),
-      });
+      comparison = mountAssetChart(
+        output.querySelector(".strategy-comparison-chart"),
+        {
+          ownerId,
+          symbol,
+          surface: "strategies",
+          label: symbol + " · Strategies",
+          readout: false,
+          onCurrency: changeCurrency,
+          accessory: '<div class="strategy-scoreboard"></div>',
+        },
+      );
+      structure = mountAssetChart(
+        output.querySelector(".strategy-structure-chart"),
+        {
+          ownerId,
+          symbol,
+          surface: "structure",
+          label: symbol + " · Asset structure",
+          readout: false,
+          onCurrency: changeCurrency,
+          accessory:
+            '<div class="structure-legend"><span>Price</span><span>Power fit</span><span>Confirmed pivots</span></div>',
+          references: () =>
+            current.wave.active
+              ? current.wave.projected.map((price, i) => ({
+                  id: "wave-" + i,
+                  label: "Wave 3 · " + (i ? "1.618×" : "1×"),
+                  price,
+                  color: "#bf9ef0",
+                }))
+              : [],
+          extra: (g) =>
+            current.wave.pivots
+              .map(
+                (p) =>
+                  `<g pointer-events="none"><circle cx="${g.timeX(p.time)}" cy="${g.y(p.price)}" r="3" fill="#bf9ef0"/><text class="asset-pivot-label" x="${g.timeX(p.time)}" y="${g.y(p.price) + (p.kind === "high" ? -10 : 18)}" text-anchor="middle">${p.kind === "high" ? "H" : "L"}</text><title>${new Date(p.time * 1000).toLocaleDateString()} · ${esc(assetPrice(p.price))} · confirmed ${new Date(p.confirmedAt * 1000).toLocaleDateString()}</title></g>`,
+              )
+              .join(""),
+        },
+      );
     }
-    output.querySelector(".strategy-comparison-content").innerHTML =
-      `<div class="strategy-scoreboard">${d.strategies.map((s, i) => `<button class="strategy-score ${selected === i ? "selected" : ""}" data-strategy="${i}" style="--strategy-color:${colors[i]}"><span>${esc(s.name)}</span><strong>${money(s.value)}</strong><small>${pct(s.return)}</small></button>`).join("")}</div><svg class="strategy-curve" viewBox="0 0 1000 240" role="img" aria-label="Strategy account values including uninvested cash"><defs>${curveInk.defs}</defs>${curveInk.markup}</svg><div class="strategy-dates"><span>${new Date(d.start * 1000).toLocaleDateString()}</span><span>${esc(d.currency)} · ${d.samples} samples</span><span>${new Date(d.end * 1000).toLocaleDateString()}</span></div><div class="strategy-metrics"><div><span>Drawdown</span><b>${pct(s.drawdown)}</b></div><div><span>Cash</span><b>${money(s.cash)}</b></div><div><span>Orders</span><b>${s.trades.length}</b></div><div><span>Fees</span><b>${money(s.fees)}</b></div></div>`;
-    const structureSlot = output.querySelector(".strategy-structure-slot"),
-      structureHTML = structureChart(d, assetPrice, inkId + "-structure"),
-      existingStructure = structureSlot.querySelector(".strategy-structure");
-    if (existingStructure && structureHTML) {
-      const next = document.createElement("div");
-      next.innerHTML = structureHTML;
-      existingStructure.querySelector(".strategy-structure-body").innerHTML =
-        next.querySelector(".strategy-structure-body").innerHTML;
-      existingStructure.querySelector(
-        ".structure-expand-host > span",
-      ).textContent = d.currency;
-    } else {
-      structureFullscreen?.destroy();
-      structureFullscreen = null;
-      structureSlot.innerHTML = structureHTML;
-      const structure = structureSlot.querySelector(".strategy-structure");
-      if (structure)
-        structureFullscreen = mountChartFullscreen(structure, {
-          native: true,
-          label: () => `${symbol} · Asset structure`,
-          buttonHost: structure.querySelector(".structure-expand-host"),
-          onChange: () => requestAnimationFrame(resizePlots),
-        });
-    }
+    comparison.accessory.querySelector(".strategy-scoreboard").innerHTML =
+      d.strategies
+        .map(
+          (item, i) =>
+            `<button class="strategy-score ${selected === i ? "selected" : ""}" data-strategy="${i}" aria-pressed="${selected === i}" style="--strategy-color:${colors[i]}"><span>${esc(item.name)}</span><strong>${money(item.value)}</strong><small>${pct(item.return)}</small></button>`,
+        )
+        .join("");
+    comparison.setData({
+      points: series[selected].points,
+      series: [
+        ...series.filter((s) => !s.primary),
+        ...series.filter((s) => s.primary),
+      ],
+      currency: d.currency,
+      source: d.source,
+    });
+    structure.setData({
+      points: d.structure,
+      currency: d.currency,
+      source: d.source,
+      series: [
+        { points: d.structure, color: colors[0], primary: true },
+        {
+          points: d.structure.map((p) => ({ time: p.time, price: p.fit })),
+          color: colors[2],
+          dashed: true,
+        },
+      ],
+    });
+    output.querySelector(".strategy-metrics").innerHTML =
+      `<div><span>Drawdown</span><b>${pct(s.drawdown)}</b></div><div><span>Cash</span><b>${money(s.cash)}</b></div><div><span>Orders</span><b>${s.trades.length}</b></div><div><span>Fees</span><b>${money(s.fees)}</b></div>`;
     output.querySelector(".strategy-details").innerHTML =
       `<div class="strategy-lenses"><section><span class="eyebrow">POWER LAW · LOG FIT</span><strong>R² ${d.power?.r2.toFixed(3) ?? "—"}</strong><span>Fit ${d.power ? assetPrice(d.power.fair) : "—"}</span></section><section><span class="eyebrow">ELLIOTT · WAVE 2 SCAN</span><strong>${d.wave.active ? "Setup detected" : "No active setup"}</strong><span>${d.wave.active ? d.wave.projected.map(assetPrice).join(" → ") : d.wave.pivots.length + " confirmed pivots"}</span></section></div><details class="strategy-method"><summary>Method & data ${icon("arrow")}</summary><dl><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Capital</dt><dd>Equal starting cash · ${money(d.capital)}</dd><dt>Timing</dt><dd>Monthly tranches · next sampled close</dd><dt>Cash yield</dt><dd>0%</dd><dt>Costs</dt><dd>${money(d.fee)} / order + ${d.bps} bp</dd><dt>Basis</dt><dd>Pre-tax · price returns · dividends excluded</dd><dt>Power law</dt><dd>Observed-window log price / log elapsed days</dd><dt>Elliott</dt><dd>Wave 2 candidate · 38.2–78.6% retracement</dd><dt>Confirmation</dt><dd>2 later samples / pivot</dd><dt>Extension</dt><dd>1× / 1.618× prior impulse · conditional</dd>${d.conversionUnavailable ? `<dt>FX</dt><dd>${esc(d.requestedCurrency)} unavailable · ${esc(d.currency)} shown</dd>` : ""}</dl><a href="https://www.investor.gov/introduction-investing/investing-basics/glossary/dollar-cost-averaging" target="_blank" rel="noopener noreferrer">DCA ${icon("arrow")}</a> · <a href="https://www.elliottwave.com/wave-riffs/questions-we-get-questions/" target="_blank" rel="noopener noreferrer">Wave rules ${icon("arrow")}</a></details>`;
-    comparisonFullscreen?.refresh();
-    structureFullscreen?.refresh();
-    resize.disconnect();
-    for (const svg of output.querySelectorAll(
-      ".strategy-curve,.structure-chart",
-    ))
-      resize.observe(svg);
-    resizePlots();
     output.querySelectorAll("[data-strategy]").forEach(
       (b) =>
         (b.onclick = () => {
@@ -262,8 +267,6 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
           }).format(data.capital);
         root.querySelector(".strategy-parameters").open = false;
         render();
-        revealChart(output.querySelector(".strategy-curve"));
-        revealChart(output.querySelector(".structure-chart"));
       }
     } catch (e) {
       if (!disposed && id === epoch) {
@@ -289,15 +292,28 @@ export function mountStrategies(root, { symbol, currency = "EUR" } = {}) {
     e.preventDefault();
     load();
   };
-  if (symbol) load();
-  else output.textContent = "Select an asset";
+  if (symbol) {
+    const saved = chartWorkspaceSync(ownerId, symbol, "strategies");
+    void saved
+      .load()
+      .then(() => {
+        if (disposed) return;
+        form.elements.currency.value = saved.get(1).state.currency;
+        return load();
+      })
+      .catch((e) => {
+        if (!disposed) {
+          output.textContent = e.message;
+          output.setAttribute("aria-busy", "false");
+        }
+      });
+  } else output.textContent = "Select an asset";
   return {
     destroy() {
       disposed = true;
       epoch++;
-      comparisonFullscreen?.destroy();
-      structureFullscreen?.destroy();
-      resize.disconnect();
+      comparison?.destroy();
+      structure?.destroy();
     },
     update(next) {
       symbol = next.symbol ?? symbol;
