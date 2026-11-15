@@ -35,7 +35,7 @@ The app remains framework-light and bundled. A feature can be replaced without r
 
 `createSaveQueue` clones snapshots, serializes writes, coalesces later edits, and advances the server revision after acknowledgement. Multiple flush calls await the same in-flight operation. A failed write retains the newest local snapshot. Network failures allow retry; 401 and 409 pause automatic writes until explicit session/conflict resolution. Before-unload protects pending writes, and sign-out waits for the queue. Users can export unsaved edits before reloading newer server data.
 
-This is not an offline-first database: unsaved edits remain in memory and can be lost if the browser process is killed. Do not claim offline persistence. Add an explicitly scoped, encrypted/offline strategy only as a separate feature with account isolation and conflict semantics.
+Portfolio saving is not an offline-first database: unsaved portfolio edits remain in memory and can be lost if the browser process is killed. Research charts have a separate account/asset/slot autosave queue with tab-session draft recovery, bounded retries and revision-conflict protection; see [chart analysis](CHART_ANALYSIS.md). Neither path guarantees durable offline storage.
 
 `recordSale` and `recordBuyback` are pure commands: clone → apply rules → validate → return. Failed trades leave the original state untouched. A completed buyback cannot be completed twice. New acquisition lots preserve FIFO history and proportionate fees. Server-side validation and revision checks remain the final boundary.
 
