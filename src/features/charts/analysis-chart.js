@@ -8,7 +8,13 @@ import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { esc } from "../../shared/format.js";
 import { modal, close, toast, icon } from "../../shared/ui.js";
 import { setAnimatedText, revealChart } from "../../shared/motion.js";
-import { fetchPriceHistory } from "./price-chart.js";
+import {
+  fetchPriceHistory,
+  loadChartHistory,
+  historyOutside,
+  fullHistoryViewport,
+} from "./history-data.js";
+import { mountHistoryBrowser } from "./history-browser.js";
 import { historyRanges } from "../../domain/market-history.js";
 import {
   MAX_CHART_DRAWINGS,
@@ -91,6 +97,7 @@ export function mountAnalysisChart(
     fetchGeneration = 0,
     storageGeneration = 0,
     resizeFrame = 0;
+  let historyBrowser = null;
   let releaseRemote = null,
     remoteSlot = null,
     editorOpen = false,
@@ -282,8 +289,9 @@ export function mountAnalysisChart(
       ? "Review concurrent chart edits"
       : "Manage saved analysis";
     root.querySelector("[data-ta-currency]").textContent = state.currency;
-    root.querySelector("[data-ta-type]").textContent =
-      state.chartType === "candle" ? "Candles" : "Line";
+    root
+      .querySelector("[data-ta-type]")
+      .setAttribute("aria-pressed", String(state.chartType === "candle"));
     root
       .querySelector("[data-ta-scale]")
       .setAttribute("aria-pressed", String(state.scale === "log"));
@@ -420,7 +428,8 @@ export function mountAnalysisChart(
         }
       : null;
   function applyViewport(next) {
-    state.viewport = savedChartViewport(data.points, next);
+    state.viewport =
+      savedChartViewport(data.points, next) || fullHistoryViewport(data);
   }
   const gestures = mountChartGestures(plot, {
     getView: view,
@@ -449,6 +458,23 @@ export function mountAnalysisChart(
         redo = [];
       }
       gestureBefore = null;
+      reconcileDirty();
+      draw();
+    },
+  });
+  historyBrowser = mountHistoryBrowser(root, {
+    read: () => ({
+      key: slot,
+      data,
+      state,
+      geometry,
+      busy: !ready || busy || managing,
+      interacting: interactionActive(),
+    }),
+    apply: (next, viewport) => {
+      data = next;
+      state.viewport = viewport;
+      indicators = technicalIndicators(data.points);
       reconcileDirty();
       draw();
     },
@@ -526,6 +552,7 @@ export function mountAnalysisChart(
     selectPoint(data.points.length - 1, false);
     if (reveal) revealChart(plot.querySelector(".ta-price-line"));
     updateChrome();
+    queueMicrotask(() => historyBrowser?.update());
   }
   function selectPoint(index, exploring = true) {
     if (!data || !geometry) return;
@@ -612,10 +639,10 @@ export function mountAnalysisChart(
     plot.classList.add("is-loading");
     plot.setAttribute("aria-busy", "true");
     try {
-      const result = await fetchPriceHistory(
+      const result = await loadChartHistory(
         asset.symbol,
-        state.range,
-        state.currency,
+        state,
+        () => live() && generation === fetchGeneration,
       );
       if (!live() || generation !== fetchGeneration) return false;
       if (result.currency !== state.currency)
@@ -688,10 +715,10 @@ export function mountAnalysisChart(
     plot.classList.add("is-loading");
     plot.setAttribute("aria-busy", "true");
     try {
-      const result = await fetchPriceHistory(
+      const result = await loadChartHistory(
         asset.symbol,
-        previous.range,
-        nextCurrency,
+        { ...previous, currency: nextCurrency },
+        () => live() && generation === fetchGeneration,
       );
       if (!live() || generation !== fetchGeneration) return;
       if (result.currency !== nextCurrency || result.points.length < 2)
@@ -1099,7 +1126,7 @@ export function mountAnalysisChart(
     if (!price && !time) return;
     checkpoint();
     if (axis !== "time") state.priceRange = null;
-    if (axis !== "price") state.viewport = null;
+    if (axis !== "price") state.viewport = fullHistoryViewport(data);
     mark();
     draw();
   }
@@ -1479,7 +1506,8 @@ export function mountAnalysisChart(
       if (
         !data ||
         data.range !== state.range ||
-        data.currency !== state.currency
+        data.currency !== state.currency ||
+        historyOutside(data, state.viewport)
       )
         void loadHistory({ remote: true });
       else draw();
@@ -1506,6 +1534,7 @@ export function mountAnalysisChart(
     isDirty: () => dirty,
     canLeave: () => true,
     destroy() {
+      historyBrowser?.destroy();
       fullscreen?.destroy();
       gestures.finish();
       finishDrag();

@@ -1,3 +1,4 @@
+import { externalURL as external } from "../../shared/external-url.js";
 import { esc } from "../../shared/format.js";
 import { icon } from "../../shared/icons.js";
 import { formatArticle } from "../../domain/article-format.js";
@@ -18,18 +19,6 @@ export const contextDate = (value) =>
       })
     : "—";
 const count = (value) => Number(value || 0).toLocaleString();
-const external = (value) => {
-  try {
-    const u = new URL(value);
-    return ["http:", "https:"].includes(u.protocol) &&
-      !u.username &&
-      !u.password
-      ? u.href
-      : "";
-  } catch {
-    return "";
-  }
-};
 const scope = (section) =>
   section === "journal"
     ? "RNT · Public"

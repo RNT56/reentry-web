@@ -38,7 +38,7 @@
   align-items: center;
   gap: 8px;
   min-height: 24px;
-  color: var(--text);
+  color: #e8ebe9;
   text-decoration: none;
 }
 .asset-context-link h3 {
@@ -198,6 +198,74 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .asset-context-link > svg {
+    transition: none;
+  }
+}
+
+/* Shared, on-demand asset readers. The plot keeps its own mounted lifecycle. */
+.asset-context-dock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px;
+  border-block: 1px solid var(--line);
+  margin-block: 18px;
+  min-width: 0;
+}
+.context-dock-label {
+  color: var(--muted);
+  font-size: 11px;
+  margin-right: auto;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+.asset-context-dock a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition:
+    color 0.18s,
+    background 0.18s;
+}
+.asset-context-dock a svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.5;
+  transition: transform 0.18s;
+}
+.asset-context-dock a:hover,
+.asset-context-dock a:focus-visible {
+  color: #e8ebe9;
+  background: var(--surface);
+}
+.asset-context-dock a:hover svg {
+  transform: translate(1px, -1px);
+}
+@media (max-width: 680px) {
+  .asset-context-dock {
+    gap: 0;
+    padding-inline: 0;
+  }
+  .context-dock-label {
+    display: none;
+  }
+  .asset-context-dock a {
+    flex: 1;
+    padding: 0 5px;
+    gap: 5px;
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asset-context-dock a,
+  .asset-context-dock a svg {
     transition: none;
   }
 }

@@ -1,3 +1,6 @@
+import { chartTimeLabel } from "./chart-time.js";
+import { renderCandles } from "./candles.js";
+import { restoreChartWindow } from "../../domain/chart-viewport.js";
 import { chartGeometry, chartNumber } from "./analysis-render.js";
 import { renderChartInk, newChartInkId } from "../../shared/chart-ink.js";
 import { esc } from "../../shared/format.js";
@@ -35,8 +38,13 @@ export function renderAssetPlot(
       Number.isFinite(r.price) &&
       (state.scale !== "log" || r.price > 0),
   );
+  const window = restoreChartWindow(points, state.viewport);
   const values = series
-    .flatMap((s) => s.points.map((p) => p.price))
+    .flatMap((s) =>
+      s.points
+        .slice(Math.max(0, Math.floor(window.from)), Math.ceil(window.to) + 1)
+        .map((p) => p.price),
+    )
     .concat(visible.map((r) => r.price))
     .filter((v) => Number.isFinite(v) && (state.scale !== "log" || v > 0));
   if (!values.length)
@@ -51,7 +59,7 @@ export function renderAssetPlot(
     data,
     {
       ...state,
-      chartType: "line",
+      chartType: data.series ? "line" : state.chartType,
       indicators: [],
       drawings: bounds.map((price) => ({
         type: "horizontal",
@@ -64,32 +72,31 @@ export function renderAssetPlot(
   );
   const g = geometry,
     id = newChartInkId("asset"),
-    date =
-      xLabel ||
-      ((time) =>
-        new Intl.DateTimeFormat("en-GB", {
-          timeZone: data.timeZone || "UTC",
-          ...(data.range === "1d"
-            ? { hour: "2-digit", minute: "2-digit" }
-            : { month: "short", day: "numeric" }),
-        }).format(time * 1000));
-  const inks = series.map((s, i) =>
-    renderChartInk(
-      sampleLimit
-        ? sampleChartPoints(s.points.slice(g.from, g.to + 1), sampleLimit)
-        : s.points,
-      {
-        id: id + "-" + i,
-        x: (_index, p) => g.timeX(p.time),
-        y: g.y,
-        baseline: s.primary ? g.B : undefined,
-        color: s.color || "#9bd5aa",
-        highlight: s.highlight || s.color || "#dcf1d5",
-        endpoint: false,
-        className: "asset-series-line",
-      },
-    ),
-  );
+    date = xLabel || chartTimeLabel(data, g);
+  const candles =
+    !data.series && state.chartType === "candle"
+      ? renderCandles(points, g)
+      : null;
+  const inks = candles?.count
+    ? []
+    : series.map((s, i) =>
+        renderChartInk(
+          sampleChartPoints(
+            s.points.slice(g.from, g.to + 1),
+            sampleLimit || 1200,
+          ),
+          {
+            id: id + "-" + i,
+            x: (_index, p) => g.timeX(p.time),
+            y: g.y,
+            baseline: s.primary ? g.B : undefined,
+            color: s.color || "#9bd5aa",
+            highlight: s.highlight || s.color || "#dcf1d5",
+            endpoint: false,
+            className: "asset-series-line",
+          },
+        ),
+      );
   const grid = Array.from({ length: 5 }, (_, i) => {
     const y = g.T + ((g.B - g.T) * i) / 4;
     return `<path d="M${g.L} ${y}H${g.R}" class="ta-grid"/><text x="${g.R + 8}" y="${y + 4}" class="ta-axis">${esc(yLabel ? yLabel(g.axis(i)) : chartNumber(g.axis(i)))}</text>`;
@@ -118,6 +125,6 @@ export function renderAssetPlot(
     .join("");
   return {
     geometry,
-    html: `<svg class="ta-canvas asset-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs>${inks.map((i) => i.defs).join("")}<clipPath id="${id}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${id}-clip)">${inks.map((ink, i) => `<g opacity="${series[i].primary ? 1 : 0.65}"${series[i].dashed ? ' stroke-dasharray="5 4"' : ""}>${ink.bodyMarkup}</g>`).join("")}${refs}${extra?.(g) || ""}<g class="asset-crosshair" opacity="0" pointer-events="none"><path class="asset-cross-v" stroke="#9eb3a070" stroke-dasharray="3 4"/><path class="asset-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="asset-cross-dot" r="3" fill="#dcf1d5"/></g></g>${dates}<rect class="ta-axis-hit" data-ta-axis="price" x="${g.R}" y="${g.T}" width="${g.W - g.R}" height="${g.B - g.T}"><title>Drag to scale price · Double-click to reset</title></rect><rect class="ta-axis-hit" data-ta-axis="time" x="${g.L}" y="${g.B}" width="${g.R - g.L}" height="${g.H - g.B}"><title>Drag to scale ${xLabel ? "horizontal axis" : "time"} · Double-click to reset</title></rect></svg>`,
+    html: `<svg class="ta-canvas asset-canvas" viewBox="0 0 ${g.W} ${g.H}" aria-hidden="true"><defs>${inks.map((i) => i.defs).join("")}<clipPath id="${id}-clip"><rect x="${g.L}" y="${g.T}" width="${g.R - g.L}" height="${g.B - g.T}"/></clipPath></defs>${grid}<g clip-path="url(#${id}-clip)">${candles?.count ? candles.html : inks.map((ink, i) => `<g opacity="${series[i].primary ? 1 : 0.65}"${series[i].dashed ? ' stroke-dasharray="5 4"' : ""}>${ink.bodyMarkup}</g>`).join("")}${refs}${extra?.(g) || ""}<g class="asset-crosshair" opacity="0" pointer-events="none"><path class="asset-cross-v" stroke="#9eb3a070" stroke-dasharray="3 4"/><path class="asset-cross-h" stroke="#9eb3a040" stroke-dasharray="3 4"/><circle class="asset-cross-dot" r="3" fill="#dcf1d5"/></g></g>${dates}<rect class="ta-axis-hit" data-ta-axis="price" x="${g.R}" y="${g.T}" width="${g.W - g.R}" height="${g.B - g.T}"><title>Drag to scale price · Double-click to reset</title></rect><rect class="ta-axis-hit" data-ta-axis="time" x="${g.L}" y="${g.B}" width="${g.R - g.L}" height="${g.H - g.B}"><title>Drag to scale ${xLabel ? "horizontal axis" : "time"} · Double-click to reset</title></rect></svg>`,
   };
 }

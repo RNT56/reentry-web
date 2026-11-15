@@ -1,3 +1,4 @@
+import { externalURL } from "../../shared/external-url.js";
 import { loadingSurface } from "../../shared/motion.js";
 import { esc } from "../../shared/format.js";
 import { icon, toast } from "../../shared/ui.js";
@@ -60,8 +61,8 @@ export function sourceLinks(ids, sources) {
     .map((id) => sources.find((s) => s.id === id))
     .filter(Boolean)
     .map((s) =>
-      s.url
-        ? `<a class="source-cite" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" title="${esc(s.title)}">${esc(s.connector || s.kind)} ${icon("arrow")}</a>`
+      externalURL(s.url)
+        ? `<a class="source-cite" href="${esc(externalURL(s.url))}" target="_blank" rel="noopener noreferrer" title="${esc(s.title)}">${esc(s.connector || s.kind)} ${icon("arrow")}</a>`
         : `<span class="source-cite">${esc(s.title)}</span>`,
     )
     .join(" ");
@@ -81,7 +82,7 @@ export function scenarioCards(
             .filter((o) => b.status.evidence.includes(o.id))
             .map(
               (o) =>
-                `<p class="small"><a href="${esc(o.url || "#")}" target="_blank" rel="noopener noreferrer">${esc(o.source)}</a> · ${esc(when(o.occurredAt))}${o.kind === "price" ? ` · ${o.value.toLocaleString()} ${esc(o.currency)}` : ""}</p>`,
+                `<p class="small"><a href="${esc(externalURL(o.url) || "#")}" target="_blank" rel="noopener noreferrer">${esc(o.source)}</a> · ${esc(when(o.occurredAt))}${o.kind === "price" ? ` · ${o.value.toLocaleString()} ${esc(o.currency)}` : ""}</p>`,
             )
             .join("") || '<p class="small">No qualifying evidence yet.</p>'
         }</details></article>`,

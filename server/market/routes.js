@@ -9,6 +9,7 @@ export function registerMarketRoutes(app, service) {
       req.query.symbol,
       req.query.range,
       req.query.currency || "EUR",
+      req.query.before,
     ),
   );
 }

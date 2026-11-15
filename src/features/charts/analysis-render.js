@@ -1,3 +1,6 @@
+import { chartTimeLabel } from "./chart-time.js";
+import { sampleChartPoints } from "../../domain/chart-sampling.js";
+import { validCandle, renderCandles } from "./candles.js";
 import { renderChartInk, newChartInkId } from "../../shared/chart-ink.js";
 import {
   fibonacciLevels,
@@ -49,10 +52,6 @@ const compact = (value) =>
     maximumFractionDigits: 1,
   }).format(value);
 const finite = (v) => Number.isFinite(v);
-const validCandle = (p) =>
-  [p.open, p.high, p.low, p.close].every((v) => finite(v) && v > 0) &&
-  p.low <= Math.min(p.open, p.close) &&
-  p.high >= Math.max(p.open, p.close);
 export function chartGeometry(data, state, indicators, width, totalHeight) {
   const all = data.points;
   if (!Array.isArray(all) || all.length < 2)
@@ -339,30 +338,25 @@ export function renderAnalysisPlot(
       y = g.T + ((g.B - g.T) * i) / 4;
     return `<path d="M${g.L} ${y}H${g.R}" class="ta-grid"/><text x="${g.R + 8}" y="${y + 4}" class="ta-axis">${chartNumber(v)}</text>`;
   }).join("");
-  let candles = "",
-    hasCandles = false;
-  const candleWidth = Math.max(
-    1,
-    Math.min(12, ((g.R - g.L) / (g.end - g.start + 1)) * 0.65),
-  );
-  if (state.chartType === "candle")
-    for (let i = g.from; i <= g.to; i++) {
-      const p = data.points[i];
-      if (!validCandle(p)) continue;
-      hasCandles = true;
-      const c = p.close >= p.open ? "#8bd5ab" : "#df9d90";
-      candles += `<path d="M${g.x(i)} ${g.y(p.high)}V${g.y(p.low)}" stroke="${c}"/><rect x="${g.x(i) - candleWidth / 2}" y="${Math.min(g.y(p.open), g.y(p.close))}" width="${candleWidth}" height="${Math.max(1, Math.abs(g.y(p.close) - g.y(p.open)))}" fill="${c}"/>`;
-    }
+  const candleLayer =
+    state.chartType === "candle" ? renderCandles(data.points, g) : null;
+  const hasCandles = !!candleLayer?.count,
+    candles = candleLayer?.html || "";
   const inkId = newChartInkId("research"),
-    ink = renderChartInk(data.points.slice(g.from, g.to + 1), {
-      id: inkId,
-      x: (i) => g.x(i + g.from),
-      y: g.y,
-      baseline: g.B,
-      color: up ? "#9bd5aa" : "#dca295",
-      highlight: up ? "#dcf1d5" : "#f1c8bb",
-      className: "ta-price-line",
-    });
+    ink = hasCandles
+      ? { defs: "", bodyMarkup: "", endpointMarkup: "" }
+      : renderChartInk(
+          sampleChartPoints(data.points.slice(g.from, g.to + 1), 1200),
+          {
+            id: inkId,
+            x: (_i, p) => g.timeX(p.time),
+            y: g.y,
+            baseline: g.B,
+            color: up ? "#9bd5aa" : "#dca295",
+            highlight: up ? "#dcf1d5" : "#f1c8bb",
+            className: "ta-price-line",
+          },
+        );
   let overlays = "";
   for (const id of state.indicators) {
     if (id === "bollinger") {
@@ -375,12 +369,7 @@ export function renderAnalysisPlot(
     } else if (palette[id])
       overlays += `<path d="${path(indicators[id], g)}" stroke="${palette[id]}" fill="none" stroke-width="1.4"/>`;
   }
-  const date = (t) =>
-    new Intl.DateTimeFormat("en-GB", {
-      month: "short",
-      day: "numeric",
-      timeZone: data.timeZone || "UTC",
-    }).format(t * 1000);
+  const date = chartTimeLabel(data, g);
   const dates = [
     ...new Set([g.visibleFrom, Math.round((g.start + g.end) / 2), g.visibleTo]),
   ]

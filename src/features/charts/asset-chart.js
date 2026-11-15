@@ -1,3 +1,8 @@
+import {
+  historyBrowserMarkup,
+  mountHistoryBrowser,
+} from "./history-browser.js";
+import { historyOutside, fullHistoryViewport } from "./history-data.js";
 import { chartWorkspaceSync } from "./chart-sync.js";
 import {
   mountChartGestures,
@@ -25,6 +30,8 @@ export function mountAssetChart(
     readout = true,
     ranges = false,
     currencyControl = false,
+    candles = false,
+    history = false,
     data: initialData = null,
     references = () => [],
     reserveReferences = false,
@@ -42,6 +49,7 @@ export function mountAssetChart(
   const rangeOptions = typeof ranges === "object" ? ranges : historyRanges;
   const sync = chartWorkspaceSync(ownerId, symbol, surface),
     hidden = new Set();
+  let historyBrowser = null;
   let state = sync.get(1).state,
     data = initialData,
     geometry = null,
@@ -69,7 +77,7 @@ export function mountAssetChart(
           )
           .join("")}</div>`
       : ""
-  }<div class="asset-navigation" role="group" aria-label="Chart navigation"><button data-asset-zoom="out" aria-label="Zoom chart out">${icon("minus")}</button><button data-asset-fit title="Reset both axes">Fit</button><button data-asset-zoom="in" aria-label="Zoom chart in">${icon("plus")}</button><button data-asset-log aria-pressed="false" ${linearOnly ? "hidden" : ""}>Log</button>${currencyControl ? '<button data-asset-currency aria-label="Switch chart currency">EUR</button>' : ""}</div><button class="asset-sync" data-asset-sync aria-live="polite" title="All chart changes saved">Saved</button></div><div class="asset-sync-review" hidden><button data-view-latest>Use latest view</button><button data-view-mine>Keep my view</button></div><div class="asset-chart-caption"><span data-asset-source></span><span data-asset-date></span></div>`;
+  }<div class="asset-navigation" role="group" aria-label="Chart navigation"><button data-asset-zoom="out" aria-label="Zoom chart out">${icon("minus")}</button><button data-asset-fit title="Reset both axes">Fit</button><button data-asset-zoom="in" aria-label="Zoom chart in">${icon("plus")}</button>${candles ? '<button data-asset-type aria-label="Candlestick chart" aria-pressed="false">Candles</button>' : ""}<button data-asset-log aria-pressed="false" ${linearOnly ? "hidden" : ""}>Log</button>${currencyControl ? '<button data-asset-currency aria-label="Switch chart currency">EUR</button>' : ""}</div>${history ? historyBrowserMarkup : ""}<button class="asset-sync" data-asset-sync aria-live="polite" title="All chart changes saved">Saved</button></div><div class="asset-sync-review" hidden><button data-view-latest>Use latest view</button><button data-view-mine>Keep my view</button></div><div class="asset-chart-caption"><span data-asset-source></span><span data-asset-date></span></div>`;
   const plot = root.querySelector(".asset-plot"),
     status = root.querySelector("[data-asset-sync]");
   const live = () => !disposed && root.isConnected;
@@ -89,11 +97,12 @@ export function mountAssetChart(
     sync.update(1, state);
   };
   const apply = (next) => {
-    state.viewport = savedChartViewport(
-      data.points,
-      next,
-      surface === "buyback" ? { min: -1e6, max: 1e6 } : undefined,
-    );
+    state.viewport =
+      savedChartViewport(
+        data.points,
+        next,
+        surface === "buyback" ? { min: -1e6, max: 1e6 } : undefined,
+      ) || (history ? fullHistoryViewport(data) : null);
     if (Object.hasOwn(next, "priceRange")) state.priceRange = next.priceRange;
   };
   const checkpoint = () => {
@@ -131,6 +140,9 @@ export function mountAssetChart(
     root
       .querySelector("[data-asset-log]")
       .setAttribute("aria-pressed", String(state.scale === "log"));
+    root
+      .querySelector("[data-asset-type]")
+      ?.setAttribute("aria-pressed", String(state.chartType === "candle"));
     const currency = root.querySelector("[data-asset-currency]");
     if (currency) currency.textContent = state.currency;
     root
@@ -159,7 +171,7 @@ export function mountAssetChart(
       const number = (n) =>
         new Intl.NumberFormat("de-DE", {
           minimumFractionDigits: 2,
-          maximumFractionDigits: Math.abs(n) < 0.1 ? 8 : 2,
+          maximumFractionDigits: Math.abs(p.price) < 0.1 ? 6 : 2,
         }).format(n);
       setAnimatedText(
         root.querySelector("[data-asset-price]"),
@@ -246,6 +258,7 @@ export function mountAssetChart(
       .join(" · ");
     select(geometry?.visibleTo ?? data.points.length - 1);
     chrome();
+    queueMicrotask(() => historyBrowser?.update());
   }
   const gestures = mountChartGestures(plot, {
     getView: view,
@@ -277,10 +290,27 @@ export function mountAssetChart(
     },
     onResetAxis: (axis) => reset(axis),
   });
+  if (history)
+    historyBrowser = mountHistoryBrowser(root, {
+      read: () => ({
+        data,
+        state,
+        geometry,
+        busy: busy || !ready,
+        interacting: gestures.isActive(),
+      }),
+      apply: (next, viewport) => {
+        data = next;
+        state.viewport = viewport;
+        remember();
+        draw();
+      },
+    });
   function reset(axis = "both") {
     if (!editable()) return;
     checkpoint();
-    if (axis !== "price") state.viewport = null;
+    if (axis !== "price")
+      state.viewport = history ? fullHistoryViewport(data) : null;
     if (axis !== "time") state.priceRange = null;
     remember();
     draw();
@@ -403,7 +433,7 @@ export function mountAssetChart(
     chrome();
     plot.setAttribute("aria-busy", "true");
     try {
-      const response = await load(next);
+      const response = await load(next, () => live() && generation === epoch);
       if (!live() || generation !== epoch) return;
       data = response;
       state = {
@@ -416,15 +446,18 @@ export function mountAssetChart(
     } catch (e) {
       if (live() && generation === epoch) {
         error = e.message || "Data unavailable";
-        data = null;
-        geometry = null;
-        plot.innerHTML =
-          '<div class="asset-chart-empty">Data unavailable</div>';
+        if (!data) {
+          geometry = null;
+          plot.innerHTML =
+            '<div class="asset-chart-empty">Data unavailable</div>';
+        }
+        plot.setAttribute("aria-busy", "false");
       }
     } finally {
       if (generation === epoch) {
         busy = false;
         chrome();
+        historyBrowser?.update(false);
       }
       done();
     }
@@ -494,7 +527,12 @@ export function mountAssetChart(
     if (b.dataset.assetZoom)
       edit(zoomChartView(view(), b.dataset.assetZoom === "in" ? 0.65 : 1.5));
     else if (b.hasAttribute("data-asset-fit")) reset();
-    else if (b.hasAttribute("data-asset-log")) {
+    else if (b.hasAttribute("data-asset-type")) {
+      checkpoint();
+      state.chartType = state.chartType === "candle" ? "line" : "candle";
+      remember();
+      draw();
+    } else if (b.hasAttribute("data-asset-log")) {
       checkpoint();
       state.scale = state.scale === "log" ? "linear" : "log";
       state.priceRange = null;
@@ -543,7 +581,11 @@ export function mountAssetChart(
       state = next;
       undo = [];
       redo = [];
-      if (changed || (data && data.currency !== state.currency))
+      if (
+        changed ||
+        (data && data.currency !== state.currency) ||
+        (history && historyOutside(data, state.viewport))
+      )
         void refreshView();
       else draw();
     }
@@ -602,8 +644,10 @@ export function mountAssetChart(
       if (ready) draw();
     },
     redraw: draw,
+    canLeave: () => true,
     accessory: root.querySelector(".asset-chart-accessory"),
     destroy() {
+      historyBrowser?.destroy();
       gestures.finish();
       void sync.flush(1);
       disposed = true;

@@ -1,3 +1,4 @@
+import { historyWindow } from "./history-window.js";
 import { convertHistory } from "./history-currency.js";
 import { yahooProvider } from "./yahoo.js";
 import { createRequestCache } from "./cache.js";
@@ -13,6 +14,12 @@ export function createMarketService({
   provider = yahooProvider(),
   cache = createRequestCache(),
 } = {}) {
+  const historyCache = createRequestCache({ limit: 64, maxPending: 12 }),
+    archiveCache = createRequestCache({
+      ttl: 24 * 60 * 60 * 1000,
+      limit: 64,
+      maxPending: 12,
+    });
   const rawQuote = (symbol) =>
     cache("raw:" + symbol, () => provider.quote(symbol));
   return {
@@ -30,20 +37,23 @@ export function createMarketService({
             results: await provider.search(query),
           }));
     },
-    history(symbol, range = "1mo", targetCurrency) {
+    history(symbol, range = "1mo", targetCurrency, before) {
       validateHistoryInput(symbol, range);
       if (
         targetCurrency !== undefined &&
         !["EUR", "USD"].includes(targetCurrency)
       )
         throw invalid("Invalid chart currency.");
+      const window = historyWindow(symbol, range, before),
+        cached = window ? archiveCache : historyCache,
+        suffix = window ? ":" + window.from + ":" + window.to : "";
       const native = () =>
-        cache("history:" + symbol + ":" + range, () =>
-          provider.history(symbol, range),
+        cached("history:" + symbol + ":" + range + suffix, () =>
+          provider.history(symbol, range, false, window),
         );
       if (!targetCurrency) return native();
-      return cache(
-        "history:" + symbol + ":" + range + ":" + targetCurrency,
+      return cached(
+        "history:" + symbol + ":" + range + ":" + targetCurrency + suffix,
         async () => {
           const nativeHistory = await native();
           let referenceFx;
@@ -66,8 +76,9 @@ export function createMarketService({
             };
           try {
             const pair = history.currency + targetCurrency + "=X";
-            const fx = await cache("fxhistory:" + pair + ":" + range, () =>
-              provider.history(pair, range, true),
+            const fx = await cached(
+              "fxhistory:" + pair + ":" + range + suffix,
+              () => provider.history(pair, range, true, window),
             );
             return convertHistory(history, fx, targetCurrency);
           } catch {

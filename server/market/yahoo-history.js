@@ -3,8 +3,20 @@ import {
   validateHistoryInput,
 } from "../../src/domain/market-history.js";
 import { currencyUnit } from "../../src/domain/currency.js";
-export function historyPath(symbol, range = "1mo", padded = false) {
+export function historyPath(
+  symbol,
+  range = "1mo",
+  padded = false,
+  window = null,
+) {
   validateHistoryInput(symbol, range);
+  if (window) {
+    const buffer = padded
+      ? (["1d", "1wk"].includes(range) ? 2 : 15) * 86400
+      : 0;
+    const from = Math.max(window.floor || 0, window.from - buffer);
+    return `/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${from}&period2=${window.to}&interval=${historyRanges[range].interval}&includePrePost=false`;
+  }
   if (padded) {
     const seconds = {
       "1d": 86400,
@@ -37,13 +49,18 @@ export function normalizeHistory(payload, symbol, range) {
   const closes = quote.close || [];
   const positive = (value) =>
     typeof value === "number" && Number.isFinite(value) && value > 0;
+  if (
+    !Array.isArray(result.timestamp || []) ||
+    (result.timestamp || []).length > 2500
+  )
+    throw Error("The history response is too large.");
   const unique = new Map();
   for (const [i, time] of (result.timestamp || []).entries()) {
     const value = closes[i];
     if (
       Number.isSafeInteger(time) &&
       time > 0 &&
-      time < 8640000000000 &&
+      time <= 4102444800 &&
       typeof value === "number" &&
       Number.isFinite(value) &&
       value > 0
@@ -87,6 +104,12 @@ export function normalizeHistory(payload, symbol, range) {
     timeZone,
     exchange: meta.fullExchangeName || meta.exchangeName || "",
     source: "Yahoo Finance",
+    firstTradeTime:
+      Number.isSafeInteger(meta.firstTradeDate) &&
+      meta.firstTradeDate > 0 &&
+      meta.firstTradeDate <= 4102444800
+        ? meta.firstTradeDate
+        : null,
     interval: historyRanges[range].interval,
     points,
   };

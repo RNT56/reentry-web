@@ -1,9 +1,8 @@
+import { readMarketJSON } from "./read-json.js";
+import { withHistoryPaging } from "./history-window.js";
 import { historyPath, normalizeHistory } from "./yahoo-history.js";
 import { assetInfo } from "../../src/domain/assets.js";
-import {
-  returnHistoryPath,
-  normalizeReturnHistory,
-} from "./return-history.js";
+import { returnHistoryPath, normalizeReturnHistory } from "./return-history.js";
 // Provider-specific symbols, payloads and URLs terminate at this boundary.
 export function yahooProvider({ fetcher = fetch } = {}) {
   async function get(path) {
@@ -15,9 +14,10 @@ export function yahooProvider({ fetcher = fetch } = {}) {
         const response = await fetcher("https://" + host + path, {
           headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
           signal: AbortSignal.timeout(6000),
+          redirect: "error",
         });
         if (!response.ok) continue;
-        return await response.json();
+        return await readMarketJSON(response);
       } catch {
         /* Try the alternate provider host within the same deadline. */
       }
@@ -41,6 +41,7 @@ export function yahooProvider({ fetcher = fetch } = {}) {
           "&quotesCount=20&newsCount=0&enableFuzzyQuery=false",
       );
       return (payload.quotes || [])
+        .slice(0, 20)
         .filter((q) =>
           ["EQUITY", "ETF", "MUTUALFUND", "CRYPTOCURRENCY"].includes(
             q.quoteType,
@@ -85,11 +86,14 @@ export function yahooProvider({ fetcher = fetch } = {}) {
         assetType: m.instrumentType,
       };
     },
-    async history(symbol, range, padded = false) {
-      return normalizeHistory(
-        await get(historyPath(symbol, range, padded)),
-        symbol,
-        range,
+    async history(symbol, range, padded = false, window = null) {
+      return withHistoryPaging(
+        normalizeHistory(
+          await get(historyPath(symbol, range, padded, window)),
+          symbol,
+          range,
+        ),
+        window,
       );
     },
   };

@@ -1,3 +1,4 @@
+import { mountAssetContextDock } from "../portfolio/context-dock.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
 import { icon, monogram, bindLogos, toast } from "../../shared/ui.js";
@@ -54,6 +55,7 @@ export function mountPolitics(root, { model, navigate }) {
     controller = null,
     searchTimer,
     chart = null,
+    context = null,
     returnEstimate = null,
     chartTicker = null,
     returnMember = null,
@@ -253,6 +255,9 @@ export function mountPolitics(root, { model, navigate }) {
       chartTicker === memory.ticker
         ? result.querySelector("[data-capitol-chart]")
         : null;
+    const retainedContext = retainedChart
+      ? result.querySelector("[data-capitol-context]")
+      : null;
     const retainedReturns =
       returnMember === data.member?.id
         ? result.querySelector(".political-returns")
@@ -261,6 +266,8 @@ export function mountPolitics(root, { model, navigate }) {
       ? result.querySelector(".politician-rail")?.scrollLeft || 0
       : 0;
     if (!retainedChart) {
+      context?.destroy();
+      context = null;
       chart?.destroy();
       chart = null;
       chartTicker = null;
@@ -292,7 +299,7 @@ export function mountPolitics(root, { model, navigate }) {
     }
     ${
       asset
-        ? `<section class="capitol-asset-focus"><header><div>${monogram(asset)}<h2>${esc(asset.symbol)}</h2><button class="icon-button" data-clear-ticker aria-label="Clear asset filter">${icon("close")}</button></div><span><button class="link" data-watch="${esc(asset.symbol)}">${icon("plus")} Watchlist</button><button class="link" data-research="${esc(asset.symbol)}">Research ${icon("arrow")}</button></span></header><div data-capitol-chart class="price-history"></div></section>`
+        ? `<section class="capitol-asset-focus"><header><div>${monogram(asset)}<h2>${esc(asset.symbol)}</h2><button class="icon-button" data-clear-ticker aria-label="Clear asset filter">${icon("close")}</button></div><span><button class="link" data-watch="${esc(asset.symbol)}">${icon("plus")} Watchlist</button><button class="link" data-research="${esc(asset.symbol)}">Research ${icon("arrow")}</button></span></header><div data-capitol-chart class="price-history"></div><nav data-capitol-context></nav></section>`
         : s.tickers.length
           ? `<section class="disclosure-assets"><div class="capitol-section-title"><h2>Asset activity</h2><span>Disclosed transactions</span></div><div class="disclosure-asset-rail">${s.tickers
               .slice(0, 8)
@@ -316,6 +323,15 @@ export function mountPolitics(root, { model, navigate }) {
     }
     if (asset) {
       chartTicker = asset.symbol;
+      if (retainedContext)
+        root
+          .querySelector("[data-capitol-context]")
+          .replaceWith(retainedContext);
+      else
+        context = mountAssetContextDock(
+          root.querySelector("[data-capitol-context]"),
+          asset,
+        );
       if (retainedChart)
         root.querySelector("[data-capitol-chart]").replaceWith(retainedChart);
       else
@@ -629,6 +645,7 @@ export function mountPolitics(root, { model, navigate }) {
   return {
     canLeave: () => chart?.canLeave?.() !== false,
     destroy() {
+      context?.destroy();
       alive = false;
       epoch++;
       controller?.abort();

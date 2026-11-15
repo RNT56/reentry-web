@@ -1,3 +1,4 @@
+import { historyBrowserMarkup } from "./history-browser.js";
 import { esc } from "../../shared/format.js";
 import { icon } from "../../shared/ui.js";
 import {
@@ -34,7 +35,9 @@ export function chartControlsMarkup(state, drawerId) {
         <button type="button" data-ta-fit aria-label="Fit all chart observations" title="Reset chart zoom">Fit</button>
         <button type="button" data-ta-zoom="0.65" aria-label="Zoom chart in" title="Zoom chart in">${chartControlIcon("plus")}</button>
       </div>
+      ${historyBrowserMarkup}
       <div class="ta-display-compact">
+        <button type="button" data-ta-type aria-label="Candlestick chart" aria-pressed="false">Candles</button>
         <button type="button" data-ta-currency aria-label="Switch chart currency">${state.currency}</button>
         <span class="ta-sync" data-phase="loading"><span class="ta-sync-mark" aria-hidden="true">${icon("check")}</span><span data-ta-status role="status" aria-live="polite">Loading…</span><button type="button" class="ta-sync-retry" data-ta-sync-retry aria-label="Retry chart autosave" hidden>${icon("refresh")}</button></span>
       </div>
@@ -50,7 +53,7 @@ export function chartControlsMarkup(state, drawerId) {
         .join("")}</div>
       <div class="ta-drawer-options">
         <div class="ta-history-tools" role="group" aria-label="Chart edit history"><button type="button" data-ta-undo aria-label="Undo chart change" title="Undo" disabled>${icon("undo")}</button><button type="button" data-ta-redo aria-label="Redo chart change" title="Redo" disabled>${icon("redo")}</button></div>
-        <div class="ta-display"><button type="button" data-ta-type aria-label="Toggle candles">Line</button><button type="button" data-ta-scale aria-pressed="${state.scale === "log"}">Log</button><details class="ta-indicator-menu"><summary>Indicators ${icon("plus")}</summary><div>${Object.entries(
+        <div class="ta-display"><button type="button" data-ta-scale aria-pressed="${state.scale === "log"}">Log</button><details class="ta-indicator-menu"><summary>Indicators ${icon("plus")}</summary><div>${Object.entries(
           indicatorLabels,
         )
           .map(

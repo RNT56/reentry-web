@@ -1,5 +1,6 @@
+import { mountAssetContextDock } from "../portfolio/context-dock.js";
 import { mountAssetChart } from "../charts/asset-chart.js";
-import { fetchPriceHistory } from "../charts/price-chart.js";
+import { loadChartHistory } from "../charts/history-data.js";
 import { referenceLevels } from "../../domain/chart-levels.js";
 import { target } from "../../domain/reentry.js";
 import { esc } from "../../shared/format.js";
@@ -12,15 +13,21 @@ export function mountBuybackChart(root, { ownerId, sales, whole, quotes }) {
       sales.find((s) => s.symbol === symbol),
   );
   let chart = null,
+    context = null,
     selected =
       sales.find((s) => s.status === "waiting")?.symbol || assets[0]?.symbol;
   root.innerHTML =
-    '<div class="buyback-chart-assets" role="group" aria-label="Buyback chart asset"></div><div class="buyback-history"></div>';
+    '<div class="buyback-chart-assets" role="group" aria-label="Buyback chart asset"></div><div class="buyback-history"></div><nav data-buyback-context></nav>';
   const tabs = root.querySelector(".buyback-chart-assets");
   function select(symbol) {
     chart?.destroy();
+    context?.destroy();
     selected = symbol;
     const asset = assets.find((s) => s.symbol === symbol);
+    context = mountAssetContextDock(
+      root.querySelector("[data-buyback-context]"),
+      asset,
+    );
     const plans = sales.filter(
       (s) => s.symbol === symbol && s.status === "waiting",
     );
@@ -38,7 +45,8 @@ export function mountBuybackChart(root, { ownerId, sales, whole, quotes }) {
       label: symbol + " · Buybacks",
       ranges: true,
       currencyControl: true,
-      load: (state) =>
+      candles: true,
+      load: (state, current) =>
         asset.demo
           ? Promise.resolve({
               symbol,
@@ -46,7 +54,8 @@ export function mountBuybackChart(root, { ownerId, sales, whole, quotes }) {
               source: "Demo",
               currency: state.currency,
             })
-          : fetchPriceHistory(symbol, state.range, state.currency),
+          : loadChartHistory(symbol, state, current),
+      history: !asset.demo,
       references: (data) =>
         plans
           .map((sale, i) => {
@@ -77,6 +86,7 @@ export function mountBuybackChart(root, { ownerId, sales, whole, quotes }) {
   if (selected) select(selected);
   return {
     destroy() {
+      context?.destroy();
       chart?.destroy();
     },
   };

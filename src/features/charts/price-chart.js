@@ -1,33 +1,7 @@
 import { referenceLevels } from "../../domain/chart-levels.js";
 import { mountAssetChart } from "./asset-chart.js";
-const cache = new Map(),
-  pending = new Map();
-export async function fetchPriceHistory(symbol, range, currency) {
-  const key = symbol + ":" + range + ":" + currency,
-    previous = cache.get(key);
-  if (previous && Date.now() - previous.at < 60000) return previous.data;
-  if (pending.has(key)) return pending.get(key);
-  const controller = new AbortController(),
-    timer = setTimeout(() => controller.abort(), 18000);
-  const promise = (async () => {
-    try {
-      const response = await fetch(
-        `/api/history?symbol=${encodeURIComponent(symbol)}&range=${range}&currency=${currency}`,
-        { credentials: "same-origin", signal: controller.signal },
-      );
-      const data = await response.json();
-      if (!response.ok) throw Error(data.error || "Price history unavailable.");
-      if (cache.size >= 30) cache.delete(cache.keys().next().value);
-      cache.set(key, { at: Date.now(), data });
-      return data;
-    } finally {
-      clearTimeout(timer);
-      pending.delete(key);
-    }
-  })();
-  pending.set(key, promise);
-  return promise;
-}
+import { loadChartHistory } from "./history-data.js";
+export { fetchPriceHistory } from "./history-data.js";
 export function mountPriceChart(
   root,
   holding,
@@ -42,8 +16,9 @@ export function mountPriceChart(
     label: holding.symbol + " · Price history",
     ranges: true,
     currencyControl: true,
+    candles: true,
     reserveReferences: Number.isFinite(initialLevels.buyIn) || !!holding.lots,
-    load: (state) =>
+    load: (state, current) =>
       holding.demo
         ? Promise.resolve({
             symbol: holding.symbol,
@@ -51,7 +26,8 @@ export function mountPriceChart(
             source: "Demo",
             currency: state.currency,
           })
-        : fetchPriceHistory(holding.symbol, state.range, state.currency),
+        : loadChartHistory(holding.symbol, state, current),
+    history: !holding.demo,
     references: (data) =>
       referenceLevels({
         ...levels,
@@ -66,5 +42,6 @@ export function mountPriceChart(
       chart.redraw();
     },
     destroy: chart.destroy,
+    canLeave: chart.canLeave,
   };
 }

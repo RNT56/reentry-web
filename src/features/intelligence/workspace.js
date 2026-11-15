@@ -1,3 +1,4 @@
+import { mountAssetContextDock } from "../portfolio/context-dock.js";
 import {
   watchlistBar,
   editWatchlists,
@@ -61,6 +62,8 @@ export async function flushResearchOrders(ownerId) {
 export const intelligenceView = () =>
   '<section class="intelligence-page" id="intelligence"></section>';
 export function mountIntelligence(root, { model, navigate }) {
+  let contextDock = null,
+    contextSymbol = null;
   const memory =
     model.intelligence ||
     (model.intelligence = { tab: "research", symbol: null, jobId: null });
@@ -998,6 +1001,20 @@ export function mountIntelligence(root, { model, navigate }) {
           ),
         }
       : null;
+    const contextAsset = ["research", "strategies", "scenarios"].includes(
+      memory.tab,
+    )
+      ? active()
+      : null;
+    const retainedContext =
+      contextAsset?.symbol === contextSymbol
+        ? root.querySelector("[data-research-context]")
+        : null;
+    if (!retainedContext) {
+      contextDock?.destroy();
+      contextDock = null;
+      contextSymbol = null;
+    }
     const retainedChart =
       memory.tab === "research" && chartSymbol === memory.symbol
         ? root.querySelector("#research-chart")
@@ -1045,6 +1062,14 @@ export function mountIntelligence(root, { model, navigate }) {
       const search = root.querySelector("#research-search");
       if (search) search.value = "";
       root.querySelector("#research-search-results")?.replaceChildren();
+    }
+    if (contextAsset) {
+      const dock = retainedContext || document.createElement("nav");
+      dock.setAttribute("data-research-context", "");
+      root.querySelector("#intelligence-content").prepend(dock);
+      if (!retainedContext)
+        contextDock = mountAssetContextDock(dock, contextAsset);
+      contextSymbol = contextAsset.symbol;
     }
     renderedAssets = JSON.stringify(assets);
     renderedWatchlists = watchlistSignature();
@@ -1816,6 +1841,7 @@ export function mountIntelligence(root, { model, navigate }) {
       return !orderSaving && !pendingOrder && !orderUnsynced;
     },
     destroy() {
+      contextDock?.destroy();
       alive = false;
       reorder?.destroy();
       reorder = null;
