@@ -36,7 +36,7 @@ export function chartControlsMarkup(state, drawerId) {
       </div>
       <div class="ta-display-compact">
         <button type="button" data-ta-currency aria-label="Switch chart currency">${state.currency}</button>
-        <button type="button" class="secondary" data-ta-save disabled>Save</button>
+        <span class="ta-sync" data-phase="loading"><span class="ta-sync-mark" aria-hidden="true">${icon("check")}</span><span data-ta-status role="status" aria-live="polite">Loading…</span><button type="button" class="ta-sync-retry" data-ta-sync-retry aria-label="Retry chart autosave" hidden>${icon("refresh")}</button></span>
       </div>
     </div>
     <div class="ta-tool-drawer" id="${esc(drawerId)}" hidden>

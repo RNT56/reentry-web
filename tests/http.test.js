@@ -99,3 +99,16 @@ test("chart writes can finish during reload while retaining credentials and CSRF
   assert.equal(sent.headers["X-Reentry-Request"], "1");
   assert.deepEqual(JSON.parse(sent.body).state.drawings, []);
 });
+
+test("autosave requests bind the intended account independently of the current cookie", async (t) => {
+  let sent;
+  t.mock.method(globalThis, "fetch", async (_path, options) => {
+    sent = options;
+    return new Response(JSON.stringify({ slots: [] }), { status: 200 });
+  });
+  await request("/api/chart-workspaces?symbol=INTC", "GET", undefined, {
+    ownerId: "alice",
+  });
+  assert.equal(sent.headers["X-Reentry-Owner"], "alice");
+  assert.equal(sent.credentials, "same-origin");
+});

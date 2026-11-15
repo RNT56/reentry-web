@@ -38,7 +38,7 @@ export async function request(
   path,
   method = "GET",
   body,
-  { timeout = 20000, signal, keepalive = false } = {},
+  { timeout = 20000, signal, keepalive = false, ownerId } = {},
 ) {
   const deadline = AbortSignal.timeout(timeout);
   let res;
@@ -49,6 +49,9 @@ export async function request(
       keepalive,
       headers: {
         "X-Reentry-Request": "1",
+        ...(ownerId === undefined
+          ? {}
+          : { "X-Reentry-Owner": String(ownerId) }),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),

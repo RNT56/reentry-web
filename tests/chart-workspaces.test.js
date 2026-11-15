@@ -65,7 +65,7 @@ async function fixture() {
     );
     tokens.set(user, token);
   }
-  const call = (user, url, method = "GET", payload) =>
+  const call = (user, url, method = "GET", payload, extraHeaders = {}) =>
     app.inject({
       url,
       method,
@@ -74,6 +74,7 @@ async function fixture() {
         origin,
         "x-reentry-request": "1",
         ...(user ? { cookie: "reentry_dev=" + tokens.get(user) } : {}),
+        ...extraHeaders,
       },
     });
   return {
@@ -389,6 +390,37 @@ test("removing the final drawing and all indicators survives fresh reads, undo a
     assert.equal((await read("second"))[0].state.name, "Other account");
     assert.equal(
       (await f.call("first", "/api/chart-workspaces?symbol=AAPL")).json()
+        .slots[0].state,
+      null,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("a stale tab cannot read or autosave into a different signed-in account", async () => {
+  const f = await fixture();
+  try {
+    for (const [path, method, payload] of [
+      ["/api/chart-workspaces?symbol=INTC", "GET"],
+      ["/api/chart-workspaces/INTC/1", "PUT", { revision: 0, state: state() }],
+      ["/api/chart-workspaces/INTC/1", "DELETE", { revision: 0 }],
+    ]) {
+      const response = await f.call("second", path, method, payload, {
+        "x-reentry-owner": "first",
+      });
+      assert.equal(response.statusCode, 401, response.body);
+    }
+    const response = await f.call(
+      "first",
+      "/api/chart-workspaces/INTC/1",
+      "PUT",
+      { revision: 0, state: state() },
+      { "x-reentry-owner": "first" },
+    );
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(
+      (await f.call("second", "/api/chart-workspaces?symbol=INTC")).json()
         .slots[0].state,
       null,
     );

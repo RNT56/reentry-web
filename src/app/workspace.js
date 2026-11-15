@@ -25,7 +25,10 @@ import {
 import { request } from "../shared/http.js";
 import { showAuth, openPasskeys } from "../features/identity/session.js";
 import { mountPriceChart } from "../features/charts/price-chart.js";
-import { setChartWorkspaceOwner } from "../features/charts/analysis-chart.js";
+import {
+  setChartWorkspaceOwner,
+  flushChartAutosaves,
+} from "../features/charts/chart-sync.js";
 import { createPlanner } from "../features/planner/controller.js";
 import { createPurchases } from "../features/portfolio/purchases.js";
 import { createActivity } from "../features/activity/controller.js";
@@ -176,6 +179,14 @@ export function startWorkspace() {
       );
     } catch {
       toast("Research order not synced. Retry in Research before signing out.");
+      return;
+    }
+    try {
+      await flushChartAutosaves(
+        model.currentUser.id || model.currentUser.username,
+      );
+    } catch (error) {
+      toast(error.message);
       return;
     }
     await flushSave();

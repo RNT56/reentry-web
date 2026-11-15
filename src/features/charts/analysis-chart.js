@@ -1,4 +1,5 @@
-import { request } from "../../shared/http.js";
+import { chartWorkspaceSync } from "./chart-sync.js";
+import { chartStateVersion as versionOf } from "./chart-autosave.js";
 import { mountChartFullscreen } from "../../shared/chart-fullscreen.js";
 import { esc } from "../../shared/format.js";
 import { modal, close, toast, icon } from "../../shared/ui.js";
@@ -6,7 +7,6 @@ import { setAnimatedText, revealChart } from "../../shared/motion.js";
 import { fetchPriceHistory } from "./price-chart.js";
 import { historyRanges } from "../../domain/market-history.js";
 import {
-  defaultChartWorkspaceState,
   MAX_CHART_DRAWINGS,
   validateChartWorkspaceState,
 } from "../../domain/chart-workspace.js";
@@ -32,30 +32,14 @@ import {
   toolLabels,
 } from "./analysis-render.js";
 
-const drafts = new Map();
 const instances = new Map();
-const pendingSaves = new Map();
 const clone = (value) => structuredClone(value);
-const versionOf = (value) =>
-  JSON.stringify(value, (_key, item) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
-        )
-      : item,
-  );
 const localDate = (time) => {
   const d = new Date(time * 1000);
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 16);
 };
-let unloadInstalled = false,
-  activeOwner = null;
-export function setChartWorkspaceOwner(ownerId) {
-  activeOwner =
-    ownerId === null || ownerId === undefined ? null : String(ownerId);
-}
 export function mountAnalysisChart(
   root,
   asset,
@@ -71,26 +55,24 @@ export function mountAnalysisChart(
     instance = Symbol(key);
   instances.set(key, instance);
   root.analysisChartInstance = instance;
-  let memo = drafts.get(key),
-    state = clone(memo?.state || defaultChartWorkspaceState()),
-    slot = memo?.slot || 1,
+  const sync = chartWorkspaceSync(owner, asset.symbol);
+  let slot = sync.selected,
+    state = sync.get(slot).state,
     slots = Array.from({ length: 3 }, (_, i) => ({
       slot: i + 1,
       revision: 0,
       state: null,
     })),
-    dirty = !!memo?.dirty,
+    dirty = sync.get(slot).dirty,
     ready = false,
     disposed = false,
     busy = false,
-    saving = false,
     managing = false,
     toolsOpen = false,
     fullscreen = null,
     fullscreenSettings = false,
     fullscreenPlacements = [],
     gestureBefore = null,
-    baseRevision = memo?.revision ?? 0,
     conflict = false,
     data = null,
     indicators = null,
@@ -107,43 +89,22 @@ export function mountAnalysisChart(
     redo = [],
     aiLayer = null,
     aiVersion = "null",
+    selectionMarkup = "",
     contextVersion = "";
   const chartContext = () => ({
     range: data?.range || state.range,
     currency: data?.currency || state.currency,
   });
-  if (!unloadInstalled) {
-    unloadInstalled = true;
-    addEventListener("beforeunload", (e) => {
-      if (
-        activeOwner !== null &&
-        [...drafts.values()].some((d) => d.ownerId === activeOwner && d.dirty)
-      ) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    });
-  }
   const live = () =>
     !disposed &&
     root.isConnected &&
     instances.get(key) === instance &&
     root.analysisChartInstance === instance;
-  const editable = () => live() && ready && !busy && !saving && !managing;
+  const editable = () => live() && ready && !busy && !managing;
   const remember = () => {
-    if (disposed || instances.get(key) !== instance) return;
-    drafts.set(key, {
-      ownerId: owner,
-      state: clone(state),
-      slot,
-      dirty,
-      revision: baseRevision,
-      instance,
-    });
-    if (drafts.size > 40) {
-      const oldest = [...drafts].find(([k, v]) => k !== key && !v.dirty);
-      if (oldest) drafts.delete(oldest[0]);
-    }
+    if (disposed || !ready || instances.get(key) !== instance) return;
+    sync.update(slot, state);
+    dirty = sync.get(slot).dirty;
   };
   const status = (message, error = false) => {
     if (!live()) return;
@@ -157,9 +118,6 @@ export function mountAnalysisChart(
     updateChrome();
   }
   function reconcileDirty() {
-    const baseline =
-      slots[slot - 1].state || defaultChartWorkspaceState("Analysis " + slot);
-    dirty = versionOf(state) !== versionOf(baseline);
     remember();
   }
   function checkpoint() {
@@ -170,7 +128,7 @@ export function mountAnalysisChart(
   const drawerId = "ta-tools-" + crypto.randomUUID();
   const fullscreenPanelId = "ta-workspace-" + crypto.randomUUID();
   root.classList.add("analysis-chart");
-  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-heading-actions"><button type="button" class="ta-fullscreen-settings" data-ta-fullscreen-settings aria-label="Chart workspace settings" aria-controls="${fullscreenPanelId}" aria-expanded="false">${icon("sliders")}<span>Workspace</span></button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><span data-ta-status role="status">Loading…</span><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
+  root.innerHTML = `<div class="ta-heading"><div class="ta-readout"><div class="ta-price" data-number>—</div><div class="ta-change" data-number>—</div></div><div class="ta-heading-actions"><button type="button" class="ta-fullscreen-settings" data-ta-fullscreen-settings aria-label="Chart workspace settings" aria-controls="${fullscreenPanelId}" aria-expanded="false">${icon("sliders")}<span>Workspace</span></button></div></div><div class="ta-ohlc" aria-label="Selected candle values"><span data-ta-time>—</span><span data-ta-ohlc></span></div><div class="ta-plot" tabindex="0" role="slider" aria-label="${esc(asset.symbol)} chart. Drag to pan; scroll or pinch to zoom. Arrow keys inspect, plus and minus zoom; Delete removes a selected drawing." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-busy="true"><div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ta-active-row" hidden><span data-ta-guide></span><div data-ta-selected></div></div><div class="ta-caption"><span data-ta-source>Market history</span><span data-ta-count>0 / ${MAX_CHART_DRAWINGS} drawings</span></div><div class="ta-message" role="status"></div><div class="ta-workspaces"><div class="ta-slots" role="group" aria-label="Your saved analyses">${[1, 2, 3].map((n) => `<button type="button" data-ta-slot="${n}" aria-label="Analysis slot ${n}" aria-pressed="${n === slot}"><span>0${n}</span><b>Analysis ${n}</b></button>`).join("")}</div><div class="ta-save"><button class="icon-button" data-ta-manage aria-label="Manage saved analysis">${icon("sliders")}</button></div></div><div class="ta-analysis-settings"><input class="ta-name" value="${esc(state.name)}" maxlength="40" aria-label="Analysis name"><div class="ta-ranges" role="group" aria-label="Chart time range">${Object.entries(
     historyRanges,
   )
     .map(
@@ -260,7 +218,7 @@ export function mountAnalysisChart(
   }
   function updateChrome() {
     if (!live()) return;
-    const locked = !ready || busy || saving || managing;
+    const locked = !ready || busy || managing;
     root.querySelector(".ta-name").disabled = locked;
     root
       .querySelectorAll(
@@ -278,14 +236,6 @@ export function mountAnalysisChart(
       b.classList.toggle("has-save", !!saved.state);
       b.disabled = locked;
     });
-    root.querySelector("[data-ta-save]").disabled =
-      locked ||
-      conflict ||
-      !state.name.trim() ||
-      (!dirty && !!slots[slot - 1].state);
-    root.querySelector("[data-ta-save]").textContent = saving
-      ? "Saving…"
-      : "Save";
     root.querySelector("[data-ta-manage]").disabled = locked;
     root.querySelector("[data-ta-manage]").title = conflict
       ? "Reload the saved analysis to resolve this conflict"
@@ -314,9 +264,15 @@ export function mountAnalysisChart(
     root.querySelector("[data-ta-count]").textContent =
       state.drawings.length + " / " + MAX_CHART_DRAWINGS + " drawings";
     const selectedDrawing = state.drawings.find((d) => d.id === selected);
-    root.querySelector("[data-ta-selected]").innerHTML = selectedDrawing
+    const selection = root.querySelector("[data-ta-selected]");
+    const selectionHTML = selectedDrawing
       ? `<span>${esc(selectedDrawing.text || toolLabels[selectedDrawing.type])}</span><button data-ta-edit>Edit</button><button data-ta-delete aria-label="Delete selected drawing">${chartControlIcon("trash")}<span>Delete</span></button>`
       : "";
+    // Save acknowledgments must not replace focused editing controls.
+    if (selectionMarkup !== selectionHTML) {
+      selection.innerHTML = selectionHTML;
+      selectionMarkup = selectionHTML;
+    }
     root.querySelector(".ta-active-row").hidden =
       tool === "inspect" && !selectedDrawing;
     root
@@ -366,23 +322,31 @@ export function mountAnalysisChart(
     root
       .querySelectorAll("[data-ta-edit],[data-ta-delete]")
       .forEach((b) => (b.disabled = locked));
-    if (!saving)
-      status(
-        !ready
-          ? "Loading…"
-          : managing
-            ? "Updating…"
-            : conflict
-              ? "Changed elsewhere · reload in Manage"
-              : !state.name.trim()
-                ? "Name this analysis"
-                : dirty
-                  ? "Unsaved"
-                  : slots[slot - 1]?.state
-                    ? "Saved"
-                    : "Private · " + slot + "/3",
-        conflict,
-      );
+    const savingState = sync.get(slot);
+    dirty = savingState.dirty;
+    conflict = savingState.phase === "conflict";
+    const phase = !ready ? "loading" : managing ? "saving" : savingState.phase;
+    const labels = {
+      loading: "Loading…",
+      pending: "Saving…",
+      saving: "Saving…",
+      saved: "Saved",
+      retrying: "Retrying…",
+      error: "Not synced",
+      conflict: "Conflict",
+    };
+    status(labels[phase] || "Saved", ["error", "conflict"].includes(phase));
+    const syncUI = root.querySelector(".ta-sync"),
+      retry = root.querySelector("[data-ta-sync-retry]");
+    syncUI.dataset.phase = phase;
+    syncUI.title =
+      savingState.error ||
+      (phase === "saved" ? "All chart changes saved" : "Saving chart changes");
+    retry.hidden = !["error", "retrying", "conflict"].includes(phase);
+    retry.setAttribute(
+      "aria-label",
+      phase === "conflict" ? "Resolve chart conflict" : "Retry chart autosave",
+    );
     const context = chartContext(),
       nextContext = JSON.stringify(context);
     if (contextVersion !== nextContext) {
@@ -597,6 +561,7 @@ export function mountAnalysisChart(
       data = result;
       indicators = technicalIndicators(data.points);
       busy = false;
+      remember();
       draw(true);
       return true;
     } catch (e) {
@@ -620,78 +585,15 @@ export function mountAnalysisChart(
       return false;
     }
   }
-  async function save({ automatic = false } = {}) {
-    if (!editable() || conflict) return false;
-    if (automatic && !state.name.trim())
-      state.name = slots[slot - 1].state?.name || "Analysis " + slot;
-    if (!state.name.trim()) return false;
-    state.name = state.name.trim();
-    root.querySelector(".ta-name").value = state.name;
-    const savedSlot = slot,
-      version = versionOf(state),
-      snapshot = clone(state),
-      revision = baseRevision;
-    try {
-      validateChartWorkspaceState(snapshot);
-    } catch (e) {
-      status(e.message, true);
-      return false;
-    }
-    saving = true;
-    updateChrome();
-    status("Saving…");
-    try {
-      const pending = request(
-        "/api/chart-workspaces/" +
-          encodeURIComponent(asset.symbol) +
-          "/" +
-          savedSlot,
-        "PUT",
-        { revision, state: snapshot },
-        { keepalive: true },
-      );
-      pendingSaves.set(key, pending);
-      const result = await pending.finally(() => {
-        if (pendingSaves.get(key) === pending) pendingSaves.delete(key);
-      });
-      if (!live()) {
-        const stored = drafts.get(key);
-        if (!instances.has(key) && stored?.instance === instance) {
-          stored.revision = result.revision;
-          if (versionOf(stored.state) === version) stored.dirty = false;
-        }
-        return false;
-      }
-      slots[savedSlot - 1] = result;
-      if (slot === savedSlot) {
-        baseRevision = result.revision;
-        if (versionOf(state) === version) dirty = false;
-      }
-      remember();
-      saving = false;
-      if (live()) updateChrome();
-      return slot === savedSlot && !dirty;
-    } catch (e) {
-      if (!live()) return false;
-      saving = false;
-      if (e.status === 409) conflict = true;
-      remember();
-      updateChrome();
-      status(e.message, true);
-      return false;
-    }
-  }
   async function switchSlot(next) {
     if (next === slot || !editable()) return;
-    if (dirty && !(await save())) return;
-    if (!live() || dirty) return;
+    remember();
+    void sync.flush(slot);
     slot = next;
-    baseRevision = slots[slot - 1].revision;
-    state = clone(
-      slots[slot - 1].state || defaultChartWorkspaceState("Analysis " + slot),
-    );
-    dirty = false;
-    conflict = false;
+    sync.select(slot);
+    state = sync.get(slot).state;
+    dirty = sync.get(slot).dirty;
+    conflict = sync.get(slot).phase === "conflict";
     undo = [];
     redo = [];
     selected = null;
@@ -1041,7 +943,7 @@ export function mountAnalysisChart(
     state.name = e.target.value;
     mark();
   };
-  root.onchange = async (e) => {
+  root.onchange = (e) => {
     if (e.target.dataset.taIndicator) {
       const checked = e.target.checked;
       gestures.finish();
@@ -1058,7 +960,6 @@ export function mountAnalysisChart(
         : state.indicators.filter((x) => x !== id);
       reconcileDirty();
       draw();
-      await persistAnalysisEdit();
     }
   };
   root.onkeydown = (e) => {
@@ -1086,23 +987,6 @@ export function mountAnalysisChart(
         : zoomChartView(view(), factor),
     );
   }
-  async function persistAnalysisEdit(previous) {
-    if (!dirty) return;
-    // Pan/zoom history remains a draft; deleting or restoring TA is durable.
-    if (
-      previous &&
-      versionOf(previous.drawings) === versionOf(state.drawings) &&
-      versionOf(previous.indicators) === versionOf(state.indicators)
-    )
-      return;
-    const saved = await save({ automatic: true });
-    if (!saved && live() && dirty)
-      toast(
-        conflict
-          ? "Analysis changed elsewhere. Reload it in Manage."
-          : "Chart changes not saved. Retry with Save.",
-      );
-  }
   async function removeDrawing(id) {
     if (!editable() || !state.drawings.some((d) => d.id === id)) return;
     checkpoint();
@@ -1110,55 +994,23 @@ export function mountAnalysisChart(
     if (selected === id) selected = null;
     reconcileDirty();
     draw();
-    await persistAnalysisEdit();
   }
   function manage() {
     if (!editable()) return;
-    const managedSlot = slot,
-      managedRevision = baseRevision,
-      managedVersion = versionOf(state);
-    async function applyAction(action, actionControl) {
-      if (
-        !editable() ||
-        slot !== managedSlot ||
-        versionOf(state) !== managedVersion
-      )
-        return;
+    const managedSlot = slot;
+    async function applyAction(action, control) {
+      if (!editable() || slot !== managedSlot) return;
       managing = true;
       updateChrome();
       document
         .querySelectorAll("#ta-reload,#ta-remove,#ta-confirm-clear")
         .forEach((b) => (b.disabled = true));
       try {
-        const result =
-          action === "clear"
-            ? await request(
-                "/api/chart-workspaces/" +
-                  encodeURIComponent(asset.symbol) +
-                  "/" +
-                  managedSlot,
-                "DELETE",
-                { revision: managedRevision },
-                { keepalive: true },
-              )
-            : await request(
-                "/api/chart-workspaces?symbol=" +
-                  encodeURIComponent(asset.symbol),
-              );
+        const result = await sync.reset(managedSlot, action === "clear");
         if (!live()) return;
-        if (action === "clear") slots[managedSlot - 1] = result;
-        else slots = result.slots;
-        if (slot !== managedSlot || versionOf(state) !== managedVersion) {
-          if (slot === managedSlot) baseRevision = slots[slot - 1].revision;
-          remember();
-          return;
-        }
-        state = clone(
-          slots[managedSlot - 1].state ||
-            defaultChartWorkspaceState("Analysis " + managedSlot),
-        );
-        baseRevision = slots[managedSlot - 1].revision;
-        dirty = false;
+        slots = sync.slots();
+        state = result.state;
+        dirty = result.dirty;
         conflict = false;
         undo = [];
         redo = [];
@@ -1169,16 +1021,11 @@ export function mountAnalysisChart(
         data = null;
         geometry = null;
         root.querySelector(".ta-name").value = state.name;
-        plot.innerHTML =
-          '<div class="ta-loading" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>';
-        remember();
-        if (actionControl?.isConnected) close();
+        if (control?.isConnected) close();
         managing = false;
         await loadHistory();
-      } catch (e) {
-        if (!live()) return;
-        if (e.status === 409 && slot === managedSlot) conflict = true;
-        toast(e.message);
+      } catch (error) {
+        if (live()) toast(error.message);
       } finally {
         if (live()) {
           managing = false;
@@ -1190,15 +1037,15 @@ export function mountAnalysisChart(
       }
     }
     modal(
-      `<h2>${esc(state.name || "Analysis " + slot)}</h2><div class="actions"><button class="secondary" id="ta-reload">Reload saved</button><button class="danger" id="ta-remove" ${!slots[managedSlot - 1].state ? "disabled" : ""}>Clear slot ${managedSlot}</button></div>`,
+      `<h2>${esc(state.name || "Analysis " + slot)}</h2><div class="actions"><button class="secondary" id="ta-reload">Reload saved</button><button class="danger" id="ta-remove">Clear slot ${managedSlot}</button></div>`,
     );
     document.querySelector("#ta-reload").onclick = (event) =>
       applyAction("reload", event.currentTarget);
     document.querySelector("#ta-remove").onclick = () => {
       if (!editable() || slot !== managedSlot) return;
-      const drawingCount = slots[managedSlot - 1].state?.drawings.length || 0;
+      const count = state.drawings.length;
       modal(
-        `<h2>Clear analysis ${managedSlot}?</h2><p class="sub">${drawingCount} saved ${drawingCount === 1 ? "drawing" : "drawings"}</p><div class="actions"><button class="secondary" id="ta-cancel-clear">Keep analysis</button><button class="danger" id="ta-confirm-clear">Clear analysis</button></div>`,
+        `<h2>Clear analysis ${managedSlot}?</h2><p class="sub">${count} ${count === 1 ? "drawing" : "drawings"}</p><div class="actions"><button class="secondary" id="ta-cancel-clear">Keep analysis</button><button class="danger" id="ta-confirm-clear">Clear analysis</button></div>`,
       );
       document.querySelector("#ta-cancel-clear").onclick = close;
       document.querySelector("#ta-confirm-clear").onclick = (event) =>
@@ -1242,8 +1089,9 @@ export function mountAnalysisChart(
       await switchSlot(Number(b.dataset.taSlot));
       return;
     }
-    if (b.hasAttribute("data-ta-save")) {
-      await save();
+    if (b.hasAttribute("data-ta-sync-retry")) {
+      if (sync.get(slot).phase === "conflict") manage();
+      else await sync.retry(slot);
       return;
     }
     if (b.hasAttribute("data-ta-manage")) {
@@ -1308,7 +1156,6 @@ export function mountAnalysisChart(
       pendingAnchor = null;
       selected = null;
       root.querySelector(".ta-name").value = state.name;
-      reconcileDirty();
       updateChrome();
       if (data.range !== state.range || data.currency !== state.currency) {
         if (!(await loadHistory({ rollback: previous })) && live()) {
@@ -1317,7 +1164,7 @@ export function mountAnalysisChart(
           updateChrome();
         }
       } else draw();
-      await persistAnalysisEdit(previous);
+      reconcileDirty();
       return;
     }
     if (b.hasAttribute("data-ta-redo") && redo.length) {
@@ -1329,7 +1176,6 @@ export function mountAnalysisChart(
       pendingAnchor = null;
       selected = null;
       root.querySelector(".ta-name").value = state.name;
-      reconcileDirty();
       updateChrome();
       if (data.range !== state.range || data.currency !== state.currency) {
         if (!(await loadHistory({ rollback: previous })) && live()) {
@@ -1338,7 +1184,7 @@ export function mountAnalysisChart(
           updateChrome();
         }
       } else draw();
-      await persistAnalysisEdit(previous);
+      reconcileDirty();
       return;
     }
     if (b.dataset.taZoom) {
@@ -1367,7 +1213,6 @@ export function mountAnalysisChart(
       pendingAnchor = null;
       selected = null;
       tool = "inspect";
-      mark();
       if (!(await loadHistory({ rollback: previous })) && live()) {
         undo = previousUndo;
         redo = previousRedo;
@@ -1403,32 +1248,14 @@ export function mountAnalysisChart(
     updateChrome();
     plot.setAttribute("aria-busy", "true");
     try {
-      const pending = pendingSaves.get(key);
-      if (pending) await pending.catch(() => {});
+      await sync.load();
       if (!live() || generation !== storageGeneration) return;
-      const result = await request(
-        "/api/chart-workspaces?symbol=" + encodeURIComponent(asset.symbol),
-      );
-      if (!live() || generation !== storageGeneration) return;
-      slots = result.slots;
+      slots = sync.slots();
+      slot = sync.selected;
+      state = sync.get(slot).state;
+      dirty = sync.get(slot).dirty;
+      conflict = sync.get(slot).phase === "conflict";
       ready = true;
-      if (dirty) {
-        const remote = slots[slot - 1];
-        const same =
-          remote.state && versionOf(remote.state) === versionOf(state);
-        conflict = baseRevision !== remote.revision && !same;
-        if (same) dirty = false;
-        if (!conflict) baseRevision = remote.revision;
-      } else {
-        const first = slots.find((s) => s.state);
-        slot = memo?.slot || first?.slot || 1;
-        state = clone(
-          slots[slot - 1].state ||
-            defaultChartWorkspaceState("Analysis " + slot),
-        );
-        baseRevision = slots[slot - 1].revision;
-        conflict = false;
-      }
       root.querySelector(".ta-name").value = state.name;
       remember();
       updateChrome();
@@ -1443,6 +1270,11 @@ export function mountAnalysisChart(
       plot.setAttribute("aria-busy", "false");
     }
   }
+  const unsubscribe = sync.subscribe(() => {
+    if (!live()) return;
+    slots = sync.slots();
+    updateChrome();
+  });
   updateChrome();
   loadWorkspaces();
   return {
@@ -1461,7 +1293,10 @@ export function mountAnalysisChart(
     destroy() {
       fullscreen?.destroy();
       gestures.finish();
+      finishDrag();
       remember();
+      unsubscribe();
+      void sync.flush(slot);
       gestures.destroy();
       disposed = true;
       if (instances.get(key) === instance) instances.delete(key);

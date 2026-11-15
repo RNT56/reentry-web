@@ -19,7 +19,14 @@ function parameters(params, body) {
 
 export function registerChartWorkspaceRoutes(app, db) {
   const repository = chartWorkspaceRepository(db);
-  const auth = { preHandler: app.requireUser };
+  const auth = {
+    preHandler: async (req) => {
+      await app.requireUser(req);
+      const owner = req.headers["x-reentry-owner"];
+      if (owner !== undefined && owner !== req.auth.user_id)
+        throw fail("Account changed. Sign in again.", 401);
+    },
+  };
   app.get("/api/chart-workspaces", auth, async (req) => {
     const symbol = validateSymbol(req.query.symbol);
     return { symbol, slots: repository.list(req.auth.user_id, symbol) };

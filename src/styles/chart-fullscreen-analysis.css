@@ -502,7 +502,7 @@
     );
   }
 }
-/* Six full-size touch targets fit even a 320px phone without a second row. */
+/* Compact full-size touch targets fit even a 320px phone without a second row. */
 @media (max-width: 400px) and (any-pointer: coarse) {
   .chart-fullscreen .ta-control-bar {
     gap: 4px;
