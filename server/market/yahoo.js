@@ -1,5 +1,9 @@
 import { historyPath, normalizeHistory } from "./yahoo-history.js";
 import { assetInfo } from "../../src/domain/assets.js";
+import {
+  returnHistoryPath,
+  normalizeReturnHistory,
+} from "./return-history.js";
 // Provider-specific symbols, payloads and URLs terminate at this boundary.
 export function yahooProvider({ fetcher = fetch } = {}) {
   async function get(path) {
@@ -24,6 +28,12 @@ export function yahooProvider({ fetcher = fetch } = {}) {
   }
   return {
     source: "Yahoo Finance",
+    async returnHistory(symbol) {
+      return normalizeReturnHistory(
+        await get(returnHistoryPath(symbol)),
+        symbol,
+      );
+    },
     async search(query) {
       const payload = await get(
         "/v1/finance/search?q=" +

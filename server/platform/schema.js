@@ -59,6 +59,13 @@ export const platformMigrations = [
     version: 7,
     sql: `CREATE TABLE political_archives(id TEXT PRIMARY KEY,revision TEXT NOT NULL,payload BLOB NOT NULL,updated_at INTEGER NOT NULL);`,
   },
+  {
+    version: 8,
+    sql: `
+      CREATE TABLE political_return_prices(symbol TEXT PRIMARY KEY,payload BLOB NOT NULL,checked_at INTEGER NOT NULL,next_check INTEGER NOT NULL);
+      CREATE TABLE political_return_estimates(member TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,payload BLOB NOT NULL,updated_at INTEGER NOT NULL,next_check INTEGER NOT NULL,failed INTEGER NOT NULL DEFAULT 0);
+    `,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

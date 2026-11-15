@@ -1,5 +1,6 @@
 import { createPoliticalIntelligence } from "../politics/service.js";
 import { registerPoliticalRoutes } from "../politics/routes.js";
+import { createPoliticalReturns } from "../politics/returns-service.js";
 import { registerWatchlistRoutes } from "../watchlists/store.js";
 import { registerAdminRoutes } from "../admin/routes.js";
 import { createMacroService } from "../macro/service.js";
@@ -37,7 +38,12 @@ export function registerPlatform(app, db, market, options = {}) {
       enabled:
         options.workerEnabled ?? process.env.ENABLE_BACKGROUND_JOBS === "true",
     });
-  registerPoliticalRoutes(app, { db, politics });
+  const politicalReturns = createPoliticalReturns({
+    db,
+    market,
+    now: Date.now,
+  });
+  registerPoliticalRoutes(app, { db, politics, politicalReturns });
   registerMacroRoutes(app, macro);
   registerStrategyRoutes(app, { market });
   registerChartWorkspaceRoutes(app, db);
@@ -88,6 +94,7 @@ export function registerPlatform(app, db, market, options = {}) {
     }
   });
   app.addHook("onClose", async () => {
+    await politicalReturns.stop();
     await politics.stop?.();
     await portfolioSources.stop();
     await engine.stop();

@@ -16,6 +16,10 @@ export function createMarketService({
   const rawQuote = (symbol) =>
     cache("raw:" + symbol, () => provider.quote(symbol));
   return {
+    returnHistory(symbol) {
+      checkSymbol(symbol);
+      return provider.returnHistory(symbol);
+    },
     search(query = "") {
       if (typeof query !== "string" || query.length > 80)
         throw invalid("Search is too long.");

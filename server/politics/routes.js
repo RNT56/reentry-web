@@ -128,11 +128,23 @@ export function filterDisclosures(
         )),
   );
 }
-export function registerPoliticalRoutes(app, { db, politics }) {
+export function registerPoliticalRoutes(
+  app,
+  { db, politics, politicalReturns },
+) {
   const auth = { preHandler: app.requireUser };
   app.get("/api/politics/status", auth, async () =>
     feedStatus(await politics.get()),
   );
+  app.get("/api/politics/returns", auth, async (req) => {
+    if (typeof req.query.member !== "string" || req.query.member.length > 100)
+      throw fail("Choose a person.");
+    const data = await politics.get(),
+      id = data.aliases?.[req.query.member] || req.query.member,
+      person = data.people?.find((p) => p.id === id);
+    if (!person) throw fail("Person not found.", 404);
+    return politicalReturns.get(person, data.rows);
+  });
   app.post("/api/politics/refresh", auth, async () =>
     feedStatus(await politics.get({ force: true })),
   );
