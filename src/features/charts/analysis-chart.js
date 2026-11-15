@@ -620,8 +620,11 @@ export function mountAnalysisChart(
       return false;
     }
   }
-  async function save() {
-    if (!editable() || conflict || !state.name.trim()) return false;
+  async function save({ automatic = false } = {}) {
+    if (!editable() || conflict) return false;
+    if (automatic && !state.name.trim())
+      state.name = slots[slot - 1].state?.name || "Analysis " + slot;
+    if (!state.name.trim()) return false;
     state.name = state.name.trim();
     root.querySelector(".ta-name").value = state.name;
     const savedSlot = slot,
@@ -645,6 +648,7 @@ export function mountAnalysisChart(
           savedSlot,
         "PUT",
         { revision, state: snapshot },
+        { keepalive: true },
       );
       pendingSaves.set(key, pending);
       const result = await pending.finally(() => {
@@ -1037,7 +1041,7 @@ export function mountAnalysisChart(
     state.name = e.target.value;
     mark();
   };
-  root.onchange = (e) => {
+  root.onchange = async (e) => {
     if (e.target.dataset.taIndicator) {
       const checked = e.target.checked;
       gestures.finish();
@@ -1054,6 +1058,7 @@ export function mountAnalysisChart(
         : state.indicators.filter((x) => x !== id);
       reconcileDirty();
       draw();
+      await persistAnalysisEdit();
     }
   };
   root.onkeydown = (e) => {
@@ -1081,13 +1086,31 @@ export function mountAnalysisChart(
         : zoomChartView(view(), factor),
     );
   }
-  function removeDrawing(id) {
+  async function persistAnalysisEdit(previous) {
+    if (!dirty) return;
+    // Pan/zoom history remains a draft; deleting or restoring TA is durable.
+    if (
+      previous &&
+      versionOf(previous.drawings) === versionOf(state.drawings) &&
+      versionOf(previous.indicators) === versionOf(state.indicators)
+    )
+      return;
+    const saved = await save({ automatic: true });
+    if (!saved && live() && dirty)
+      toast(
+        conflict
+          ? "Analysis changed elsewhere. Reload it in Manage."
+          : "Chart changes not saved. Retry with Save.",
+      );
+  }
+  async function removeDrawing(id) {
     if (!editable() || !state.drawings.some((d) => d.id === id)) return;
     checkpoint();
     state.drawings = state.drawings.filter((d) => d.id !== id);
     if (selected === id) selected = null;
     reconcileDirty();
     draw();
+    await persistAnalysisEdit();
   }
   function manage() {
     if (!editable()) return;
@@ -1116,6 +1139,7 @@ export function mountAnalysisChart(
                   managedSlot,
                 "DELETE",
                 { revision: managedRevision },
+                { keepalive: true },
               )
             : await request(
                 "/api/chart-workspaces?symbol=" +
@@ -1256,7 +1280,8 @@ export function mountAnalysisChart(
       const index = state.drawings.findIndex(
         (d) => d.id === b.dataset.taDeleteDrawing,
       );
-      removeDrawing(b.dataset.taDeleteDrawing);
+      await removeDrawing(b.dataset.taDeleteDrawing);
+      if (!live()) return;
       const next = root.querySelectorAll("[data-ta-select-drawing]");
       (
         next[Math.min(index, next.length - 1)] ||
@@ -1269,7 +1294,8 @@ export function mountAnalysisChart(
       return;
     }
     if (b.hasAttribute("data-ta-delete")) {
-      removeDrawing(selected);
+      await removeDrawing(selected);
+      if (!live()) return;
       plot.focus({ preventScroll: true });
       return;
     }
@@ -1291,6 +1317,7 @@ export function mountAnalysisChart(
           updateChrome();
         }
       } else draw();
+      await persistAnalysisEdit(previous);
       return;
     }
     if (b.hasAttribute("data-ta-redo") && redo.length) {
@@ -1311,6 +1338,7 @@ export function mountAnalysisChart(
           updateChrome();
         }
       } else draw();
+      await persistAnalysisEdit(previous);
       return;
     }
     if (b.dataset.taZoom) {

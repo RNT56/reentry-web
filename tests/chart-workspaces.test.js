@@ -342,3 +342,57 @@ test("chart migration is additive and repeated startup retains saved state and r
     await f.close();
   }
 });
+
+test("removing the final drawing and all indicators survives fresh reads, undo and redo", async () => {
+  const f = await fixture();
+  try {
+    const path = "/api/chart-workspaces/INTC/1";
+    const original = state();
+    await f.call("first", path, "PUT", { revision: 0, state: original });
+    await f.call("first", "/api/chart-workspaces/INTC/2", "PUT", {
+      revision: 0,
+      state: state("Other slot"),
+    });
+    await f.call("second", path, "PUT", {
+      revision: 0,
+      state: state("Other account"),
+    });
+    const cleared = { ...original, drawings: [], indicators: [] };
+    const read = async (user = "first") =>
+      (await f.call(user, "/api/chart-workspaces?symbol=INTC")).json().slots;
+    const remove = await f.call("first", path, "PUT", {
+      revision: 1,
+      state: cleared,
+    });
+    assert.equal(remove.statusCode, 200, remove.body);
+    assert.deepEqual((await read())[0].state, cleared);
+    // A stale tab cannot resurrect deleted TA, while undo intentionally can.
+    assert.equal(
+      (await f.call("first", path, "PUT", { revision: 1, state: original }))
+        .statusCode,
+      409,
+    );
+    assert.deepEqual((await read())[0].state.drawings, []);
+    assert.equal(
+      (await f.call("first", path, "PUT", { revision: 2, state: original }))
+        .statusCode,
+      200,
+    );
+    assert.deepEqual((await read())[0].state, original);
+    assert.equal(
+      (await f.call("first", path, "PUT", { revision: 3, state: cleared }))
+        .statusCode,
+      200,
+    );
+    assert.deepEqual((await read())[0].state, cleared);
+    assert.equal((await read())[1].state.name, "Other slot");
+    assert.equal((await read("second"))[0].state.name, "Other account");
+    assert.equal(
+      (await f.call("first", "/api/chart-workspaces?symbol=AAPL")).json()
+        .slots[0].state,
+      null,
+    );
+  } finally {
+    await f.close();
+  }
+});

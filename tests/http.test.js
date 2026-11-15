@@ -78,3 +78,24 @@ test("bodyless deletion preserves CSRF header without declaring an empty JSON bo
   assert.equal(calls[1].headers["Content-Type"], "application/json");
   assert.equal(JSON.parse(calls[1].body).symbol, "INTC");
 });
+
+test("chart writes can finish during reload while retaining credentials and CSRF protection", async (t) => {
+  let sent;
+  t.mock.method(globalThis, "fetch", async (path, options) => {
+    sent = { path, ...options };
+    return new Response(JSON.stringify({ revision: 2 }), { status: 200 });
+  });
+  await request(
+    "/api/chart-workspaces/INTC/1",
+    "PUT",
+    {
+      revision: 1,
+      state: { drawings: [] },
+    },
+    { keepalive: true },
+  );
+  assert.equal(sent.keepalive, true);
+  assert.equal(sent.credentials, "same-origin");
+  assert.equal(sent.headers["X-Reentry-Request"], "1");
+  assert.deepEqual(JSON.parse(sent.body).state.drawings, []);
+});

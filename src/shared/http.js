@@ -38,7 +38,7 @@ export async function request(
   path,
   method = "GET",
   body,
-  { timeout = 20000, signal } = {},
+  { timeout = 20000, signal, keepalive = false } = {},
 ) {
   const deadline = AbortSignal.timeout(timeout);
   let res;
@@ -46,6 +46,7 @@ export async function request(
     res = await fetch(path, {
       method,
       credentials: "same-origin",
+      keepalive,
       headers: {
         "X-Reentry-Request": "1",
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
