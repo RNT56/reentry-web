@@ -40,6 +40,10 @@ The author allowlist grants publishing rights, not access to other users’ acco
 
 ## Studio writing and article presentation
 
+New drafts and existing articles share an asset autocomplete. Search by name, symbol or ISIN, then choose a listing with its exchange visible. Arrow keys, Enter and Escape work alongside pointer selection. Unconfirmed primary searches cannot be saved, previewed or sent for AI work; late search responses are discarded. Existing draft symbols remain usable if search is unavailable.
+
+Each article has one primary asset for its scenario map and up to seven related assets for discovery. Selection stores exact provider symbols and descriptive metadata. Draft links and published-edition links live in separate additive tables. Editing a draft never changes public asset associations until a new edition is explicitly published. Journal filters and portfolio article context match both primary and related assets from the published snapshot. Related assets do not inherit the primary asset's price targets. The private research export includes both association tables, and deleting a never-published draft cascades to its asset links.
+
 Studio offers a rich text editor and an editable Markdown source view. Both use the same safe Markdown renderer as published articles: headings, emphasis, lists, block quotes, links, dividers, code and tables. Raw HTML is escaped, unsafe links are rejected, and image syntax displays its description without loading remote images. The toolbar includes table editing, find and replace, word count, reading time and undo/redo. Save remains explicit, with optimistic revision checks; saving preserves the active editor and its undo history. Mapped passages can match visible text across Markdown emphasis.
 
 **Preview** renders the current unsaved draft through the published-article template in a private desktop or mobile viewport. It does not save, publish, create an edition or expose a public URL. Incomplete mappings and source rows are omitted with a visible warning. Preview pages are marked noindex and use the author-only, no-store API.

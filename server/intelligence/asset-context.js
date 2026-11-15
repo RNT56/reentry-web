@@ -1,3 +1,4 @@
+import { publishedAssetFilter } from "../journal/assets.js";
 import { symbol } from "../platform/util.js";
 
 const parse = (value, fallback) => {
@@ -20,7 +21,7 @@ const excerpt = (value, length = 180) =>
 /** Read-only, exact-listing context. Public content comes exclusively from published snapshots. */
 export function assetContext(db, owner, asset) {
   const journalFrom =
-    "FROM articles a JOIN article_revisions r ON r.article_id=a.id AND r.revision=a.published_revision WHERE r.symbol=?";
+    "FROM articles a JOIN article_revisions r ON r.article_id=a.id AND r.revision=a.published_revision WHERE " + publishedAssetFilter;
   const researchFrom =
     "FROM ai_jobs WHERE user_id=? AND symbol=? AND kind='research' AND status='completed'";
   const scenariosFrom =
@@ -30,14 +31,14 @@ export function assetContext(db, owner, asset) {
   return {
     symbol: asset,
     journal: {
-      count: count(journalFrom, [asset]),
+      count: count(journalFrom, [asset, asset]),
       items: db
         .prepare(
           "SELECT a.slug,r.title,r.body,r.published_at,r.author,r.revision " +
             journalFrom +
             " ORDER BY r.published_at DESC,a.slug LIMIT 1",
         )
-        .all(asset)
+        .all(asset, asset)
         .map((r) => ({
           slug: r.slug,
           title: r.title,

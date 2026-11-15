@@ -14,6 +14,12 @@ import {
   formatArticle,
   articleContainsPassage,
 } from "../../src/domain/article-format.js";
+import {
+  articleAssets,
+  saveArticleAssets,
+  validateArticleAssets,
+  publishedAssetFilter,
+} from "./assets.js";
 import { writingRequest } from "../ai/writing-contract.js";
 export function registerJournalRoutes(
   app,
@@ -44,6 +50,7 @@ export function registerJournalRoutes(
     id: a.id,
     slug: a.slug,
     symbol: a.symbol,
+    assets: articleAssets(db, a.id, a.symbol),
     title: a.title,
     body: a.body,
     branches: JSON.parse(a.branches),
@@ -56,12 +63,13 @@ export function registerJournalRoutes(
   function listings(asset) {
     return db
       .prepare(
-        `SELECT a.slug,r.symbol,r.title,r.body,r.published_at,r.author,r.revision FROM articles a JOIN article_revisions r ON r.article_id=a.id AND r.revision=a.published_revision ${asset ? "WHERE r.symbol=?" : ""} ORDER BY r.published_at DESC LIMIT 100`,
+        `SELECT a.slug,r.id AS edition_id,r.symbol,r.title,r.body,r.published_at,r.author,r.revision FROM articles a JOIN article_revisions r ON r.article_id=a.id AND r.revision=a.published_revision ${asset ? "WHERE " + publishedAssetFilter : ""} ORDER BY r.published_at DESC LIMIT 100`,
       )
-      .all(...(asset ? [symbol(asset)] : []))
+      .all(...(asset ? [symbol(asset), symbol(asset)] : []))
       .map((a) => ({
         slug: a.slug,
         symbol: a.symbol,
+        assets: articleAssets(db, a.edition_id, a.symbol, true),
         title: a.title,
         excerpt: formatArticle(a.body).plainText.slice(0, 180),
         publishedAt: a.published_at,
@@ -94,6 +102,7 @@ export function registerJournalRoutes(
     return {
       slug: a.slug,
       symbol: r.symbol,
+      assets: articleAssets(db, r.id, r.symbol, true),
       title: r.title,
       body: r.body,
       author: r.author,
@@ -123,38 +132,43 @@ export function registerJournalRoutes(
       .all(req.auth.user_id)
       .map(draft),
   }));
-  app.post("/api/journal", author, async (req) => {
-    const b = req.body || {},
-      user = req.auth.user_id,
-      a = id(),
-      now = Date.now();
-    if (
-      db.prepare("SELECT COUNT(*) AS n FROM articles WHERE user_id=?").get(user)
-        .n >= 1000
-    )
-      throw fail("Article limit reached.");
-    const slug =
-      text(b.title, 200)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 80) +
-      "-" +
-      a.slice(0, 8);
-    db.prepare(
-      "INSERT INTO articles(id,user_id,slug,symbol,title,body,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
-    ).run(
-      a,
-      user,
-      slug,
-      symbol(b.symbol),
-      text(b.title, 200),
-      text(b.body || "", 40000, 0),
-      now,
-      now,
-    );
-    return { id: a };
-  });
+  app.post("/api/journal", author, async (req) =>
+    transaction(db, () => {
+      const b = req.body || {},
+        user = req.auth.user_id,
+        a = id(),
+        now = Date.now();
+      if (
+        db
+          .prepare("SELECT COUNT(*) AS n FROM articles WHERE user_id=?")
+          .get(user).n >= 1000
+      )
+        throw fail("Article limit reached.");
+      const slug =
+        text(b.title, 200)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 80) +
+        "-" +
+        a.slice(0, 8);
+      const assets = validateArticleAssets(b.assets, b.symbol);
+      db.prepare(
+        "INSERT INTO articles(id,user_id,slug,symbol,title,body,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",
+      ).run(
+        a,
+        user,
+        slug,
+        symbol(b.symbol),
+        text(b.title, 200),
+        text(b.body || "", 40000, 0),
+        now,
+        now,
+      );
+      saveArticleAssets(db, a, assets);
+      return { id: a };
+    }),
+  );
   app.get("/api/journal/:id", author, async (req) => draft(owned(req)));
   app.post("/api/journal/:id/preview", author, async (req) => {
     const a = owned(req),
@@ -198,6 +212,11 @@ export function registerJournalRoutes(
       slug: a.slug,
       title: text(b.title || a.title, 200),
       symbol: symbol(b.symbol || a.symbol),
+      assets: validateArticleAssets(
+        b.assets,
+        b.symbol || a.symbol,
+        articleAssets(db, a.id, a.symbol),
+      ),
       body,
       author: authorName,
       revision: a.revision,
@@ -227,7 +246,15 @@ export function registerJournalRoutes(
       );
     return engine.enqueueWriting(
       req.auth.user_id,
-      writingRequest(b, a),
+      writingRequest(b, {
+        ...a,
+        symbol: symbol(b.symbol ?? a.symbol),
+        assets: validateArticleAssets(
+          b.assets,
+          b.symbol ?? a.symbol,
+          articleAssets(db, a.id, a.symbol),
+        ),
+      }),
       text(b.requestKey, 100),
     );
   });
@@ -287,46 +314,58 @@ export function registerJournalRoutes(
       return { ok: true };
     }),
   );
-  app.put("/api/journal/:id", author, async (req) => {
-    const a = owned(req),
-      b = req.body || {},
-      branches = validateBranches(b.branches),
-      body = text(b.body, 40000, 0),
-      sources = validatePublicSources(b.sources);
-    if (
-      branches.some(
-        (s) => s.passage && !articleContainsPassage(body, s.passage),
+  app.put("/api/journal/:id", author, async (req) =>
+    transaction(db, () => {
+      const a = owned(req),
+        b = req.body || {},
+        branches = validateBranches(b.branches),
+        body = text(b.body, 40000, 0),
+        sources = validatePublicSources(b.sources),
+        assets = validateArticleAssets(
+          b.assets,
+          b.symbol,
+          articleAssets(db, a.id, a.symbol),
+        );
+      if (
+        branches.some(
+          (s) => s.passage && !articleContainsPassage(body, s.passage),
+        )
       )
-    )
-      throw fail("Each mapped passage must appear in the article.");
-    const changed = db
-      .prepare(
-        "UPDATE articles SET symbol=?,title=?,body=?,branches=?,sources=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=?",
-      )
-      .run(
-        symbol(b.symbol),
-        text(b.title, 200),
-        body,
-        JSON.stringify(branches),
-        JSON.stringify(sources),
-        Date.now(),
-        a.id,
-        req.auth.user_id,
-        integer(b.revision, 1, 100000),
-      );
-    if (!changed.changes)
-      throw fail(
-        "This draft changed on another device. Reload before saving.",
-        409,
-      );
-    return draft(db.prepare("SELECT * FROM articles WHERE id=?").get(a.id));
-  });
+        throw fail("Each mapped passage must appear in the article.");
+      const changed = db
+        .prepare(
+          "UPDATE articles SET symbol=?,title=?,body=?,branches=?,sources=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=?",
+        )
+        .run(
+          symbol(b.symbol),
+          text(b.title, 200),
+          body,
+          JSON.stringify(branches),
+          JSON.stringify(sources),
+          Date.now(),
+          a.id,
+          req.auth.user_id,
+          integer(b.revision, 1, 100000),
+        );
+      if (!changed.changes)
+        throw fail(
+          "This draft changed on another device. Reload before saving.",
+          409,
+        );
+      saveArticleAssets(db, a.id, assets);
+      return draft(db.prepare("SELECT * FROM articles WHERE id=?").get(a.id));
+    }),
+  );
   app.post("/api/journal/:id/map", author, async (req) => {
     const a = owned(req);
     if (!a.body.trim()) throw fail("Write the article before mapping it.");
     db.prepare(
       "INSERT OR IGNORE INTO research_assets(user_id,symbol,name) VALUES(?,?,?)",
-    ).run(req.auth.user_id, a.symbol, a.symbol);
+    ).run(
+      req.auth.user_id,
+      a.symbol,
+      articleAssets(db, a.id, a.symbol)[0].name,
+    );
     return engine.enqueue(req.auth.user_id, {
       symbol: a.symbol,
       kind: "map-article",
@@ -357,6 +396,7 @@ export function registerJournalRoutes(
         .get(a.id, a.revision);
       if (!existing) {
         const now = Date.now(),
+          edition = id(),
           set = createSet(
             db,
             req.auth.user_id,
@@ -369,7 +409,7 @@ export function registerJournalRoutes(
         db.prepare(
           "INSERT INTO article_revisions VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         ).run(
-          id(),
+          edition,
           a.id,
           a.revision,
           authorName,
@@ -381,6 +421,7 @@ export function registerJournalRoutes(
           set,
           now,
         );
+        saveArticleAssets(db, edition, articleAssets(db, a.id, a.symbol), true);
       }
       db.prepare("UPDATE articles SET published_revision=? WHERE id=?").run(
         a.revision,

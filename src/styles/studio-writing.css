@@ -18,7 +18,7 @@
   border-color: #d1e8c41a;
 }
 .studio-workbench .article-heading-fields {
-  grid-template-columns: 100px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 .studio-workbench .editor-toolbar {

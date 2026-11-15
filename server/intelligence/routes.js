@@ -437,6 +437,16 @@ export function registerIntelligenceRoutes(
         "SELECT r.* FROM article_revisions r JOIN articles a ON r.article_id=a.id WHERE a.user_id=?",
       )
       .all(user);
+    result.article_assets = db
+      .prepare(
+        "SELECT aa.* FROM article_assets aa JOIN articles a ON a.id=aa.article_id WHERE a.user_id=?",
+      )
+      .all(user);
+    result.article_revision_assets = db
+      .prepare(
+        "SELECT aa.* FROM article_revision_assets aa JOIN article_revisions r ON r.id=aa.revision_id JOIN articles a ON a.id=r.article_id WHERE a.user_id=?",
+      )
+      .all(user);
     return result;
   });
 }

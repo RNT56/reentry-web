@@ -20,7 +20,7 @@ const style =
 
 export function createWritingAssistant(
   root,
-  { getDraft, getWriter, onTitle, canEdit = () => true },
+  { getDraft, getWriter, onTitle, canEdit = () => true, validate = () => true },
 ) {
   let alive = true,
     job = null,
@@ -87,7 +87,9 @@ export function createWritingAssistant(
       return;
     }
     const r = job.result;
-    const stale = getWriter().getBody() !== job.article.body;
+    const stale =
+      getWriter().getBody() !== job.article.body ||
+      getDraft().symbol !== job.article.symbol;
     resultRoot.innerHTML = `<section class="writing-proposal"><div class="writing-result-heading"><span class="eyebrow">${esc(tasks[job.writing.task])}</span><span>${esc(job.model)}</span></div><p class="writing-result-summary">${esc(r.summary)}</p>${applied ? '<p class="writing-review-clear">Applied to this draft. Use Undo in the editor to revert.</p>' : stale ? '<p class="writing-stale">The article has changed since this request. Copy the suggestion or run a new check against the current text.</p>' : ""}${r.content ? `<div class="writing-proposal-text">${formatArticle(r.content).html}</div><div class="writing-apply-actions"><button type="button" class="secondary" data-writing-apply="append" ${stale || applied ? "disabled" : ""}>Append to article</button>${context ? `<button type="button" class="secondary" data-writing-apply="selection" ${stale || applied ? "disabled" : ""}>${context.text ? "Replace selection" : "Insert at cursor"}</button>` : ""}<button type="button" class="secondary" data-writing-apply="replace" ${stale || applied ? "disabled" : ""}>Replace article</button><button type="button" class="link" data-writing-copy>Copy suggestion</button></div>${r.title ? `<div class="writing-suggested-title"><span>Suggested title</span><b>${esc(r.title)}</b><button type="button" class="link" data-writing-title>Use title</button></div>` : ""}` : ""}${r.issues.length ? `<div class="writing-review-issues">${r.issues.map((issue, i) => `<article class="writing-review-issue"><span class="eyebrow">${esc(issue.category)}</span>${issue.quote ? `<blockquote>${esc(issue.quote)}</blockquote>` : ""}<p>${esc(issue.explanation)}</p>${issue.replacement ? `<div class="writing-correction">${esc(issue.replacement)}</div><button type="button" class="link" data-writing-correct="${i}" ${stale ? "disabled" : ""}>Apply correction ${icon("arrow")}</button>` : ""}</article>`).join("")}</div>` : !r.content ? '<p class="writing-review-clear">No issues identified in this check.</p>' : ""}<p class="writing-ai-note">AI suggestions can contain mistakes. Check facts and sources before publishing.</p></section>`;
   }
   async function history() {
@@ -135,6 +137,14 @@ export function createWritingAssistant(
   root.onclick = (event) => {
     const b = event.target.closest("button");
     if (!b || !live()) return;
+    if (
+      (b.dataset.writingApply || b.dataset.writingCorrect !== undefined) &&
+      job?.article.symbol !== getDraft().symbol
+    )
+      return toast(
+        "The primary asset changed. Run a new writing task for this asset.",
+      );
+    if (b.hasAttribute("data-writing-generate") && !validate()) return;
     if ((!canEdit() || loading) && !b.hasAttribute("data-writing-copy"))
       return toast("Wait for the draft change to finish.");
     if (
@@ -155,6 +165,8 @@ export function createWritingAssistant(
           const r = await request(`/api/journal/${articleId}/assist`, "POST", {
             revision: data.revision,
             title: data.title,
+            symbol: data.symbol,
+            assets: data.assets,
             body: writer.getBody(),
             selection: ["grammar", "structure"].includes(task)
               ? ""

@@ -66,6 +66,14 @@ export const platformMigrations = [
       CREATE TABLE political_return_estimates(member TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,payload BLOB NOT NULL,updated_at INTEGER NOT NULL,next_check INTEGER NOT NULL,failed INTEGER NOT NULL DEFAULT 0);
     `,
   },
+  {
+    version: 9,
+    sql: `
+      CREATE TABLE article_assets(article_id TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,symbol TEXT NOT NULL,position INTEGER NOT NULL,metadata TEXT NOT NULL,PRIMARY KEY(article_id,symbol));
+      CREATE TABLE article_revision_assets(revision_id TEXT NOT NULL REFERENCES article_revisions(id) ON DELETE CASCADE,symbol TEXT NOT NULL,position INTEGER NOT NULL,metadata TEXT NOT NULL,PRIMARY KEY(revision_id,symbol));
+      CREATE INDEX article_revision_asset_symbol ON article_revision_assets(symbol,revision_id);
+    `,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

@@ -86,6 +86,7 @@ export function writingRequest(value, article) {
       revision: article.revision,
       title: text(value.title ?? article.title, 200),
       symbol: article.symbol,
+      ...(article.assets ? { assets: article.assets } : {}),
       body,
       sources: validatePublicSources(
         value.sources ?? JSON.parse(article.sources),

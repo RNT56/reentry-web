@@ -284,6 +284,15 @@ test("writing uses the configured provider, accounts for usage and never edits o
     const key = randomUUID();
     const response = await f.queue({
       requestKey: key,
+      symbol: "NVDA",
+      assets: [
+        {
+          symbol: "NVDA",
+          name: "NVIDIA",
+          exchange: "NASDAQ",
+          assetType: "EQUITY",
+        },
+      ],
       body: "\n" + body + "\n\nUnsaved author context.\n\n",
     });
     assert.equal(response.statusCode, 200, response.body);
@@ -291,6 +300,15 @@ test("writing uses the configured provider, accounts for usage and never edits o
     const jobId = response.json().id;
     const duplicate = await f.queue({
       requestKey: key,
+      symbol: "NVDA",
+      assets: [
+        {
+          symbol: "NVDA",
+          name: "NVIDIA",
+          exchange: "NASDAQ",
+          assetType: "EQUITY",
+        },
+      ],
       body: "\n" + body + "\n\nUnsaved author context.\n\n",
     });
     assert.equal(duplicate.json().id, jobId);
@@ -308,6 +326,8 @@ test("writing uses the configured provider, accounts for usage and never edits o
     assert.match(f.calls[0].prompt, /Never use em dashes/);
     const job = (await f.call(f.url + "/assist/" + jobId)).json();
     assert.equal(job.status, "completed", job.error);
+    assert.equal(job.article.symbol, "NVDA");
+    assert.equal(job.article.assets[0].exchange, "NASDAQ");
     assert.equal(
       job.article.body,
       "\n" + body + "\n\nUnsaved author context.\n\n",

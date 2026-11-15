@@ -1,3 +1,4 @@
+import { articleAssetsMarkup, mountArticleAssets } from "./article-assets.js";
 import { createWritingEditor, writingEditorMarkup } from "./writing-editor.js";
 import { createWritingAssistant } from "./writing-assistant.js";
 import { openArticlePreview } from "./article-preview.js";
@@ -13,7 +14,9 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     loadVersion = 0,
     destroyed = false,
     items = [];
-  let writer,
+  let assetPicker,
+    newAssetPicker,
+    writer,
     assistant,
     preview,
     assistOpen = true;
@@ -57,7 +60,8 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       ...draft,
       title: form.elements.namedItem("article-title").value,
       body: writer?.getBody() ?? form.elements.namedItem("article-body").value,
-      symbol: form.elements.namedItem("article-symbol").value.toUpperCase(),
+      symbol: assetPicker?.values()[0]?.symbol || "",
+      assets: assetPicker?.values() || [],
       branches,
       sources: [...form.querySelectorAll("[data-source-row]")]
         .map((r) => ({
@@ -71,9 +75,10 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     if (destroyed || !root.isConnected) return;
     writer?.destroy();
     assistant?.destroy();
+    assetPicker?.destroy();
     writer = null;
     assistant = null;
-    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>${icon("plus")} New article</button>${items.map((a) => `<div class="studio-card"><button type="button" class="studio-item ${draft?.id === a.id ? "selected" : ""} ${a.canDelete ? "deletable" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : a.canDelete ? "Draft" : "Unpublished"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>${a.canDelete ? `<button type="button" class="studio-delete" data-delete-article="${esc(a.id)}" aria-label="Delete draft: ${esc(a.title)}" title="Delete draft">${icon("close")}</button>` : ""}</div>`).join("")}</aside><div class="studio-workbench ${assistOpen ? "" : "assistant-hidden"}"><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row article-heading-fields">${field("Asset ticker", "article-symbol", draft.symbol, "text", 'maxlength="32" required')}${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div><div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-preview-article>Preview ${icon("arrow")}</button><button type="button" class="secondary" data-toggle-writing aria-pressed="${assistOpen}">${icon("sparkles")} Writing partner</button><button type="button" class="secondary" data-map-article>${icon("sparkles")} Map with AI</button><button type="button" class="secondary" data-publish>Publish ${icon("arrow")}</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ${icon("arrow")}</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div>${writingEditorMarkup(draft.body)}<details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} ${draft.branches.length === 1 ? "branch" : "branches"}</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>${icon("plus")} Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>${icon("plus")} Source link</button></details></form>` : empty("New article", "", `<button class="primary" data-new-article>Write an article ${icon("arrow")}</button>`)}</div>${draft ? '<aside class="writing-assistant" aria-label="AI writing partner"></aside>' : ""}</div></div>`;
+    root.innerHTML = `<div class="studio-layout"><aside class="studio-list"><span class="eyebrow">RNT / AUTHOR STUDIO</span><h2>Articles</h2><button class="secondary" data-new-article>${icon("plus")} New article</button>${items.map((a) => `<div class="studio-card"><button type="button" class="studio-item ${draft?.id === a.id ? "selected" : ""} ${a.canDelete ? "deletable" : ""}" data-edit-article="${esc(a.id)}"><span class="eyebrow">${esc(a.symbol)} / ${a.publishedRevision ? "Published" : a.canDelete ? "Draft" : "Unpublished"}</span><b>${esc(a.title)}</b><small>${esc(when(a.updatedAt))}</small></button>${a.canDelete ? `<button type="button" class="studio-delete" data-delete-article="${esc(a.id)}" aria-label="Delete draft: ${esc(a.title)}" title="Delete draft">${icon("close")}</button>` : ""}</div>`).join("")}</aside><div class="studio-workbench ${assistOpen ? "" : "assistant-hidden"}"><div class="studio-editor">${draft ? `<form id="article-form"><div class="section-line"><span class="privacy-chip">${draft.publishedRevision ? "Published edition " + draft.publishedRevision + " · editing privately" : "Private draft"}</span><span id="draft-status" class="small">${dirty ? "Unsaved changes" : "Saved · revision " + draft.revision}</span></div><div class="form-row article-heading-fields">${field("Title", "article-title", draft.title, "text", 'maxlength="200" required')}</div>${articleAssetsMarkup("studio")}<div class="editor-toolbar"><button type="submit" class="primary">Save draft</button><button type="button" class="secondary" data-preview-article>Preview ${icon("arrow")}</button><button type="button" class="secondary" data-toggle-writing aria-pressed="${assistOpen}">${icon("sparkles")} Writing partner</button><button type="button" class="secondary" data-map-article>${icon("sparkles")} Map with AI</button><button type="button" class="secondary" data-publish>Publish ${icon("arrow")}</button>${draft.publishedRevision ? `<a class="link" href="/journal/${esc(draft.slug)}" target="_blank" rel="noopener">View live ${icon("arrow")}</a><button type="button" class="link" data-unpublish>Unpublish</button>` : ""}</div>${writingEditorMarkup(draft.body)}<details class="editor-scenarios" ${draft.branches.length ? "open" : ""}><summary>Scenario map · ${draft.branches.length} ${draft.branches.length === 1 ? "branch" : "branches"}</summary><div id="branch-editor">${branchesHTML(draft.branches)}</div><button class="secondary" type="button" data-add-branch>${icon("plus")} Map selected passage</button></details><details class="editor-sources"><summary>Public source links · ${draft.sources.length}</summary><div id="source-editor">${draft.sources.map((s) => `<div class="form-row" data-source-row>${field("Source title", "source-title", s.title, "text", 'maxlength="300"')}${field("HTTPS link", "source-url", s.url, "url", 'maxlength="2000"')}</div>`).join("")}</div><button class="secondary" type="button" data-add-public-source>${icon("plus")} Source link</button></details></form>` : empty("New article", "", `<button class="primary" data-new-article>Write an article ${icon("arrow")}</button>`)}</div>${draft ? '<aside class="writing-assistant" aria-label="AI writing partner"></aside>' : ""}</div></div>`;
     associateLabels(root);
     const form = root.querySelector("#article-form");
     if (form) {
@@ -81,6 +86,22 @@ export function createStudio({ root, onMapped, refreshJournal }) {
         dirty = true;
         root.querySelector("#draft-status").textContent = "Unsaved changes";
       };
+      assetPicker = mountArticleAssets(
+        root.querySelector("[data-article-assets]"),
+        {
+          assets: draft.assets || [
+            { symbol: draft.symbol, name: draft.symbol },
+          ],
+          onChange: (assets) => {
+            markDirty();
+            assistant?.refresh();
+            const note = root.querySelector("[data-asset-change-note]");
+            note.hidden =
+              assets[0]?.symbol === draft.symbol || !read().branches.length;
+            note.textContent = `Review the existing scenario ranges and conditions for ${assets[0]?.symbol} before saving.`;
+          },
+        },
+      );
       writer = createWritingEditor(root.querySelector(".writing-surface"), {
         body: draft.body,
         onChange: markDirty,
@@ -89,6 +110,7 @@ export function createStudio({ root, onMapped, refreshJournal }) {
         root.querySelector(".writing-assistant"),
         {
           getDraft: read,
+          validate: () => assetPicker.validate(),
           getWriter: () => writer,
           canEdit: () => !saving && !deleting,
           onTitle: (title) => {
@@ -98,7 +120,8 @@ export function createStudio({ root, onMapped, refreshJournal }) {
         },
       );
       form.oninput = (event) => {
-        if (!event.target.closest(".writing-surface")) markDirty();
+        if (!event.target.closest(".writing-surface,.article-assets"))
+          markDirty();
       };
       form.onkeydown = (event) => {
         if (
@@ -140,9 +163,12 @@ export function createStudio({ root, onMapped, refreshJournal }) {
         (b) => b.dataset.editArticle === draft.id,
       );
       if (card) {
+        card.querySelector(".eyebrow").textContent =
+          `${draft.symbol} / ${draft.publishedRevision ? "Published" : draft.canDelete ? "Draft" : "Unpublished"}`;
         card.querySelector("b").textContent = draft.title;
         card.querySelector("small").textContent = when(draft.updatedAt);
       }
+      root.querySelector("[data-asset-change-note]").hidden = true;
       toast("Draft saved.");
     } finally {
       saving = false;
@@ -215,6 +241,13 @@ export function createStudio({ root, onMapped, refreshJournal }) {
       );
       return;
     }
+    if (
+      ["data-preview-article", "data-map-article", "data-publish"].some(
+        (attr) => b.hasAttribute(attr),
+      ) &&
+      !assetPicker.validate()
+    )
+      return;
     if (b.hasAttribute("data-preview-article")) {
       preview?.close();
       preview = openArticlePreview(read);
@@ -241,9 +274,17 @@ export function createStudio({ root, onMapped, refreshJournal }) {
         toast("Save this draft before starting another.");
         return;
       }
+      newAssetPicker?.destroy();
       modal(
-        '<h2>A new thesis.</h2><form id="new-article"><div class="field"><label for="new-symbol">Asset ticker</label><input id="new-symbol" name="symbol" maxlength="32" placeholder="INTC" required></div><div class="field"><label for="new-title">Title</label><input id="new-title" name="title" maxlength="200" placeholder="What has to be true" required></div><button class="primary">Create private draft</button></form>',
+        `<h2>A new thesis.</h2><form id="new-article">${articleAssetsMarkup("new-article")}<div class="field"><label for="new-title">Title</label><input id="new-title" name="title" maxlength="200" placeholder="What has to be true" required></div><button type="submit" class="primary">Create private draft</button></form>`,
       );
+      const picker = mountArticleAssets(
+        document.querySelector("#new-article [data-article-assets]"),
+      );
+      newAssetPicker = picker;
+      document
+        .querySelector("#modal")
+        .addEventListener("close", () => picker.destroy(), { once: true });
       document.querySelector("#new-article").onsubmit = (e) => {
         e.preventDefault();
         const f = e.target;
@@ -251,7 +292,8 @@ export function createStudio({ root, onMapped, refreshJournal }) {
           f.querySelector('button[type="submit"],button:not([type])'),
           async () => {
             const r = await request("/api/journal", "POST", {
-              symbol: f.elements.namedItem("symbol").value,
+              symbol: picker.values()[0]?.symbol,
+              assets: picker.values(),
               title: f.elements.namedItem("title").value,
               body: "",
             });
@@ -375,6 +417,8 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     },
     destroy() {
       destroyed = true;
+      assetPicker?.destroy();
+      newAssetPicker?.destroy();
       writer?.destroy();
       assistant?.destroy();
       preview?.close();
