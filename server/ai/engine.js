@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
 import {
+  collectWritingContext,
+  writingContextHash,
+} from "./writing-context.js";
+import {
   makeWritingPrompt,
   writingSchema,
   validateWritingResult,
@@ -292,9 +296,33 @@ export function createEngine({
       throw fail("Spending limit reached. No AI request was sent.", 409);
     return maximum;
   }
-  function enqueueWriting(user, request, requestKey) {
+  function prepareWriting(user, request) {
+    const { article, ...writing } = request;
+    const assetContext = collectWritingContext(db, user, article);
+    const input = {
+      kind: "studio-writing",
+      article,
+      writing,
+      assetContext,
+      contextHash: writingContextHash(assetContext),
+      promptVersion: "studio-writing-v2",
+    };
+    return { input, prompt: makeWritingPrompt(input) };
+  }
+  function previewWriting(user, request) {
+    const p = preferences(db, user);
+    const prepared = prepareWriting(user, request);
+    return {
+      context: prepared.input.assetContext,
+      contextHash: prepared.input.contextHash,
+      prompt: prepared.prompt,
+      schema: writingSchema,
+      model: p.model,
+    };
+  }
+  function enqueueWriting(user, request, requestKey, expectedContextHash) {
     const requestHash = createHash("sha256")
-      .update(JSON.stringify(request))
+      .update(JSON.stringify({ request, expectedContextHash }))
       .digest("hex");
     const previous = db
       .prepare(
@@ -313,15 +341,15 @@ export function createEngine({
       return { id: previous.id, status: previous.status };
     }
     const p = chartAccess(user, { scenario: false });
-    const { article, ...writing } = request;
-    const input = {
-      kind: "studio-writing",
-      article,
-      writing,
-      requestHash,
-      promptVersion: "studio-writing-v1",
-    };
-    const maximum = writingBudget(user, makeWritingPrompt(input), p.model);
+    const { input, prompt } = prepareWriting(user, request);
+    if (expectedContextHash && expectedContextHash !== input.contextHash)
+      throw fail(
+        "Asset context changed. Review the refreshed context and send again.",
+        409,
+      );
+    input.requestHash = requestHash;
+    input.renderedPrompt = prompt;
+    const maximum = writingBudget(user, prompt, p.model);
     const job = id();
     db.prepare(
       "INSERT INTO ai_jobs(id,user_id,kind,symbol,provider,model,status,input,request_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -329,7 +357,7 @@ export function createEngine({
       job,
       user,
       "studio-writing",
-      article.symbol,
+      request.article.symbol,
       p.provider,
       p.model,
       "queued",
@@ -440,7 +468,7 @@ export function createEngine({
             ? input
             : { ...input, ...collected, watched, asOf: Date.now() },
         prompt = writingJob
-          ? makeWritingPrompt(snapshot)
+          ? snapshot.renderedPrompt || makeWritingPrompt(snapshot)
           : sourceJob
             ? makeSourceMonitorPrompt(snapshot)
             : chartJob
@@ -696,6 +724,7 @@ export function createEngine({
     estimateChart,
     enqueueChart,
     enqueueWriting,
+    previewWriting,
     tick,
     start() {
       if (!enabled || timer) return;

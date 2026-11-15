@@ -84,6 +84,7 @@ export function createStudio({ root, onMapped, refreshJournal }) {
     if (form) {
       const markDirty = () => {
         dirty = true;
+        assistant?.invalidateRequest();
         root.querySelector("#draft-status").textContent = "Unsaved changes";
       };
       assetPicker = mountArticleAssets(

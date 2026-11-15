@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
+import { putSource } from "../server/intelligence/sources.js";
 import { createApp } from "../server/app.js";
 import { openStore, emptyPortfolio } from "../server/store.js";
 import {
@@ -488,6 +489,124 @@ test("review contract anchors corrections to actual text and separates advice fr
   );
   assert.match(
     makeWritingPrompt(input),
-    /Source links are references only, not fetched evidence/,
+    /Article source links alone are references, not fetched evidence/,
+  );
+});
+
+test("request preview uses owned asset knowledge and a queued job preserves the exact reviewed prompt", async (t) => {
+  const f = await fixture(t);
+  const note = putSource(f.db, f.accounts.author.id, "INTC", {
+    kind: "note",
+    title: "Execution watch",
+    content: "AUTHOR_NOTE: customer adoption requires repeat orders.",
+    connector: "manual",
+    url: "https://example.com/evidence",
+  });
+  putSource(f.db, f.accounts.other.id, "INTC", {
+    kind: "note",
+    title: "Private other",
+    content: "DO_NOT_SEND_OTHER_USER",
+    connector: "manual",
+  });
+  putSource(f.db, f.accounts.author.id, "AMD", {
+    kind: "note",
+    title: "Different asset",
+    content: "DO_NOT_SEND_UNSELECTED_ASSET",
+    connector: "manual",
+  });
+  const payload = {
+    revision: 1,
+    body,
+    title: "Unsaved title",
+    symbol: "INTC",
+    task: "paragraph",
+    format: "text",
+    prompt: "Write two sentences about repeat orders. Preserve uncertainty.",
+    words: 150,
+  };
+  const before = f.db.prepare("SELECT COUNT(*) n FROM ai_jobs").get().n;
+  const preview = await f.call(f.url + "/assist/preview", "POST", payload);
+  assert.equal(preview.statusCode, 200, preview.body);
+  const prepared = preview.json();
+  assert.match(prepared.prompt, /AUTHOR_NOTE/);
+  assert.match(prepared.prompt, /Write two sentences about repeat orders/);
+  assert.doesNotMatch(prepared.prompt, /DO_NOT_SEND/);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_jobs").get().n, before);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_ledger").get().n, 0);
+  assert.equal(
+    (await f.call(f.url + "/assist/context", "POST", {}, "other")).statusCode,
+    404,
+  );
+  assert.equal(
+    (await f.call(f.url + "/assist/preview", "POST", payload, "reader"))
+      .statusCode,
+    403,
+  );
+  await f.enable();
+  const key = randomUUID();
+  const queued = await f.queue({
+    ...payload,
+    contextHash: prepared.contextHash,
+    requestKey: key,
+  });
+  assert.equal(queued.statusCode, 200, queued.body);
+  f.db
+    .prepare("UPDATE research_sources SET content=? WHERE id=?")
+    .run("CHANGED_AFTER_QUEUE", note.id);
+  const retry = await f.queue({
+    ...payload,
+    contextHash: prepared.contextHash,
+    requestKey: key,
+  });
+  assert.equal(
+    retry.json().id,
+    queued.json().id,
+    "An idempotent retry retains the first snapshot",
+  );
+  await f.app.intelligenceEngine.tick();
+  assert.equal(f.calls[0].prompt, prepared.prompt);
+  const job = (await f.call(f.url + "/assist/" + queued.json().id)).json();
+  assert.equal(job.status, "completed", job.error);
+  assert.equal(job.prompt, prepared.prompt);
+  assert.match(JSON.stringify(job.assetContext), /AUTHOR_NOTE/);
+  assert.doesNotMatch(JSON.stringify(job.assetContext), /CHANGED_AFTER_QUEUE/);
+});
+
+test("changed context requires a fresh preview before any new billable writing request", async (t) => {
+  const f = await fixture(t);
+  await f.enable();
+  const payload = {
+    revision: 1,
+    body,
+    task: "thesis",
+    prompt: "Develop the execution thesis.",
+    words: 200,
+  };
+  const preview = (
+    await f.call(f.url + "/assist/preview", "POST", payload)
+  ).json();
+  putSource(f.db, f.accounts.author.id, "INTC", {
+    kind: "note",
+    title: "New observation",
+    content: "New information arrived.",
+    connector: "manual",
+  });
+  const rejected = await f.queue({
+    ...payload,
+    contextHash: preview.contextHash,
+  });
+  assert.equal(rejected.statusCode, 409, rejected.body);
+  assert.match(rejected.body, /context changed/);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_jobs").get().n, 0);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_ledger").get().n, 0);
+  const refreshed = (
+    await f.call(f.url + "/assist/preview", "POST", payload)
+  ).json();
+  assert.notEqual(refreshed.contextHash, preview.contextHash);
+  assert.equal(
+    (await f.queue({ ...payload, contextHash: refreshed.contextHash }))
+      .statusCode,
+    200,
   );
 });

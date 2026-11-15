@@ -5,6 +5,137 @@
   align-items: start;
   gap: 22px;
 }
+.writing-prompt-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.writing-prompt-label .link {
+  font-size: 10px;
+  padding: 0;
+}
+.writing-context,
+.writing-full-request {
+  margin: 18px 0;
+  padding: 14px 0;
+  border-top: 1px solid #d5eacb24;
+  border-bottom: 1px solid #d5eacb18;
+  font-size: 11px;
+}
+.writing-context > summary,
+.writing-full-request > summary {
+  line-height: 1.7;
+}
+.writing-context > summary > span {
+  display: block;
+  color: #afc89c;
+  font-size: 10px;
+  font-weight: 400;
+}
+.writing-context-tools {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  justify-content: space-between;
+  padding: 14px 0;
+  color: #92a387;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.writing-context-asset h4 {
+  margin: 18px 0 4px;
+  font:
+    500 13px "Geist Mono",
+    monospace;
+  color: #c8e9ae;
+}
+.writing-context-asset h4 span {
+  font:
+    10px Geist,
+    sans-serif;
+  color: #90a084;
+}
+.writing-context-asset > p {
+  font-size: 11px;
+  margin: 0 0 12px;
+  color: #a4b397;
+}
+.writing-context-group {
+  padding: 10px 0;
+  border-bottom: 1px solid #d5eacb16;
+}
+.writing-context-group summary {
+  line-height: 1.7;
+  font-size: 10px;
+}
+.writing-context-group summary span {
+  color: #a5bc93;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+.writing-context-group article {
+  border-left: 1px solid #b3d09d38;
+  padding-left: 10px;
+  margin-top: 15px;
+}
+.writing-context-group strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+.writing-context-group small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #91a484;
+  margin: 5px 0;
+}
+.writing-context-group a {
+  display: inline-block;
+  color: #b7d99d;
+  font-size: 10px;
+  margin: 5px 0;
+  text-decoration: underline;
+}
+.writing-context-group pre,
+.writing-full-request pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 10px;
+  background: #0c120c;
+  border-radius: 6px;
+  font:
+    11px/1.7 Geist,
+    sans-serif;
+  color: #b7c4ad;
+}
+.writing-context-limit {
+  font-size: 10px;
+  line-height: 1.6;
+  color: #c2ba8d;
+}
+.writing-full-request textarea {
+  font-size: 11px;
+  line-height: 1.7;
+  min-height: 220px;
+  max-height: 550px;
+}
+.writing-full-request label {
+  margin-top: 12px;
+}
+.writing-full-request > .link {
+  margin: 10px 0;
+  font-size: 10px;
+}
+.writing-request-preview {
+  width: 100%;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
 .studio-layout .studio-workbench.assistant-hidden,
 .studio-layout .studio-workbench:not(:has(.writing-assistant)) {
   grid-template-columns: minmax(0, 1fr);

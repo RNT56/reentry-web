@@ -21,6 +21,7 @@ import {
   publishedAssetFilter,
 } from "./assets.js";
 import { writingRequest } from "../ai/writing-contract.js";
+import { collectWritingContext } from "../ai/writing-context.js";
 export function registerJournalRoutes(
   app,
   { db, engine, isAuthor, authorName },
@@ -236,6 +237,40 @@ export function registerJournalRoutes(
       warnings: [...new Set(warnings)],
     };
   });
+  function writingArticle(a, b) {
+    return {
+      ...a,
+      symbol: symbol(b.symbol ?? a.symbol),
+      assets: validateArticleAssets(
+        b.assets,
+        b.symbol ?? a.symbol,
+        articleAssets(db, a.id, a.symbol),
+      ),
+    };
+  }
+  app.post("/api/journal/:id/assist/context", author, async (req) => {
+    const a = owned(req);
+    return {
+      context: collectWritingContext(
+        db,
+        req.auth.user_id,
+        writingArticle(a, req.body || {}),
+      ),
+    };
+  });
+  app.post("/api/journal/:id/assist/preview", author, async (req) => {
+    const a = owned(req),
+      b = req.body || {};
+    if (b.revision !== a.revision)
+      throw fail(
+        "This draft changed. Reload before preparing the request.",
+        409,
+      );
+    return engine.previewWriting(
+      req.auth.user_id,
+      writingRequest(b, writingArticle(a, b)),
+    );
+  });
   app.post("/api/journal/:id/assist", author, async (req) => {
     const a = owned(req),
       b = req.body || {};
@@ -246,16 +281,9 @@ export function registerJournalRoutes(
       );
     return engine.enqueueWriting(
       req.auth.user_id,
-      writingRequest(b, {
-        ...a,
-        symbol: symbol(b.symbol ?? a.symbol),
-        assets: validateArticleAssets(
-          b.assets,
-          b.symbol ?? a.symbol,
-          articleAssets(db, a.id, a.symbol),
-        ),
-      }),
+      writingRequest(b, writingArticle(a, b)),
       text(b.requestKey, 100),
+      b.contextHash === undefined ? undefined : text(b.contextHash, 64, 64),
     );
   });
   app.get("/api/journal/:id/assist", author, async (req) => {
@@ -290,6 +318,8 @@ export function registerJournalRoutes(
       createdAt: job.created_at,
       article: input.article,
       writing: input.writing,
+      assetContext: input.assetContext || null,
+      prompt: input.renderedPrompt || null,
       result: job.result ? JSON.parse(job.result) : null,
     };
   });
