@@ -6,6 +6,7 @@ import { migratePlatform } from "../server/platform/schema.js";
 import { createSet } from "../server/intelligence/scenarios.js";
 import {
   assetContext,
+  assetContextList,
   registerAssetContextRoutes,
 } from "../server/intelligence/asset-context.js";
 import { assetRoute, applyAssetRoute, parseRoute } from "../src/app/router.js";
@@ -154,4 +155,75 @@ test("context deep links preserve the portfolio selection and open exact researc
   });
   applyAssetRoute(model, "#/politics?symbol=%3Cscript%3E");
   assert.equal(model.politics.ticker, "AAPL");
+});
+
+test("context lists paginate exact assets, preserve privacy and validate all page parameters", async (t) => {
+  const db = fixture(t),
+    app = Fastify();
+  app.decorate("requireUser", async (req, reply) => {
+    if (req.headers.authorization !== "fixture-alice")
+      return reply.code(401).send({ error: "Sign in" });
+    req.auth = { user_id: "alice" };
+  });
+  registerAssetContextRoutes(app, { db });
+  t.after(() => app.close());
+  const before = db.prepare("SELECT total_changes() AS n").get().n;
+  const seen = new Set();
+  let offset = 0;
+  do {
+    const page = assetContextList(db, "alice", "MSFT", "research", offset);
+    assert.equal(page.count, 65);
+    assert.ok(page.items.length <= 20);
+    for (const item of page.items) {
+      assert.ok(!seen.has(item.id));
+      seen.add(item.id);
+    }
+    offset = page.nextOffset;
+  } while (offset !== null);
+  assert.equal(seen.size, 65);
+  assert.equal(
+    assetContextList(db, "alice", "AAPL", "research").items[0].id,
+    "alice-brief",
+  );
+  assert.equal(
+    assetContextList(db, "alice", "AAPL", "journal").items[0].title,
+    "Apple: the long view",
+  );
+  assert.equal(
+    assetContextList(db, "author", "AAPL", "scenarios").count,
+    0,
+    "published snapshots are not private trees",
+  );
+  for (const section of ["journal", "research", "scenarios"]) {
+    assert.equal(
+      (await app.inject("/api/asset-context/" + section + "?symbol=AAPL"))
+        .statusCode,
+      401,
+    );
+    const response = await app.inject({
+      url: "/api/asset-context/" + section + "?symbol=AAPL",
+      headers: { authorization: "fixture-alice" },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["cache-control"], "private, no-store");
+    assert.doesNotMatch(
+      response.body,
+      /BOB|UNPUBLISHED|PRIVATE DRAFT|UNFINISHED/,
+    );
+  }
+  for (const suffix of [
+    "research?symbol=AAPL&offset=-1",
+    "research?symbol=AAPL&offset=1.5",
+    "research?symbol=AAPL&offset=NaN",
+    "research?symbol=AAPL&offset=100001",
+    "research?symbol=%3Cscript%3E",
+    "__proto__?symbol=AAPL",
+  ]) {
+    const res = await app.inject({
+      url: "/api/asset-context/" + suffix,
+      headers: { authorization: "fixture-alice" },
+    });
+    assert.ok([400, 404].includes(res.statusCode), suffix);
+  }
+  assert.equal(db.prepare("SELECT total_changes() AS n").get().n, before);
 });

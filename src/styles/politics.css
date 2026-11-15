@@ -64,8 +64,10 @@
   box-shadow: none;
 }
 .capitol-stats {
-  display: flex;
-  gap: 56px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 540px);
+  gap: 24px;
   margin-top: 33px;
 }
 .capitol-stats > div {
@@ -937,7 +939,7 @@
     opacity: 0.8;
   }
   .capitol-stats {
-    gap: 34px;
+    gap: 12px;
     margin-top: 30px;
   }
   .capitol-stats b {
@@ -1485,5 +1487,95 @@
   .politician-finance-grid strong {
     min-height: 2.5em;
     line-height: 1.25;
+  }
+}
+
+/* A quiet loading composition occupies the same tracks as the live records. */
+.capitol-loading-layout {
+  pointer-events: none;
+}
+.capitol-placeholder-line {
+  display: block;
+  height: 10px;
+  width: min(100%, 100px);
+  border-radius: 3px;
+  background: #93b79e12;
+}
+.capitol-placeholder-line.is-short {
+  width: min(65%, 64px);
+  height: 7px;
+  margin-top: 8px;
+}
+.capitol-placeholder {
+  background: linear-gradient(155deg, #273e2e55, #18241d66);
+}
+.capitol-loading-layout .politician-caption {
+  padding-bottom: 20px;
+}
+.capitol-placeholder-copy {
+  width: 220px;
+  display: grid;
+  gap: 15px;
+}
+.capitol-placeholder-asset {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 180px;
+  min-height: 70px;
+  padding: 12px;
+  border: 1px solid #b2cbb217;
+  border-radius: 8px;
+}
+.capitol-placeholder-asset > span:last-child {
+  flex: 1;
+}
+.capitol-placeholder-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #93b79e0b;
+}
+.capitol-loading-layout .disclosure-person > span:last-child {
+  flex: 1;
+}
+.capitol-placeholder-chart {
+  height: 440px;
+  border: 1px solid #93b79e12;
+  border-radius: 16px;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 109px,
+    #93b79e0b 109px,
+    #93b79e0b 110px
+  );
+}
+.capitol-placeholder-estimate {
+  height: 400px;
+  border-block: 1px solid #93b79e12;
+  margin: 30px 0;
+}
+.capitol-load-error {
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.capitol-results.is-first-reveal > :not(.capitol-loading-layout) {
+  animation: capitol-records-in 0.2s ease-out;
+}
+@keyframes capitol-records-in {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .capitol-results.is-first-reveal > :not(.capitol-loading-layout) {
+    animation: none;
   }
 }

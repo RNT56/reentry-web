@@ -6,6 +6,11 @@ import { mountPriceChart } from "../charts/price-chart.js";
 import { avatar, chamber, party, choosePolitician } from "./people.js";
 import { careerView, powerView } from "./insights.js";
 import { mountReturnEstimate } from "./returns.js";
+import {
+  capitolLoading,
+  capitolFilters,
+  sameCapitolFilters,
+} from "./loading.js";
 
 const count = (n) => Number(n || 0).toLocaleString();
 const date = (v) =>
@@ -51,6 +56,9 @@ export function mountPolitics(root, { model, navigate }) {
     chart = null,
     returnEstimate = null,
     chartTicker = null,
+    returnMember = null,
+    appliedFilters = null,
+    renderedOnce = false,
     data = null,
     lists = [],
     rows = [],
@@ -60,6 +68,7 @@ export function mountPolitics(root, { model, navigate }) {
     checking = false,
     statusController = null,
     lastClientCheck = 0;
+  const setupController = new AbortController();
   const live = () => alive && root.isConnected;
   root.innerHTML = `<header class="capitol-hero">${architecture()}<div class="capitol-title"><span class="eyebrow">US · PUBLIC RECORD</span><h1>Capitol<span>.</span></h1><div class="capitol-freshness" data-feed-status role="status">Fetching disclosures</div></div><div class="capitol-stats" data-capitol-stats><div><span>Disclosures</span><b>—</b></div><div><span>Filers</span><b>—</b></div><div><span>Median filing lag</span><b>—</b></div></div></header><div class="capitol-sync-row" data-sync-status role="status"></div><div class="capitol-controls"><button class="capitol-back link" data-clear-person hidden aria-label="Back to people">${icon("arrowLeft")}<span>People</span></button><div class="capitol-search">${icon("sliders")}<input type="search" aria-label="Search politicians and assets" placeholder="Person, ticker or asset" value="${esc(memory.q)}" autocomplete="off"></div><button class="link capitol-people-button" data-people>People ${icon("chevron")}</button><div class="capitol-filters"><select data-filter="scope" aria-label="Disclosure scope"><option value="all">All disclosures</option><option value="portfolio">My holdings</option></select><select data-filter="chamber" aria-label="Branch or chamber">${[
     ["all", "All chambers"],
@@ -97,7 +106,16 @@ export function mountPolitics(root, { model, navigate }) {
     )
     .join(
       "",
-    )}</div></div></div><div data-capitol-results class="capitol-results" aria-busy="true"><div class="capitol-loading"></div></div>`;
+    )}</div></div></div><div data-capitol-results class="capitol-results" aria-busy="true">${capitolLoading(memory)}</div>`;
+  if (memory.scope.startsWith("list:")) {
+    root
+      .querySelector("[data-filter=scope]")
+      .insertAdjacentHTML(
+        "beforeend",
+        `<option data-pending-list value="${esc(memory.scope)}">Watchlist</option>`,
+      );
+  }
+  root.querySelector("[data-filter=scope]").value = memory.scope;
   root.querySelector("input").oninput = (e) => {
     memory.q = e.target.value;
     clearTimeout(searchTimer);
@@ -224,16 +242,34 @@ export function mountPolitics(root, { model, navigate }) {
     const max = Math.max(...bars.map((b) => b.buys + b.sells + b.other), 1);
     return `<div class="disclosure-flow"><div class="capitol-section-title"><span>Disclosure flow</span><span class="flow-legend"><i></i>Buy<i></i>Sell</span></div><div class="disclosure-flow-bars" role="img" aria-label="${annual ? "Annual" : "Monthly"} disclosed transaction counts">${bars.map((b) => `<div title="${b.date}: ${b.buys} purchases, ${b.sells} sales, ${b.other} other"><span class="flow-bar"><i style="height:${(b.buys / max) * 100}%"></i><i style="height:${(b.sells / max) * 100}%"></i><i style="height:${(b.other / max) * 100}%"></i></span><small>${annual ? b.date.slice(2) : new Date(b.date + "-15").toLocaleDateString(undefined, { month: "short" })}</small></div>`).join("")}</div></div>`;
   }
-  function render() {
+  function render({ sameQuery = false } = {}) {
     const s = data.summary,
       result = root.querySelector("[data-capitol-results]");
     stats();
+    result.classList.toggle("is-first-reveal", !renderedOnce);
+    renderedOnce = true;
     root.querySelector(".capitol-back").hidden = !memory.member;
-    chart?.destroy();
-    returnEstimate?.destroy();
-    returnEstimate = null;
-    chart = null;
-    chartTicker = null;
+    const retainedChart =
+      chartTicker === memory.ticker
+        ? result.querySelector("[data-capitol-chart]")
+        : null;
+    const retainedReturns =
+      returnMember === data.member?.id
+        ? result.querySelector(".political-returns")
+        : null;
+    const railScroll = sameQuery
+      ? result.querySelector(".politician-rail")?.scrollLeft || 0
+      : 0;
+    if (!retainedChart) {
+      chart?.destroy();
+      chart = null;
+      chartTicker = null;
+    }
+    if (!retainedReturns) {
+      returnEstimate?.destroy();
+      returnEstimate = null;
+      returnMember = null;
+    }
     const asset = memory.ticker
       ? {
           symbol: memory.ticker,
@@ -271,20 +307,27 @@ export function mountPolitics(root, { model, navigate }) {
     <section class="disclosure-ledger"><header class="capitol-section-title"><h2>Disclosures <span>${count(s.count)}</span></h2><span><i class="buy">${count(s.buys)} buys</i> · <i class="sell">${count(s.sells)} sells</i></span></header><div class="disclosure-columns" aria-hidden="true"><span>Filer</span><span>Asset</span><span>Action</span><span>Reported value</span><span>Filed</span><span></span></div><div data-trade-rows>${rows.map(tradeRow).join("") || `<div class="capitol-empty"><span>${icon("layers")}</span><h3>${data.coverage ? "No matching disclosures" : "The disclosure feed is unavailable"}</h3><button class="link" ${data.coverage ? "data-reset" : "data-retry"}>${data.coverage ? "Reset filters" : "Retry"} ${icon("arrow")}</button></div>`}</div><button class="disclosure-more link" data-more ${data.nextOffset === null ? "hidden" : ""}>Load more ${icon("plus")}</button></section>
     <details class="capitol-coverage"><summary>Sources & coverage ${icon("chevron")}</summary><div><p><a href="https://huggingface.co/datasets/austin-starks/congressional-stock-trades" target="_blank" rel="noopener noreferrer">NexusTrade · historical archive ${icon("arrow")}</a></p><p><a href="https://github.com/kadoa-org/congress-trading-monitor" target="_blank" rel="noopener noreferrer">Kadoa · Congress Trading Monitor ${icon("arrow")}</a></p>${data.coverage ? `<dl><div><dt>Available filing history</dt><dd>${date(data.coverage.from)} – ${date(data.coverage.through)}</dd></div><div><dt>Disclosed transactions</dt><dd>${count(data.coverage.rows)}</dd></div><div><dt>Last checked</dt><dd data-last-checked>${data.checkedAt ? new Date(data.checkedAt).toLocaleString() : "Not verified yet"}</dd></div><div><dt>Source published</dt><dd>${data.publishedAt ? new Date(data.publishedAt).toLocaleString() : "—"}</dd></div><div><dt>Automatic checks</dt><dd>Every 12 hours</dd></div></dl>` : ""}${(data.sources || []).map((source) => `<dl><div><dt>${esc(source.name)} · ${esc(source.status)}</dt><dd>Published ${source.publishedAt ? new Date(source.publishedAt).toLocaleString() : "—"}</dd></div><div><dt>Checked</dt><dd>${source.checkedAt ? new Date(source.checkedAt).toLocaleString() : "—"}</dd></div></dl>`).join("")}<p>House Clerk · Senate eFD · Office of Government Ethics. Reported USD ranges and filing dates. Archive coverage may be partial; filing dates can differ from first publication.</p><p>Portraits: <a href="/people/credits.html" target="_blank" rel="noopener noreferrer">Sources & credits</a></p></div></details>`;
     if (data.member) {
-      const host = document.createElement("section");
+      const host = retainedReturns || document.createElement("section");
       host.className = "political-returns";
       result.querySelector(".politician-finances").after(host);
-      returnEstimate = mountReturnEstimate(host, data.member, { ownerId });
+      returnMember = data.member.id;
+      if (!retainedReturns)
+        returnEstimate = mountReturnEstimate(host, data.member, { ownerId });
     }
     if (asset) {
       chartTicker = asset.symbol;
-      chart = mountPriceChart(
-        root.querySelector("[data-capitol-chart]"),
-        asset,
-        {},
-        { ownerId },
-      );
+      if (retainedChart)
+        root.querySelector("[data-capitol-chart]").replaceWith(retainedChart);
+      else
+        chart = mountPriceChart(
+          root.querySelector("[data-capitol-chart]"),
+          asset,
+          {},
+          { ownerId },
+        );
     }
+    if (railScroll)
+      result.querySelector(".politician-rail")?.scrollTo({ left: railScroll });
     photos();
     result.setAttribute("aria-busy", "false");
   }
@@ -295,6 +338,10 @@ export function mountPolitics(root, { model, navigate }) {
     controller = new AbortController();
     const result = root.querySelector("[data-capitol-results]");
     result.setAttribute("aria-busy", "true");
+    const requestedFilters = capitolFilters(memory);
+    const sameQuery = sameCapitolFilters(appliedFilters, requestedFilters);
+    result.inert = !sameQuery;
+    if (!data) result.innerHTML = capitolLoading(memory);
     root.querySelector(".capitol-controls").classList.add("is-loading");
     const query = new URLSearchParams(
       Object.entries(memory).filter(
@@ -322,6 +369,7 @@ export function mountPolitics(root, { model, navigate }) {
       });
       if (!live() || operation !== epoch) return;
       data = next;
+      appliedFilters = requestedFilters;
       feedMetadata = next;
       rows = append ? [...rows, ...next.rows] : next.rows;
       if (append) {
@@ -330,7 +378,7 @@ export function mountPolitics(root, { model, navigate }) {
           .insertAdjacentHTML("beforeend", next.rows.map(tradeRow).join(""));
         root.querySelector("[data-more]").hidden = next.nextOffset === null;
         photos();
-      } else render();
+      } else render({ sameQuery });
     } catch (e) {
       if (!live() || operation !== epoch || e.name === "AbortError") return;
       if (append && e.status === 409) {
@@ -338,12 +386,19 @@ export function mountPolitics(root, { model, navigate }) {
         return;
       }
       if (!quiet) toast(e.message);
-      if (!data)
+      if (!data) {
+        root.querySelector("[data-feed-status]").textContent =
+          "Disclosures unavailable";
         result.innerHTML =
-          '<div class="capitol-empty"><h3>Disclosures unavailable</h3><button class="link" data-retry>Retry</button></div>';
+          '<div class="capitol-empty capitol-load-error" role="alert"><h3>Disclosures unavailable</h3><button class="link" data-retry>Retry</button></div>';
+      } else if (!sameQuery && appliedFilters) {
+        Object.assign(memory, appliedFilters);
+        syncControls();
+      }
     } finally {
       if (live() && operation === epoch) {
         more = false;
+        result.inert = false;
         result.setAttribute("aria-busy", "false");
         root.querySelector(".capitol-controls").classList.remove("is-loading");
         const b = root.querySelector("[data-more]");
@@ -542,11 +597,18 @@ export function mountPolitics(root, { model, navigate }) {
   document.addEventListener("visibilitychange", onResume);
   window.addEventListener("focus", onResume);
 
+  // The disclosure feed does not depend on watchlist metadata.
+  void load();
   (async () => {
     try {
-      lists = (await request("/api/watchlists")).lists;
+      lists = (
+        await request("/api/watchlists", "GET", undefined, {
+          signal: setupController.signal,
+        })
+      ).lists;
       if (!live()) return;
       const select = root.querySelector("[data-filter=scope]");
+      select.querySelector("[data-pending-list]")?.remove();
       select.insertAdjacentHTML(
         "beforeend",
         lists
@@ -555,15 +617,13 @@ export function mountPolitics(root, { model, navigate }) {
           )
           .join(""),
       );
-      if (![...select.options].some((o) => o.value === memory.scope))
+      if (![...select.options].some((o) => o.value === memory.scope)) {
         memory.scope = "all";
-      select.value = memory.scope;
-      await load();
-    } catch (e) {
-      if (live()) {
-        toast(e.message);
-        await load();
+        void load();
       }
+      syncControls();
+    } catch {
+      // Existing holdings/all scopes and the active feed remain usable offline.
     }
   })();
   return {
@@ -573,6 +633,7 @@ export function mountPolitics(root, { model, navigate }) {
       epoch++;
       controller?.abort();
       statusController?.abort();
+      setupController.abort();
       clearInterval(refreshTimer);
       document.removeEventListener("visibilitychange", onResume);
       window.removeEventListener("focus", onResume);

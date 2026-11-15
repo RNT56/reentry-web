@@ -337,6 +337,7 @@ export function startWorkspace() {
     if (model.page === "portfolio" && h)
       assetContext = mountAssetContext($("#asset-context"), {
         symbol: h.symbol,
+        name: h.name,
       });
     if (model.page === "portfolio" && h)
       priceChart = mountPriceChart(
