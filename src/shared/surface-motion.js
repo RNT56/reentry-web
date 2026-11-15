@@ -235,7 +235,8 @@ export function installSurfaceMotion(root = document) {
   function flush() {
     frame = 0;
     if (disposed || suspended) return;
-    const nextContext = `${win.location?.pathname || ""}${win.location?.hash || ""}|${doc.querySelector('.intelligence-tabs [aria-current="page"]')?.getAttribute("data-tab") || ""}|${doc.querySelector(".asset-chip.selected")?.getAttribute("data-research-asset") || ""}`;
+    // Switching an asset changes data, not the page. Keep already-seen surfaces still.
+    const nextContext = `${win.location?.pathname || ""}${(win.location?.hash || "").split("?")[0]}|${doc.querySelector('.intelligence-tabs [aria-current="page"]')?.getAttribute("data-tab") || ""}`;
     if (context !== nextContext) {
       context = nextContext;
       seen.clear();

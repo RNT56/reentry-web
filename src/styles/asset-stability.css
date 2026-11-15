@@ -1,0 +1,75 @@
+/* Loading and settled data occupy the same chart geometry. */
+.asset-chart.has-reference-space .asset-reference-legend {
+  display: flex;
+  min-height: 40px;
+}
+.asset-chart:not(.chart-fullscreen) .asset-readout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+  min-height: 64px;
+}
+.asset-chart:not(.chart-fullscreen) .asset-readout strong {
+  line-height: 1.25;
+}
+.asset-chart:not(.chart-fullscreen) .asset-readout > span {
+  min-height: 14px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+.planner .panel-head .row,
+.research-command .row {
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-start;
+}
+.planner .panel-head .row > div,
+.research-command .row > div {
+  min-width: 0;
+}
+.planner .panel-head h1,
+.research-command h2 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.planner .panel-head > button {
+  flex-shrink: 0;
+}
+.analysis-chart:not(.chart-fullscreen) .ta-change {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.research-command {
+  min-height: 94px;
+}
+.analysis-chart:not(.chart-fullscreen) .ta-slots {
+  display: grid;
+  grid-template-columns: 36px repeat(3, minmax(0, 1fr));
+  flex: 1;
+  max-width: 580px;
+}
+@media (max-width: 600px) {
+  .asset-chart.has-reference-space .asset-reference-legend {
+    min-height: 44px;
+  }
+}
+.asset-chart.chart-fullscreen .asset-readout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-height: 50px;
+}
+.asset-chart.chart-fullscreen .asset-readout strong {
+  line-height: 1.2;
+}
+.asset-chart.chart-fullscreen .asset-readout > span {
+  min-height: 14px;
+  line-height: 14px;
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .asset-chart.chart-fullscreen.has-reference-space .asset-reference-legend {
+    min-height: 32px;
+  }
+}

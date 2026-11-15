@@ -48,6 +48,7 @@ export function mountSourceMonitor(
   root,
   {
     asset,
+    initialData = null,
     onTree = () => {},
     onVerify = () => {},
     onSettings = () => {},
@@ -59,6 +60,7 @@ export function mountSourceMonitor(
 ) {
   let alive = true,
     loaded = false,
+    initialSnapshot = initialData,
     busy = false,
     info = null,
     detail = null,
@@ -289,9 +291,14 @@ export function mountSourceMonitor(
   async function load(initial = true) {
     const epoch = ++generation;
     try {
-      const value = await req(
-        "/api/source-monitor?" + new URLSearchParams({ symbol: asset.symbol }),
-      );
+      const snapshot = initialSnapshot;
+      initialSnapshot = null;
+      const value =
+        snapshot ||
+        (await req(
+          "/api/source-monitor?" +
+            new URLSearchParams({ symbol: asset.symbol }),
+        ));
       if (!live() || epoch !== generation) return;
       info = value;
       onSignals(structuredClone(value.signals || []));
@@ -583,6 +590,7 @@ export function mountSourceMonitor(
       render();
     }
   };
+  render();
   load();
   return {
     refresh() {

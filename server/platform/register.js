@@ -19,6 +19,7 @@ import { registerSourceMonitorRoutes } from "../ai/source-monitor-routes.js";
 import { registerIntelligenceRoutes } from "../intelligence/routes.js";
 import { registerJournalRoutes } from "../journal/routes.js";
 import { createPortfolioSources } from "../intelligence/portfolio-sources.js";
+import { registerAssetContextRoutes } from "../intelligence/asset-context.js";
 export function registerPlatform(app, db, market, options = {}) {
   migratePlatform(db);
   registerWatchlistRoutes(app, db);
@@ -83,6 +84,7 @@ export function registerPlatform(app, db, market, options = {}) {
   registerChartAnalysisRoutes(app, services);
   registerSourceMonitorRoutes(app, services);
   registerIntelligenceRoutes(app, services);
+  registerAssetContextRoutes(app, services);
   registerJournalRoutes(app, services);
   app.decorate("intelligenceEngine", engine);
   app.decorate("portfolioSources", portfolioSources);

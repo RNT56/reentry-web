@@ -27,6 +27,7 @@ export function mountAssetChart(
     currencyControl = false,
     data: initialData = null,
     references = () => [],
+    reserveReferences = false,
     xLabel,
     yLabel,
     onInspect,
@@ -56,6 +57,7 @@ export function mountAssetChart(
     error = "",
     hover = 0;
   root.classList.add("asset-chart");
+  root.classList.toggle("has-reference-space", reserveReferences);
   root.innerHTML = `<div class="asset-chart-heading">${readout ? '<div class="asset-readout"><strong data-asset-price data-number>—</strong><span data-asset-change data-number></span></div>' : '<span class="asset-chart-title">' + esc(label) + "</span>"}<span class="asset-expand"></span></div>${accessory ? `<div class="asset-chart-accessory">${accessory}</div>` : ""}<div class="asset-plot ta-plot" tabindex="0" role="slider" aria-label="${esc(label)} chart. Drag in any direction to pan; pinch or scroll to zoom. Drag axes to scale; double-click to reset. Shift and arrows pan, plus and minus zoom, zero fits the view." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><div class="asset-chart-empty loading-surface">Loading…</div></div><div class="asset-reference-legend"></div><div class="asset-chart-controls">${
     ranges
       ? `<div class="asset-ranges" role="group" aria-label="Chart time range">${Object.entries(

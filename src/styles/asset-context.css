@@ -1,0 +1,203 @@
+.asset-context {
+  container-type: inline-size;
+  padding: 22px 26px 26px;
+  border-block: 1px solid var(--line);
+}
+.asset-context-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.asset-context-heading h2 {
+  font-size: 14px;
+  font-weight: 550;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+.asset-context-heading > span {
+  font: 11px var(--font-numbers);
+  color: var(--muted);
+}
+.asset-context-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.asset-context-card {
+  min-width: 0;
+  padding: 16px 18px;
+  background: var(--bg, #101512);
+}
+.asset-context-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--text);
+  text-decoration: none;
+}
+.asset-context-link h3 {
+  font-size: 12px;
+  font-weight: 550;
+  margin: 0;
+}
+.asset-context-link > span {
+  color: #829b89;
+  font: 10px var(--font-numbers);
+}
+.asset-context-link > svg {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  color: #91b79a;
+  transition: transform 0.16s;
+}
+.asset-context-link:hover > svg {
+  transform: translate(2px, -2px);
+}
+.asset-context-scope {
+  display: block;
+  color: #7d9485;
+  font-size: 10px;
+  margin: 2px 0 12px;
+}
+.asset-context-preview {
+  height: 64px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.asset-context-entry {
+  display: block;
+  min-width: 0;
+  color: #c5d4c9;
+  text-decoration: none;
+}
+.asset-context-entry > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+}
+.asset-context-entry small {
+  display: block;
+  font-size: 10px;
+  color: #82978a;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.asset-context-entry:hover > span {
+  color: var(--accent, #bcf58b);
+}
+.asset-context-empty,
+.asset-context-retry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #93a699;
+  font-size: 11px;
+  line-height: 20px;
+  text-decoration: none;
+  text-align: left;
+  min-height: 44px;
+}
+.asset-context-empty svg,
+.asset-context-retry svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.asset-context-skeleton {
+  display: block;
+  height: 14px;
+  width: 80%;
+  background: #aec7b509;
+  border-radius: 3px;
+  margin-top: 5px;
+}
+.asset-context-flow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  color: #90a596;
+  font-size: 10px;
+  text-decoration: none;
+  padding: 0;
+  line-height: 16px;
+}
+.asset-context-card[data-context="capitol"] .asset-context-preview {
+  gap: 4px;
+}
+.asset-context-card[data-context="capitol"] .asset-context-entry > span {
+  -webkit-line-clamp: 1;
+}
+.asset-context-flow span:last-of-type {
+  text-align: right;
+}
+.asset-context-flow b {
+  font: 13px var(--font-numbers);
+  color: #bbd9b9;
+}
+.asset-context-flow span:last-of-type b {
+  color: #d6aaa0;
+}
+.asset-context-flow i {
+  grid-column: 1/-1;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    #90bd95 var(--buy-share),
+    #b5877d var(--buy-share)
+  );
+}
+@container (max-width: 650px) {
+  .asset-context-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .asset-context {
+    padding: 18px 14px;
+  }
+  .asset-context-card {
+    padding: 14px 12px;
+  }
+  .asset-context-preview {
+    height: 64px;
+  }
+  .asset-context-entry:nth-child(2):last-child:not(:only-child) {
+    display: none;
+  }
+  .asset-context-card[data-context="capitol"] .asset-context-entry {
+    display: block;
+  }
+  .asset-context-entry > span {
+    -webkit-line-clamp: 2;
+  }
+  .asset-context-card[data-context="capitol"] .asset-context-entry > span {
+    -webkit-line-clamp: 1;
+  }
+  .asset-context-entry > span {
+    font-size: 11px;
+  }
+  .asset-context-empty {
+    align-items: flex-start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .asset-context-link > svg {
+    transition: none;
+  }
+}

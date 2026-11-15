@@ -84,8 +84,12 @@ export function mountIntelligence(root, { model, navigate }) {
     aiAnalysis = null,
     sourceMonitor = null,
     sourceSignals = null,
+    sourceSnapshot = null,
     sourceConnections = [],
     chartSymbol = null,
+    contextualAsset = null,
+    renderedAssets = "",
+    renderedWatchlists = "",
     studio = null,
     strategies = null,
     admin = null,
@@ -126,7 +130,9 @@ export function mountIntelligence(root, { model, navigate }) {
       return request("/api/research/assets?list=all");
     }
   }
-  const active = () => assets.find((a) => a.symbol === memory.symbol);
+  const active = () =>
+    assets.find((a) => a.symbol === memory.symbol) ||
+    (contextualAsset?.symbol === memory.symbol ? contextualAsset : null);
   const live = () => alive && root.isConnected;
   const canLeave = () => {
     if (studio?.isDirty()) {
@@ -172,25 +178,48 @@ export function mountIntelligence(root, { model, navigate }) {
           (e) => toast(e.message),
         );
   }
+  const watchlistSignature = () =>
+    JSON.stringify([watchlists, memory.watchlistId, !!memory.symbol]);
   function patchAssetChips(focusSymbol = null) {
     const bar = root.querySelector(".watchlist-bar");
     if (bar) {
-      bar.outerHTML = watchlistBar(
-        watchlists,
-        memory.watchlistId,
-        memory.symbol,
-      );
-      bindWatchlistSelect();
+      const signature = watchlistSignature();
+      if (renderedWatchlists !== signature) {
+        bar.outerHTML = watchlistBar(
+          watchlists,
+          memory.watchlistId,
+          memory.symbol,
+        );
+        bindWatchlistSelect();
+      } else {
+        const assign = bar.querySelector("[data-watchlist-assign]");
+        if (assign) assign.title = `Add ${memory.symbol} to a watchlist`;
+      }
+      renderedWatchlists = signature;
     }
     const rail = root.querySelector(".research-assets");
     if (!rail) return;
-    reorder?.destroy();
-    reorder = null;
-    const scroll = rail.scrollLeft;
-    rail.innerHTML = assetChips();
-    rail.scrollLeft = scroll;
-    bindLogos();
-    mountAssetReorder();
+    const signature = JSON.stringify(assets);
+    if (renderedAssets !== signature) {
+      reorder?.destroy();
+      reorder = null;
+      const scroll = rail.scrollLeft;
+      rail.innerHTML = assetChips();
+      rail.scrollLeft = scroll;
+      renderedAssets = signature;
+      bindLogos();
+      mountAssetReorder();
+    } else {
+      for (const item of rail.querySelectorAll(".research-asset-item")) {
+        const selected = item.dataset.orderSymbol === memory.symbol;
+        item.classList.toggle("is-selected", selected);
+        const button = item.querySelector("[data-research-asset]");
+        button.classList.toggle("selected", selected);
+        button.setAttribute("aria-current", String(selected));
+        item.querySelector("[data-remove-research]").disabled =
+          removingAssets.has(item.dataset.orderSymbol);
+      }
+    }
     if (focusSymbol)
       rail
         .querySelector(`[data-research-asset="${CSS.escape(focusSymbol)}"]`)
@@ -446,7 +475,7 @@ export function mountIntelligence(root, { model, navigate }) {
       return false;
     if (adoptAssets(response, canonical) === false) return false;
     if (
-      !assets.some((a) => a.symbol === memory.symbol) &&
+      !active() &&
       assets.length &&
       ["research", "strategies", "scenarios"].includes(memory.tab)
     ) {
@@ -618,11 +647,48 @@ export function mountIntelligence(root, { model, navigate }) {
       ["research", "map-article"].includes(j.kind),
     );
     sets = data[3].sets;
+    if (
+      memory.entrySymbol === memory.symbol &&
+      !assets.some((a) => a.symbol === memory.symbol)
+    ) {
+      const holding = model.state.holdings.find(
+        (h) => h.symbol === memory.symbol,
+      );
+      contextualAsset = {
+        symbol: memory.symbol,
+        name: holding?.name || memory.symbol,
+        automatic: false,
+        contextual: true,
+      };
+    }
+    if (
+      memory.focusSetId &&
+      !sets.some((set) => set.id === memory.focusSetId)
+    ) {
+      const linkedSet = await request(
+        "/api/scenarios/" + encodeURIComponent(memory.focusSetId),
+      );
+      if (!live() || generation !== loadGeneration) return;
+      if (linkedSet.symbol === memory.symbol) sets.push(linkedSet);
+    }
     journal = data[4].articles;
-    if (!assets.some((a) => a.symbol === memory.symbol))
-      memory.symbol = assets[0]?.symbol || null;
+    if (!active()) memory.symbol = assets[0]?.symbol || null;
     await loadAsset();
-    if (live()) render();
+    if (live()) {
+      render();
+      if (memory.entryPending) {
+        memory.entryPending = false;
+        const target =
+          memory.tab === "scenarios" && memory.focusSetId
+            ? root.querySelector(
+                `[data-scenario-set="${CSS.escape(memory.focusSetId)}"]`,
+              )
+            : memory.jobId
+              ? root.querySelector(".brief-panel")
+              : null;
+        target?.scrollIntoView({ block: "start", behavior: "instant" });
+      }
+    }
   }
   async function loadAsset() {
     if (!active()) {
@@ -646,6 +712,7 @@ export function mountIntelligence(root, { model, navigate }) {
         ).catch(() => null),
       ]);
       const wanted =
+        (memory.jobId ? { id: memory.jobId } : null) ||
         jobs.find((j) => j.id === memory.jobId && j.symbol === selected) ||
         jobs.find(
           (j) =>
@@ -654,7 +721,7 @@ export function mountIntelligence(root, { model, navigate }) {
             j.status === "completed",
         );
       const detail = wanted
-        ? await request("/api/research/jobs/" + wanted.id)
+        ? await request("/api/research/jobs/" + encodeURIComponent(wanted.id))
         : null;
       if (
         !live() ||
@@ -665,7 +732,8 @@ export function mountIntelligence(root, { model, navigate }) {
       applySources(data);
       sourceSignals = monitored?.latest || null;
       sourceConnections = monitored?.signals || [];
-      job = detail;
+      sourceSnapshot = monitored;
+      job = detail?.symbol === selected ? detail : null;
     } finally {
       assetLoads--;
     }
@@ -943,7 +1011,7 @@ export function mountIntelligence(root, { model, navigate }) {
         ? document.activeElement
         : null;
     destroyChildren(!!retainedChart, retainedScenario);
-    root.innerHTML = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ${icon("arrow")}</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
+    const markup = `<header class="workbench-heading"><h1>${memory.tab === "studio" ? "Studio" : memory.tab === "admin" ? "Owner" : memory.tab === "journal" ? "Journal" : "Research"}</h1><button class="link" data-ai-settings>Models ${icon("arrow")}</button></header><div class="research-dock"><nav class="intelligence-tabs" aria-label="Intelligence navigation">${[
       ["research", "Overview"],
       ["strategies", "Strategies"],
       ["scenarios", "Scenarios"],
@@ -962,6 +1030,26 @@ export function mountIntelligence(root, { model, navigate }) {
       .join(
         "",
       )}</nav></div>${["journal", "studio", "admin"].includes(memory.tab) ? "" : watchlistBar(watchlists, memory.watchlistId, memory.symbol)}<div class="research-asset-bar" ${["journal", "studio", "admin"].includes(memory.tab) ? "hidden" : ""}><div class="research-assets">${assetChips()}</div><span class="research-order-state"><span data-research-order-state role="status">${esc(orderStatus)}</span><button type="button" data-research-order-retry ${!orderUnsynced ? "hidden" : ""}>Retry</button></span><div class="research-search"><input id="research-search" type="search" autocomplete="off" placeholder="Find an asset" aria-label="Search assets to research"><div id="research-search-results" class="research-search-results" role="list"></div></div></div><div id="intelligence-content">${memory.tab === "research" ? research() : memory.tab === "scenarios" ? scenarios() : memory.tab === "journal" ? journalView() : memory.tab === "strategies" ? (active() ? '<div id="strategy-workspace"></div>' : empty("Select an asset", "", `<button class="link" data-focus-search>Find asset ${icon("arrow")}</button>`)) : memory.tab === "admin" && info.author ? '<div id="owner-workspace"></div>' : '<div id="author-studio"></div>'}</div><div class="intelligence-footer"><button class="link" data-export-research>Export my research ${icon("download")}</button></div>`;
+    const keepShell =
+      root.dataset.renderedTab === memory.tab &&
+      root.querySelector("#intelligence-content");
+    if (keepShell) {
+      const template = document.createElement("template");
+      template.innerHTML = markup;
+      keepShell.replaceWith(
+        template.content.querySelector("#intelligence-content"),
+      );
+      patchAssetChips();
+    } else root.innerHTML = markup;
+    if (keepShell && root.dataset.renderedSymbol !== memory.symbol) {
+      const search = root.querySelector("#research-search");
+      if (search) search.value = "";
+      root.querySelector("#research-search-results")?.replaceChildren();
+    }
+    renderedAssets = JSON.stringify(assets);
+    renderedWatchlists = watchlistSignature();
+    root.dataset.renderedTab = memory.tab;
+    root.dataset.renderedSymbol = memory.symbol || "";
     bindWatchlistSelect();
     if (memory.tab === "strategies" && active())
       strategies = mountStrategies(root.querySelector("#strategy-workspace"), {
@@ -1060,6 +1148,7 @@ export function mountIntelligence(root, { model, navigate }) {
           root.querySelector("#source-monitor"),
           {
             asset: active(),
+            initialData: sourceSnapshot,
             initialJobId: memory.monitorJobId,
             initialChange: memory.monitorChange ?? null,
             onSettings: () => navigate("settings"),
@@ -1160,7 +1249,7 @@ export function mountIntelligence(root, { model, navigate }) {
     mountAssetReorder();
     const tabs = root.querySelector(".intelligence-tabs"),
       selectedTab = tabs.querySelector('[aria-current="page"]');
-    if (selectedTab)
+    if (selectedTab && !keepShell)
       tabs.scrollLeft = Math.max(
         0,
         selectedTab.offsetLeft - tabs.offsetLeft - 16,
@@ -1433,7 +1522,21 @@ export function mountIntelligence(root, { model, navigate }) {
       );
     if (b.dataset.researchAsset)
       action(b, async () => {
-        navigationEpoch++;
+        if (b.dataset.researchAsset === chartSymbol && !assetLoads) return;
+        const operation = ++navigationEpoch;
+        const previousSymbol = chartSymbol || root.dataset.renderedSymbol;
+        const previousData = {
+          sources,
+          coverage,
+          collection,
+          job,
+          sourceSignals,
+          sourceSnapshot,
+          sourceConnections,
+        };
+        const content = root.querySelector("#intelligence-content");
+        content.inert = true;
+        content.setAttribute("aria-busy", "true");
         memory.symbol = b.dataset.researchAsset;
         memory.jobId = null;
         memory.aiJobId = null;
@@ -1441,8 +1544,32 @@ export function mountIntelligence(root, { model, navigate }) {
         memory.monitorJobId = null;
         memory.monitorChange = null;
         coverage = [];
-        await loadAsset();
-        render();
+        sources = [];
+        collection = job = sourceSignals = sourceSnapshot = null;
+        sourceConnections = [];
+        try {
+          await loadAsset();
+          if (live() && operation === navigationEpoch) render();
+        } catch (error) {
+          if (live() && operation === navigationEpoch) {
+            memory.symbol = previousSymbol;
+            ({
+              sources,
+              coverage,
+              collection,
+              job,
+              sourceSignals,
+              sourceSnapshot,
+              sourceConnections,
+            } = previousData);
+          }
+          throw error;
+        } finally {
+          if (live() && operation === navigationEpoch && content.isConnected) {
+            content.inert = false;
+            content.removeAttribute("aria-busy");
+          }
+        }
       });
     if (b.hasAttribute("data-collect"))
       action(b, async () => {

@@ -34,10 +34,11 @@ function acknowledge(element) {
 export function setAnimatedText(element, value, { animate = true } = {}) {
   if (!element) return;
   const next = String(value ?? "");
-  if (element.textContent === next) return;
+  const previous = element.textContent;
+  if (previous === next) return;
   element.textContent = next;
   numeric.set(element, next);
-  if (animate) acknowledge(element);
+  if (animate && /\d/.test(previous)) acknowledge(element);
 }
 export const animateNumber = setAnimatedText;
 export function revealChart(element) {
@@ -77,7 +78,14 @@ export function installMotion(root = document) {
       const next = target.textContent;
       const previous = numeric.get(target);
       numeric.set(target, next);
-      if (!initial && previous !== next && /\d/.test(next)) acknowledge(target);
+      // A new asset's first value is a mount, not a change to the previous asset.
+      if (
+        !initial &&
+        previous !== undefined &&
+        previous !== next &&
+        /\d/.test(next)
+      )
+        acknowledge(target);
     }
   };
   visit(root === document ? document.documentElement : root, true);

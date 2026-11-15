@@ -42,6 +42,7 @@ export function mountPriceChart(
     label: holding.symbol + " · Price history",
     ranges: true,
     currencyControl: true,
+    reserveReferences: Number.isFinite(initialLevels.buyIn) || !!holding.lots,
     load: (state) =>
       holding.demo
         ? Promise.resolve({

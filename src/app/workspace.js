@@ -1,3 +1,4 @@
+import { mountAssetContext } from "../features/portfolio/asset-context.js";
 import { mountPolitics } from "../features/politics/workspace.js";
 import { installMotion, setAnimatedText } from "../shared/motion.js";
 import { mountReorder } from "../shared/reorder.js";
@@ -9,7 +10,7 @@ import {
 import { mountMacro } from "../features/macro/workspace.js";
 import { mountAISettings } from "../features/intelligence/settings.js";
 import { createSaveQueue } from "../shared/save-queue.js";
-import { parseRoute, routeURL } from "./router.js";
+import { parseRoute, routeURL, applyAssetRoute } from "./router.js";
 import { createWorkspaceModel } from "./model.js";
 import { workspaceView } from "./view.js";
 import { emptyPortfolio } from "../domain/portfolio.js";
@@ -71,6 +72,7 @@ export function startWorkspace() {
     logout,
   });
   let priceChart = null,
+    assetContext = null,
     buybackChart = null,
     holdingReorder = null,
     intelligence = null,
@@ -110,7 +112,10 @@ export function startWorkspace() {
     const route = parseRoute(location.hash);
     model.page = route.page;
     if (route.selected !== null) model.selected = route.selected;
-    render();
+    applyAssetRoute(model, location.hash);
+    render({
+      assetSwitch: previousPage === "portfolio" && model.page === "portfolio",
+    });
     if (previousPage !== model.page)
       window.scrollTo({ top: 0, behavior: "instant" });
   });
@@ -121,7 +126,7 @@ export function startWorkspace() {
     model.selected = selected;
     const url = routeURL(page, selected);
     if (location.hash !== url) history.pushState(null, "", url);
-    render();
+    render({ assetSwitch: !pageChanged && page === "portfolio" });
     if (pageChanged) window.scrollTo({ top: 0, behavior: "instant" });
   }
   function syncLabel(text) {
@@ -146,6 +151,7 @@ export function startWorkspace() {
       model.selected = null;
       model.percent = 5;
       Object.assign(model, parseRoute(location.hash));
+      applyAssetRoute(model, location.hash);
       render();
       if (model.state.holdings.length) refresh();
       if (newAccount) openPasskeys({ modal, close, toast });
@@ -257,9 +263,9 @@ export function startWorkspace() {
     validate(model.state);
     queue.enqueue(model.state);
   }
-  function render() {
+  function render({ assetSwitch = false } = {}) {
     try {
-      renderWorkspace();
+      renderWorkspace(assetSwitch);
     } catch {
       destroyPlannerFullscreen();
       holdingReorder?.destroy();
@@ -275,7 +281,9 @@ export function startWorkspace() {
       $("#export-view").onclick = exportState;
     }
   }
-  function renderWorkspace() {
+  function renderWorkspace(assetSwitch = false) {
+    assetContext?.destroy();
+    assetContext = null;
     destroyPlannerFullscreen();
     buybackChart?.destroy();
     buybackChart = null;
@@ -304,7 +312,7 @@ export function startWorkspace() {
     for (const h of model.state.holdings)
       if (h.demo && !model.quotes[h.symbol])
         model.quotes[h.symbol] = { price: 150, time: Date.now() / 1000 };
-    $("#app").innerHTML = workspaceView(model, {
+    const markup = workspaceView(model, {
       current,
       quoteInput,
       quoteLabel,
@@ -312,7 +320,24 @@ export function startWorkspace() {
       settings,
       sync: queue.status,
     });
+    const retainedPlanner =
+      assetSwitch && $(".shell[data-view=portfolio] .planner");
+    if (retainedPlanner && current()) {
+      // Keep navigation, portfolio totals and the scrolled holdings rail mounted.
+      const template = document.createElement("template");
+      template.innerHTML = markup;
+      retainedPlanner.replaceWith(template.content.querySelector(".planner"));
+      document.querySelectorAll("[data-holding]").forEach((button) => {
+        const selected = button.dataset.holding === model.selected;
+        button.classList.toggle("selected", selected);
+        button.setAttribute("aria-pressed", String(selected));
+      });
+    } else $("#app").innerHTML = markup;
     const h = current();
+    if (model.page === "portfolio" && h)
+      assetContext = mountAssetContext($("#asset-context"), {
+        symbol: h.symbol,
+      });
     if (model.page === "portfolio" && h)
       priceChart = mountPriceChart(
         $("#price-history"),

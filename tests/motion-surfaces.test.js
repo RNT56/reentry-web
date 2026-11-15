@@ -225,6 +225,29 @@ function fixture({ reduced = false } = {}) {
   };
 }
 
+test("asset query changes do not replay already-visible surfaces, but page navigation does", () => {
+  const h = fixture();
+  try {
+    h.win.location.hash = "#/portfolio?asset=first";
+    h.flush();
+    h.enter();
+    const next = new Surface("claim", { selected: true });
+    h.win.location.hash = "#/portfolio?asset=second";
+    h.replace(h.surfaces[0], next);
+    h.flush();
+    h.enter([next]);
+    assert.equal(next.animations.length, 0);
+    const another = new Surface("claim", { selected: true });
+    h.win.location.hash = "#/explore";
+    h.replace(next, another);
+    h.flush();
+    h.enter([another]);
+    assert.equal(another.animations.length, 1);
+  } finally {
+    h.controller.destroy();
+  }
+});
+
 test("content entry uses bounded stagger with no persistent hidden or transformed state", () => {
   const h = fixture();
   try {
