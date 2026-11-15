@@ -1,0 +1,177 @@
+.political-returns.has-performance .return-body {
+  min-height: 0;
+}
+.political-performance.asset-chart:not(.chart-fullscreen) {
+  padding: 0;
+}
+.political-performance .asset-chart-heading {
+  margin-bottom: 18px;
+}
+.political-performance .asset-chart-title {
+  font-size: 11px;
+  color: #87a390;
+}
+.performance-readings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+.performance-readings button {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 0 15px;
+  border-top: 1px solid
+    color-mix(in srgb, var(--performance-color) 40%, transparent);
+  text-align: left;
+  touch-action: manipulation;
+  transition:
+    opacity 0.18s,
+    border-color 0.18s;
+}
+.performance-readings button:hover {
+  border-color: var(--performance-color);
+}
+.performance-readings button[aria-pressed="false"] {
+  opacity: 0.4;
+}
+.performance-readings button:disabled {
+  cursor: default;
+}
+.performance-readings button > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #b3c3b8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.performance-readings i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--performance-color);
+}
+.performance-readings strong {
+  font: 450 clamp(22px, 2.65vw, 36px) / 1.2 var(--font-numbers);
+  letter-spacing: -0.055em;
+  color: var(--performance-color);
+  white-space: nowrap;
+}
+.performance-readings small {
+  color: #809889;
+  font-size: 10px;
+  min-height: 14px;
+}
+.performance-dates {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 16px 0 6px;
+  min-height: 40px;
+  color: #819c8b;
+  font-size: 10px;
+}
+.performance-dates [data-performance-hover] {
+  font-family: var(--font-numbers);
+  font-size: 9px;
+  color: #a8c3af;
+}
+.performance-zero {
+  stroke: #b2cbb555;
+  stroke-dasharray: 2 5;
+  fill: none;
+  pointer-events: none;
+}
+.political-performance .asset-plot {
+  height: 340px;
+}
+.political-performance .asset-chart-caption {
+  margin-bottom: 18px;
+}
+.political-performance .asset-ranges button {
+  min-width: 38px;
+  min-height: 44px;
+}
+.political-performance.chart-fullscreen .performance-readings strong {
+  font-size: clamp(22px, 3vw, 38px);
+}
+.political-performance.chart-fullscreen .asset-chart-caption {
+  margin-bottom: 0;
+}
+@media (max-width: 700px) {
+  .performance-readings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 20px;
+  }
+  .performance-readings button {
+    gap: 8px;
+    padding-block: 12px;
+  }
+  .performance-readings strong {
+    font-size: clamp(21px, 6.2vw, 30px);
+  }
+  .performance-readings small {
+    font-size: 9px;
+  }
+  .performance-dates {
+    align-items: start;
+    flex-direction: column;
+    min-height: 53px;
+    gap: 7px;
+  }
+  .political-performance .asset-plot {
+    height: 280px;
+  }
+  .political-performance .asset-ranges button {
+    min-width: 0;
+    flex: 1;
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .political-performance.chart-fullscreen .performance-readings {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .political-performance.chart-fullscreen .performance-readings button {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 5px 8px;
+    padding-block: 8px 4px;
+  }
+  .political-performance.chart-fullscreen .performance-readings button > span {
+    font-size: 9px;
+  }
+  .political-performance.chart-fullscreen .performance-readings strong {
+    font-size: 17px;
+    grid-row: 2;
+  }
+  .political-performance.chart-fullscreen .performance-readings small {
+    grid-row: 2;
+    align-self: end;
+    font-size: 8px;
+  }
+  .political-performance.chart-fullscreen .performance-dates {
+    flex-direction: row;
+    min-height: 22px;
+    padding: 4px 0 0;
+    font-size: 9px;
+  }
+  .political-performance.chart-fullscreen .asset-chart-controls {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .political-performance.chart-fullscreen .asset-chart-controls > * {
+    flex-shrink: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .performance-readings button {
+    transition: none;
+  }
+}

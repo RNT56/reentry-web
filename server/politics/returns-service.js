@@ -8,6 +8,7 @@ import {
   RETURN_MODEL_VERSION,
 } from "./returns-model.js";
 import { POLITICAL_CHECK_INTERVAL } from "./schedule.js";
+import { performanceBenchmarks } from "./performance.js";
 
 // Public, shared calculations. No user holdings, credentials or AI calls enter
 // this service. A single bounded queue coalesces requests across all accounts.
@@ -57,10 +58,13 @@ export function createPoliticalReturns({ db, market, now = Date.now }) {
   }
   async function execute(job) {
     const histories = new Map(),
-      symbols = prepareReturns(
-        job.rows,
-        returnCutoff(job.career, clock()),
-      ).symbols;
+      symbols = [
+        ...new Set([
+          ...prepareReturns(job.rows, returnCutoff(job.career, clock()))
+            .symbols,
+          ...performanceBenchmarks.map((b) => b.symbol),
+        ]),
+      ];
     job.total = symbols.length;
     for (let i = 0; i < symbols.length && !stopped; i += 3) {
       await Promise.all(
@@ -73,14 +77,15 @@ export function createPoliticalReturns({ db, market, now = Date.now }) {
     }
     if (stopped) return;
     const result = estimateReturns(job.rows, histories, job.career, clock());
-    const missingPrices = result.coverage.reasons.some(
-      (r) => r.key === "price",
+    const missingPrices = Boolean(
+      result.coverage.reasons.some((r) => r.key === "price") ||
+        result.performance?.benchmarks.some((b) => !b.available),
     );
     // Keep a previously usable estimate available during a complete outage.
     if (!result.available && missingPrices && job.previous?.available) {
       db.prepare(
-        "UPDATE political_return_estimates SET next_check=?,failed=1 WHERE member=?",
-      ).run(clock() + 3600000, job.id);
+        "UPDATE political_return_estimates SET next_check=?,fingerprint=?,failed=1 WHERE member=?",
+      ).run(clock() + 3600000, job.fingerprint, job.id);
       return;
     }
     db.prepare(
@@ -103,7 +108,7 @@ export function createPoliticalReturns({ db, market, now = Date.now }) {
         // Avoid a hot retry loop even for an unexpected provider/schema failure.
         if (!stopped)
           db.prepare(
-            "INSERT INTO political_return_estimates VALUES(?,?,?,?,?,1) ON CONFLICT(member) DO UPDATE SET next_check=excluded.next_check,failed=1",
+            "INSERT INTO political_return_estimates VALUES(?,?,?,?,?,1) ON CONFLICT(member) DO UPDATE SET fingerprint=excluded.fingerprint,next_check=excluded.next_check,failed=1",
           ).run(
             job.id,
             job.fingerprint,
@@ -119,7 +124,7 @@ export function createPoliticalReturns({ db, market, now = Date.now }) {
       });
   }
   return {
-    get(person, allRows) {
+    get(person, allRows, { knownRevision } = {}) {
       if (stopped) return { status: "unavailable", result: null };
       const rows = allRows.filter((r) => r.memberId === person.id),
         career = careerProfile(person, rows, clock()),
@@ -153,9 +158,14 @@ export function createPoliticalReturns({ db, market, now = Date.now }) {
       // A failed run's retry deadline applies even if the prior good fingerprint
       // is older; otherwise every browser poll would start another failed job.
       const deferredFailure =
-        cached && cached.failed && cached.next_check > clock();
+        cached &&
+        cached.failed &&
+        cached.next_check > clock() &&
+        (cached.fingerprint === fingerprint ||
+          result?.modelVersion === RETURN_MODEL_VERSION);
       const fresh =
         cached?.fingerprint === fingerprint &&
+        result?.modelVersion === RETURN_MODEL_VERSION &&
         cached.next_check > clock() &&
         clock() - cached.updated_at <= POLITICAL_CHECK_INTERVAL;
       if (
@@ -178,6 +188,9 @@ export function createPoliticalReturns({ db, market, now = Date.now }) {
       }
       const job = jobs.get(person.id);
       const busy = !job && !fresh && !deferredFailure && jobs.size >= 20;
+      const revision = cached
+        ? `${cached.updated_at}.${cached.fingerprint}`
+        : null;
       return {
         status:
           job?.state ||
@@ -191,7 +204,8 @@ export function createPoliticalReturns({ db, market, now = Date.now }) {
                 ? "stale"
                 : "unavailable"),
         progress: job ? { done: job.done, total: job.total } : null,
-        result,
+        result: revision && revision === knownRevision ? null : result,
+        revision,
         updatedAt: cached?.updated_at || null,
         nextCheckAt: cached?.next_check || null,
       };

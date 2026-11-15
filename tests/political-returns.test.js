@@ -294,21 +294,21 @@ test("shared result / price caches coalesce browsers, survive restarts, and pick
   for (let i = 0; i < 20; i++) s.get(person, rows);
   const r = await settle(() => s.get(person, rows));
   assert.equal(r.status, "ready");
-  assert.equal(calls, 1);
+  assert.equal(calls, 3);
   assert.equal(r.result.variants.mid.gain, 3000);
   await s.stop();
   s = createPoliticalReturns({ db, market, now: () => clock });
   assert.equal(s.get(person, rows).status, "ready");
-  assert.equal(calls, 1);
+  assert.equal(calls, 3);
   const corrected = [{ ...rows[0], low: 2000, high: 2000 }];
   s.get(person, corrected);
   const correctedResult = await settle(() => s.get(person, corrected));
   assert.equal(correctedResult.result.variants.mid.gain, 6000);
-  assert.equal(calls, 1);
+  assert.equal(calls, 3);
   clock += 12 * 3600000 + 1;
   s.get(person, corrected);
   await settle(() => s.get(person, corrected));
-  assert.equal(calls, 2);
+  assert.equal(calls, 6);
 });
 test("provider outage keeps the previous estimate labeled stale and backs off for an hour", async (t) => {
   const db = openStore(":memory:");
@@ -341,13 +341,13 @@ test("provider outage keeps the previous estimate labeled stale and backs off fo
   assert.equal(failed.status, "stale");
   assert.equal(failed.result.computedAt, first.result.computedAt);
   assert.equal(failed.result.variants.mid.gain, 3000);
-  assert.equal(calls, 2);
+  assert.equal(calls, 6);
   for (let i = 0; i < 20; i++) s.get(person, rows);
-  assert.equal(calls, 2);
+  assert.equal(calls, 6);
   clock += 3600001;
   s.get(person, rows);
   await settle(() => s.get(person, rows));
-  assert.equal(calls, 3);
+  assert.equal(calls, 9);
 });
 test("return markup escapes data, exposes estimates and distinguishes missing salary", () => {
   const r = calc([row()], history(), { salary: null });

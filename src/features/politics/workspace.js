@@ -274,7 +274,7 @@ export function mountPolitics(root, { model, navigate }) {
       const host = document.createElement("section");
       host.className = "political-returns";
       result.querySelector(".politician-finances").after(host);
-      returnEstimate = mountReturnEstimate(host, data.member.id, { ownerId });
+      returnEstimate = mountReturnEstimate(host, data.member, { ownerId });
     }
     if (asset) {
       chartTicker = asset.symbol;

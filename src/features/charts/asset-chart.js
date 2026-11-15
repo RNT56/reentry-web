@@ -28,12 +28,17 @@ export function mountAssetChart(
     data: initialData = null,
     references = () => [],
     xLabel,
+    yLabel,
+    onInspect,
+    linearOnly = false,
+    sampleLimit,
     extra,
     onCurrency,
     accessory = "",
   } = {},
 ) {
   if (!ownerId) throw Error("Chart account required.");
+  const rangeOptions = typeof ranges === "object" ? ranges : historyRanges;
   const sync = chartWorkspaceSync(ownerId, symbol, surface),
     hidden = new Set();
   let state = sync.get(1).state,
@@ -54,7 +59,7 @@ export function mountAssetChart(
   root.innerHTML = `<div class="asset-chart-heading">${readout ? '<div class="asset-readout"><strong data-asset-price data-number>—</strong><span data-asset-change data-number></span></div>' : '<span class="asset-chart-title">' + esc(label) + "</span>"}<span class="asset-expand"></span></div>${accessory ? `<div class="asset-chart-accessory">${accessory}</div>` : ""}<div class="asset-plot ta-plot" tabindex="0" role="slider" aria-label="${esc(label)} chart. Drag in any direction to pan; pinch or scroll to zoom. Drag axes to scale; double-click to reset. Shift and arrows pan, plus and minus zoom, zero fits the view." aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><div class="asset-chart-empty loading-surface">Loading…</div></div><div class="asset-reference-legend"></div><div class="asset-chart-controls">${
     ranges
       ? `<div class="asset-ranges" role="group" aria-label="Chart time range">${Object.entries(
-          historyRanges,
+          rangeOptions,
         )
           .map(
             ([key, v]) =>
@@ -62,7 +67,7 @@ export function mountAssetChart(
           )
           .join("")}</div>`
       : ""
-  }<div class="asset-navigation" role="group" aria-label="Chart navigation"><button data-asset-zoom="out" aria-label="Zoom chart out">${icon("minus")}</button><button data-asset-fit title="Reset both axes">Fit</button><button data-asset-zoom="in" aria-label="Zoom chart in">${icon("plus")}</button><button data-asset-log aria-pressed="false">Log</button>${currencyControl ? '<button data-asset-currency aria-label="Switch chart currency">EUR</button>' : ""}</div><button class="asset-sync" data-asset-sync aria-live="polite" title="All chart changes saved">Saved</button></div><div class="asset-sync-review" hidden><button data-view-latest>Use latest view</button><button data-view-mine>Keep my view</button></div><div class="asset-chart-caption"><span data-asset-source></span><span data-asset-date></span></div>`;
+  }<div class="asset-navigation" role="group" aria-label="Chart navigation"><button data-asset-zoom="out" aria-label="Zoom chart out">${icon("minus")}</button><button data-asset-fit title="Reset both axes">Fit</button><button data-asset-zoom="in" aria-label="Zoom chart in">${icon("plus")}</button><button data-asset-log aria-pressed="false" ${linearOnly ? "hidden" : ""}>Log</button>${currencyControl ? '<button data-asset-currency aria-label="Switch chart currency">EUR</button>' : ""}</div><button class="asset-sync" data-asset-sync aria-live="polite" title="All chart changes saved">Saved</button></div><div class="asset-sync-review" hidden><button data-view-latest>Use latest view</button><button data-view-mine>Keep my view</button></div><div class="asset-chart-caption"><span data-asset-source></span><span data-asset-date></span></div>`;
   const plot = root.querySelector(".asset-plot"),
     status = root.querySelector("[data-asset-sync]");
   const live = () => !disposed && root.isConnected;
@@ -171,11 +176,13 @@ export function mountAssetChart(
           month: "short",
           year: "numeric",
         }).format(p.time * 1000);
+    const inspection = onInspect?.({ index: hover, point: p, data, exploring });
     plot.setAttribute("aria-valuemax", String(data.points.length - 1));
     plot.setAttribute("aria-valuenow", String(hover));
     plot.setAttribute(
       "aria-valuetext",
-      `${p.price} ${data.currency || state.currency}`,
+      inspection ||
+        `${p.price ?? "Unavailable"} ${data.currency || state.currency}`,
     );
     const cross = plot.querySelector(".asset-crosshair");
     if (cross && geometry) {
@@ -187,10 +194,20 @@ export function mountAssetChart(
         .querySelector(".asset-cross-h")
         .setAttribute(
           "d",
-          `M${geometry.L} ${geometry.y(p.price)}H${geometry.R}`,
+          Number.isFinite(p.price)
+            ? `M${geometry.L} ${geometry.y(p.price)}H${geometry.R}`
+            : "",
         );
       cross.querySelector("circle").setAttribute("cx", geometry.x(hover));
-      cross.querySelector("circle").setAttribute("cy", geometry.y(p.price));
+      cross
+        .querySelector("circle")
+        .setAttribute(
+          "cy",
+          Number.isFinite(p.price) ? geometry.y(p.price) : geometry.T,
+        );
+      cross
+        .querySelector("circle")
+        .setAttribute("opacity", Number.isFinite(p.price) ? "1" : "0");
     }
   }
   function draw() {
@@ -202,6 +219,8 @@ export function mountAssetChart(
         references: refs,
         hidden,
         xLabel,
+        yLabel,
+        sampleLimit,
         extra: (g) => extra?.(g, data),
       });
     geometry = result.geometry;
@@ -558,9 +577,14 @@ export function mountAssetChart(
   }
   void initialize();
   return {
-    setData(next) {
+    refresh: refreshView,
+    setData(next, { resetPrice = false } = {}) {
       gestures.finish();
       data = next;
+      if (resetPrice) {
+        state.priceRange = null;
+        if (ready) remember();
+      }
       if (
         ready &&
         next.currency &&

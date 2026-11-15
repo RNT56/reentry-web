@@ -1,11 +1,21 @@
 import { chartGeometry, chartNumber } from "./analysis-render.js";
 import { renderChartInk, newChartInkId } from "../../shared/chart-ink.js";
 import { esc } from "../../shared/format.js";
+import { sampleChartPoints } from "../../domain/chart-sampling.js";
 
 export function renderAssetPlot(
   data,
   state,
-  { width, height, references = [], hidden = new Set(), xLabel, extra } = {},
+  {
+    width,
+    height,
+    references = [],
+    hidden = new Set(),
+    xLabel,
+    yLabel,
+    sampleLimit,
+    extra,
+  } = {},
 ) {
   const points = data.points;
   if (!points || points.length < 2)
@@ -64,20 +74,25 @@ export function renderAssetPlot(
             : { month: "short", day: "numeric" }),
         }).format(time * 1000));
   const inks = series.map((s, i) =>
-    renderChartInk(s.points, {
-      id: id + "-" + i,
-      x: (_index, p) => g.timeX(p.time),
-      y: g.y,
-      baseline: s.primary ? g.B : undefined,
-      color: s.color || "#9bd5aa",
-      highlight: s.highlight || s.color || "#dcf1d5",
-      endpoint: false,
-      className: "asset-series-line",
-    }),
+    renderChartInk(
+      sampleLimit
+        ? sampleChartPoints(s.points.slice(g.from, g.to + 1), sampleLimit)
+        : s.points,
+      {
+        id: id + "-" + i,
+        x: (_index, p) => g.timeX(p.time),
+        y: g.y,
+        baseline: s.primary ? g.B : undefined,
+        color: s.color || "#9bd5aa",
+        highlight: s.highlight || s.color || "#dcf1d5",
+        endpoint: false,
+        className: "asset-series-line",
+      },
+    ),
   );
   const grid = Array.from({ length: 5 }, (_, i) => {
     const y = g.T + ((g.B - g.T) * i) / 4;
-    return `<path d="M${g.L} ${y}H${g.R}" class="ta-grid"/><text x="${g.R + 8}" y="${y + 4}" class="ta-axis">${chartNumber(g.axis(i))}</text>`;
+    return `<path d="M${g.L} ${y}H${g.R}" class="ta-grid"/><text x="${g.R + 8}" y="${y + 4}" class="ta-axis">${esc(yLabel ? yLabel(g.axis(i)) : chartNumber(g.axis(i)))}</text>`;
   }).join("");
   const ticks = [
     ...new Set([

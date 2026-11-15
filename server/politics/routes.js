@@ -143,7 +143,12 @@ export function registerPoliticalRoutes(
       id = data.aliases?.[req.query.member] || req.query.member,
       person = data.people?.find((p) => p.id === id);
     if (!person) throw fail("Person not found.", 404);
-    return politicalReturns.get(person, data.rows);
+    return politicalReturns.get(person, data.rows, {
+      knownRevision:
+        typeof req.query.revision === "string"
+          ? req.query.revision.slice(0, 100)
+          : undefined,
+    });
   });
   app.post("/api/politics/refresh", auth, async () =>
     feedStatus(await politics.get({ force: true })),

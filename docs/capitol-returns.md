@@ -19,12 +19,28 @@ A **price-return estimate**, not reported profit, total return, net worth, or fu
 
 Fresh price histories/results are reused for 12 hours. Changed disclosure inputs invalidate the result; prices remain reusable. Missing prices back off one hour. A complete provider outage retains an older good estimate with a stale label and its original calculation timestamp. Restart loads caches rather than downloading again. The UI polls job status only while calculating, suspends while hidden, and cancels on profile exit. Source feeds retain their existing 12-hour schedule.
 
-The amount controls, gain/salary bars, loss direction, per-asset contributions, price dates, owners, unmatched sales and exclusion counts are inspectable in the profile. Both comparison bars use the same linear USD scale. Empty, pending and cached results never masquerade as completed calculations.
+The profile offers a daily interactive performance chart with 1M, 3M, 6M, YTD, 1Y, 5Y and All timeframes. Four toggleable series share a linear USD gain axis: estimated investment gains, salary benchmark, S&P 500 and MSCI World. Missing histories show gaps or Unavailable, never a fabricated zero. Record contributions and model coverage remain expandable below the chart. Cached pre-chart results retain the previous bar comparison during upgrades or outages.
+
+## Daily performance and index comparisons
+
+Model version 2 uses one FIFO ledger for the headline and daily observations. Values include realized gains plus modeled remaining-lot gains, priced only from closes available on or before each observation. A close older than seven days makes that daily valuation unavailable. The daily calculation does not reuse today's valuation for the past.
+
+The benchmark portfolios use actual USD **price** indexes: Yahoo `^GSPC` (S&P 500) and `^990100-USD-STRD` (MSCI World). Both exclude dividends. Yahoo omits currency metadata for the exact MSCI USD identifier; only that pinned identifier permits this omission, and explicit non-USD currencies are rejected.
+
+Each modeled purchase invests the same dollars into each index on its execution date. A matched FIFO stock sale disposes of the same fraction of that index lot, preserving comparable capital and timing. Realized gains remain constant after sale; no reinvestment or interest is invented. Unknown-cost-basis sales create no index transactions. A missing benchmark execution price disables that comparison rather than skipping its cash flow. This is a retrospective transaction-date comparison, not a strategy based on the later publication date of disclosures.
+
+Every timeframe subtracts the cumulative value on the same starting date from all four series. Existing holdings continue across the boundary; shorter windows do not restart the portfolio. YTD starts from the previous December 31 close, and month windows clamp to the end of shorter months. If the investment baseline is unavailable, all series move together to the next available observation; a benchmark without that baseline is unavailable for that window. The actual displayed dates expose shortened coverage.
+
+The chart reuses asset-chart gestures, fullscreen, keyboard inspection, and account-scoped optimistic view synchronization. The `performance` surface and deterministic person identifiers keep timeframes and both axis ranges independent from asset analysis. Rendering samples real extrema and gap boundaries only; pointer and keyboard inspection retain full daily resolution. A result revision lets polling clients omit unchanged chart payloads. No new database migration, paid connector, AI call or BYOC spend is required.
 
 ## Primary references
 
 - [House financial-disclosure rules](https://ethics.house.gov/financial-disclosure/): transaction reporting includes reportable family holdings and amount categories; sales disclose proceeds, not gains.
 - [Yahoo adjusted-close methodology](https://help.yahoo.com/kb/SLN28256.html): the model deliberately uses close, not dividend-adjusted close.
 - [Published pay schedules](https://uscode.house.gov/us/usc/119-136/t5/s5332/): linked individually with the existing salary metadata.
+- [S&P 500 index](https://www.spglobal.com/spdji/en/indices/equity/sp-500/): USD price-return variant.
+- [MSCI World USD price-index factsheet](https://www.msci.com/documents/10199/255599/msci-world-index-usd-price.pdf): price returns, excluding reinvested dividends.
 
 Regression coverage: FIFO, full/partial/unmatched sales, ownership, same-day ordering, losses and all amount assumptions, instrument/price/currency/issuer exclusions, former-member cutoff, daily price normalization, salary period, cache coalescing/restart/corrections/failure backoff, authentication and zero AI spending.
+
+Performance coverage adds daily/headline reconciliation, owner-isolated closures of a shared ticker, matched-capital index purchases and sales, missing-price gaps and recovery, no future-price lookahead, common timeframe baselines, year/month boundaries, pinned index metadata, empty coverage caching, upgrade failure backoff, payload revisions, account-isolated timeframe/axis persistence, and peak/gap-preserving drawing reduction.

@@ -3,22 +3,31 @@ import {
   validateChartWorkspaceState,
 } from "./chart-workspace.js";
 import { chartStateVersion } from "./chart-merge.js";
+import { performanceRanges } from "./political-performance.js";
 
 export const chartViewSurfaces = [
   "price",
   "strategies",
   "structure",
   "buyback",
+  "performance",
 ];
 export function defaultChartViewState(surface = "price") {
   return {
     ...defaultChartWorkspaceState("Chart view"),
-    range: surface === "price" ? "1mo" : "5y",
+    range:
+      surface === "performance" ? "all" : surface === "price" ? "1mo" : "5y",
     indicators: [],
-    priceCurrency: "EUR",
+    priceCurrency: surface === "performance" ? "USD" : "EUR",
+    ...(surface === "performance" ? { currency: "USD", scale: "linear" } : {}),
   };
 }
 export function validateChartViewState(input, surface = "price") {
+  const performance = surface === "performance";
+  if (performance && (!input || !Object.hasOwn(performanceRanges, input.range)))
+    throw Object.assign(Error("Invalid performance timeframe."), {
+      statusCode: 400,
+    });
   const numeric = surface === "buyback";
   const state = validateChartWorkspaceState({
     ...input,
@@ -26,6 +35,7 @@ export function validateChartViewState(input, surface = "price") {
     indicators: [],
     drawings: [],
     ...(numeric ? { viewport: null } : {}),
+    ...(performance ? { range: "5y", currency: "USD", scale: "linear" } : {}),
   });
   const priceCurrency = input.priceCurrency ?? input.currency;
   if (typeof priceCurrency !== "string" || !/^[A-Z]{3,6}$/.test(priceCurrency))
@@ -33,6 +43,10 @@ export function validateChartViewState(input, surface = "price") {
       statusCode: 400,
     });
   state.priceCurrency = priceCurrency;
+  if (performance) {
+    state.range = input.range;
+    state.priceCurrency = "USD";
+  }
   if (numeric && input.viewport != null) {
     const { from, to } = input.viewport;
     if (

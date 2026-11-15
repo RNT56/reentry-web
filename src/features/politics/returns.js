@@ -1,3 +1,4 @@
+import { mountPoliticalPerformance } from "./performance-chart.js";
 import { request } from "../../shared/http.js";
 import { esc } from "../../shared/format.js";
 import { icon } from "../../shared/ui.js";
@@ -27,7 +28,7 @@ const percent = (n) =>
     maximumFractionDigits: 1,
     signDisplay: "exceptZero",
   }).format(n) + "%";
-export function returnView(r, variant = "mid") {
+export function returnView(r, variant = "mid", { detailsOnly = false } = {}) {
   if (!r) return "";
   const v = r.variants[variant],
     c = r.coverage,
@@ -39,9 +40,11 @@ export function returnView(r, variant = "mid") {
       mid: "Amount-band midpoints",
       high: "Upper amount bands",
     };
-  const assumptions = `<details class="return-method" data-estimate-detail="method"><summary><span>Model & coverage <b>${count(c.purchases)} purchases · ${count(c.assets)} assets</b></span>${icon("chevron")}</summary><div class="return-method-body"><dl><div><dt>Record</dt><dd>${count(c.total)} disclosures</dd></div><div><dt>Priced trades</dt><dd>${count(c.modeled)}</dd></div><div><dt>Matched sales</dt><dd>${count(v.matchedSales)}</dd></div><div><dt>Unmatched sale value · estimate</dt><dd>${money(v.unmatchedSales)}</dd></div><div><dt>Owners</dt><dd>${esc(c.owners.join(" · ") || "—")}</dd></div><div><dt>Price dates</dt><dd>${c.priceFrom ? day(c.priceFrom) + (c.priceThrough !== c.priceFrom ? " – " + day(c.priceThrough) : "") : "Unavailable"}</dd></div></dl>${c.reasons.length ? `<div class="return-exclusions">${c.reasons.map((x) => `<span>${esc(x.label)}<b>${count(x.count)}</b></span>`).join("")}</div>` : ""}<p>FIFO estimate from the available record since 2012, not actual career earnings. ${esc(descriptions[variant])} set the assumed dollars for each trade. Lower and upper settings are sensitivity scenarios, not confidence bounds.</p><p>Daily split-adjusted closes, before dividends, taxes and fees. Non-trading dates use the next available close within four days (${c.shiftedDates} trades). Prices are valued at the latest close within seven days of the cutoff. Historical ticker changes and delisted assets may be missing.</p><p>Lots are separated by reported owner, with accounts pooled within each owner. Same-day sales run before purchases. A declared full sale closes all reconstructed lots; other sales use the selected amount assumption. Unmatched sales have no assumed profit. Options and incomplete price / amount chains are excluded. Remaining holdings are modeled, not verified.</p>${r.salary ? `<p>Salary benchmark: ${exact(r.salary.annual)} per year × ${count(r.salary.days)} days ÷ 365.2425, over the same modeled period. The ${r.salary.year} ${esc(r.salary.role)} rate is held constant; this is not historical pay received. Household investment estimates can include spouse and dependent trades; salary is for the officeholder only.</p><a href="${esc(r.salary.source)}" target="_blank" rel="noopener noreferrer">Salary source ${icon("arrow")}</a>` : ""}${r.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.label)} ${icon("arrow")}</a>`).join("")}</div></details>`;
+  const assumptions = `<details class="return-method" data-estimate-detail="method"><summary><span>Model & coverage <b>${count(c.purchases)} purchases · ${count(c.assets)} assets</b></span>${icon("chevron")}</summary><div class="return-method-body"><dl><div><dt>Record</dt><dd>${count(c.total)} disclosures</dd></div><div><dt>Priced trades</dt><dd>${count(c.modeled)}</dd></div><div><dt>Matched sales</dt><dd>${count(v.matchedSales)}</dd></div><div><dt>Unmatched sale value · estimate</dt><dd>${money(v.unmatchedSales)}</dd></div><div><dt>Owners</dt><dd>${esc(c.owners.join(" · ") || "—")}</dd></div><div><dt>Price dates</dt><dd>${c.priceFrom ? day(c.priceFrom) + (c.priceThrough !== c.priceFrom ? " – " + day(c.priceThrough) : "") : "Unavailable"}</dd></div></dl>${c.reasons.length ? `<div class="return-exclusions">${c.reasons.map((x) => `<span>${esc(x.label)}<b>${count(x.count)}</b></span>`).join("")}</div>` : ""}<p>FIFO estimate from the available record since 2012, not actual career earnings. ${esc(descriptions[variant])} set the assumed dollars for each trade. Lower and upper settings are sensitivity scenarios, not confidence bounds.</p><p>Daily split-adjusted closes, before dividends, taxes and fees. Non-trading dates use the next available close within four days (${c.shiftedDates} trades). Prices are valued at the latest close within seven days of the cutoff. Historical ticker changes and delisted assets may be missing.</p><p>Lots are separated by reported owner, with accounts pooled within each owner. Same-day sales run before purchases. A declared full sale closes all reconstructed lots; other sales use the selected amount assumption. Unmatched sales have no assumed profit. Options and incomplete price / amount chains are excluded. Remaining holdings are modeled, not verified.</p>${r.salary ? `<p>Salary benchmark: ${exact(r.salary.annual)} per year × ${count(r.salary.days)} days ÷ 365.2425, over the same modeled period. The ${r.salary.year} ${esc(r.salary.role)} rate is held constant; this is not historical pay received. Household investment estimates can include spouse and dependent trades; salary is for the officeholder only.</p><a href="${esc(r.salary.source)}" target="_blank" rel="noopener noreferrer">Salary source ${icon("arrow")}</a>` : ""}${r.performance ? `<p>Performance shows cumulative dollar gains, rebased to zero at the start of the selected period. Existing modeled holdings carry into shorter periods. S&P 500 and MSCI World use their USD price indexes: the same dollars are invested on each modeled purchase date, and the same fraction of each matched lot is sold on its sale date. Gains remain uninvested after sale. This retrospective comparison uses transaction dates, not the later public disclosure dates. Missing daily valuations appear as gaps.</p>${r.performance.benchmarks.map((b) => `<a href="${esc(b.source)}" target="_blank" rel="noopener noreferrer">${esc(b.label)} · USD price index ${icon("arrow")}</a>`).join("")}` : ""}${r.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.label)} ${icon("arrow")}</a>`).join("")}</div></details>`;
   if (!r.available)
     return `<div class="return-empty"><span>${icon("layers")}</span><h3>Not enough priced purchases</h3><p>${count(c.excluded)} disclosures excluded</p></div>${assumptions}`;
+  const contributions = `    <details class="return-assets" data-estimate-detail="assets"><summary><span>Record contributions <b>${count(v.assets.length)}</b></span>${icon("chevron")}</summary><div class="return-asset-scroll"><div class="return-asset-head"><span>Asset</span><span>Modeled buys</span><span>Gain · estimate</span></div>${v.assets.map((a) => `<button data-ticker="${esc(a.symbol)}"><span>${esc(a.symbol)} ${icon("arrow")}</span><span title="${esc(exact(a.purchases))}">${money(a.purchases)}</span><b class="${a.gain < 0 ? "is-loss" : ""}" title="${esc(exact(a.gain))}">${money(a.gain, true)}</b></button>`).join("")}</div></details>`;
+  if (detailsOnly) return contributions + assumptions;
   // Both bars use one linear dollar scale. A real zero origin makes a loss
   // visually different from a smaller positive return, including on mobile.
   const zero = negative ? 50 : 0,
@@ -53,15 +56,17 @@ export function returnView(r, variant = "mid") {
       <div class="return-bar-label"><span>Investment <em>estimate</em></span><b data-number>${money(v.gain, true)}</b></div><div class="return-track" style="--zero:${zero}%"><i class="return-gain ${negative ? "is-loss" : ""}" style="left:${negative ? zero - gainWidth : zero}%;width:${gainWidth}%"></i></div>
       <div class="return-bar-label"><span>Salary benchmark <em>same period</em></span><b>${salary === undefined ? "Unavailable" : money(salary)}</b></div><div class="return-track" style="--zero:${zero}%"><i class="return-salary" style="left:${zero}%;width:${salaryWidth}%"></i></div>
     </div><div class="return-breakdown"><div><span>Matched sales · estimate</span><b data-number>${money(v.realized, true)}</b></div><div><span>Remaining holdings · estimate</span><b data-number>${money(v.open, true)}</b></div><div><span>${negative ? "Loss" : "Gain"} / salary benchmark</span><b data-number>${salary > 0 ? (Math.abs(v.gain) / salary).toLocaleString(undefined, { maximumFractionDigits: 2 }) + "×" : "—"}</b></div></div>
-    <details class="return-assets" data-estimate-detail="assets"><summary><span>Asset contributions <b>${count(v.assets.length)}</b></span>${icon("chevron")}</summary><div class="return-asset-scroll"><div class="return-asset-head"><span>Asset</span><span>Modeled buys</span><span>Gain · estimate</span></div>${v.assets.map((a) => `<button data-ticker="${esc(a.symbol)}"><span>${esc(a.symbol)} ${icon("arrow")}</span><span title="${esc(exact(a.purchases))}">${money(a.purchases)}</span><b class="${a.gain < 0 ? "is-loss" : ""}" title="${esc(exact(a.gain))}">${money(a.gain, true)}</b></button>`).join("")}</div></details>${assumptions}`;
+    ${contributions}${assumptions}`;
 }
 export function mountReturnEstimate(root, member, { ownerId }) {
+  let performanceChart = null;
   let alive = true,
     timer,
     controller,
     result = null,
     variant = "mid",
     lastStamp,
+    revision = "",
     loading = false;
   root.innerHTML = `<header class="return-heading"><div><span class="eyebrow">DISCLOSED TRADES → HISTORICAL PRICES</span><h2>Investment return <span>Estimate</span></h2></div><div class="return-assumptions" role="group" aria-label="Disclosed transaction amount assumption">${[
     ["low", "Lower"],
@@ -74,7 +79,7 @@ export function mountReturnEstimate(root, member, { ownerId }) {
     )
     .join(
       "",
-    )}</div></header><div class="return-body"><div class="return-placeholder" aria-hidden="true"><i></i><i></i><i></i></div></div><footer class="return-footer"><span data-return-status role="status">Preparing estimate</span><span>Daily closes · USD</span></footer>`;
+    )}</div></header><div class="return-performance-host" hidden></div><div class="return-body"><div class="return-placeholder" aria-hidden="true"><i></i><i></i><i></i></div></div><footer class="return-footer"><span data-return-status role="status">Preparing estimate</span><span>Daily closes · USD</span></footer>`;
   function render() {
     root.querySelector(".return-heading .eyebrow").textContent =
       `${count(result.coverage.purchases)} PRICED PURCHASES · ${count(result.coverage.assets)} ASSETS`;
@@ -82,7 +87,26 @@ export function mountReturnEstimate(root, member, { ownerId }) {
       open = [...body.querySelectorAll("details[open]")].map(
         (d) => d.dataset.estimateDetail,
       );
-    body.innerHTML = returnView(result, variant);
+    const hasPerformance = Boolean(result.performance?.dates?.length);
+    root.classList.toggle("has-performance", hasPerformance);
+    const host = root.querySelector(".return-performance-host");
+    host.hidden = !hasPerformance;
+    if (hasPerformance) {
+      if (performanceChart)
+        performanceChart.update(result.performance, variant);
+      else
+        performanceChart = mountPoliticalPerformance(host, member, {
+          ownerId,
+          performance: result.performance,
+          variant,
+        });
+    } else {
+      performanceChart?.destroy();
+      performanceChart = null;
+    }
+    body.innerHTML = returnView(result, variant, {
+      detailsOnly: hasPerformance,
+    });
     open.forEach((id) =>
       body
         .querySelector(`[data-estimate-detail="${id}"]`)
@@ -111,15 +135,23 @@ export function mountReturnEstimate(root, member, { ownerId }) {
     let wait = 60000;
     try {
       const data = await request(
-        "/api/politics/returns?member=" + encodeURIComponent(member),
+        "/api/politics/returns?member=" +
+          encodeURIComponent(member.id) +
+          (revision ? "&revision=" + encodeURIComponent(revision) : ""),
         "GET",
         undefined,
         { signal: controller.signal, ownerId },
       );
       if (!alive) return;
-      if (data.result && data.result.computedAt !== lastStamp) {
+      if (
+        data.result &&
+        (data.revision
+          ? data.revision !== revision
+          : data.result.computedAt !== lastStamp)
+      ) {
         result = data.result;
         lastStamp = result.computedAt;
+        revision = data.revision || "";
         render();
       }
       const busy = ["queued", "calculating", "busy"].includes(data.status);
@@ -166,6 +198,7 @@ export function mountReturnEstimate(root, member, { ownerId }) {
   load();
   return {
     destroy() {
+      performanceChart?.destroy();
       alive = false;
       clearTimeout(timer);
       controller?.abort();

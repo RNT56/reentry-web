@@ -37,7 +37,7 @@ db.prepare('INSERT INTO passkeys VALUES(?,?,?,?,?,?,?)').run('fixture-key','fixt
     try:
         auto.canary(bad_tag,snapshot,'https://reentry.xn--pav-dma.tech','fixture',root)
     except auto.DeploymentError as exc:
-        assert 'changed stored' in str(exc), str(exc)
+        assert 'changed existing durable data' in str(exc), str(exc)
         print('PASS: healthy-looking destructive candidate was rejected.')
     else:
         raise AssertionError('Destructive candidate was accepted')

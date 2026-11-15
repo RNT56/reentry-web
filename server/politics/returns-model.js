@@ -1,8 +1,10 @@
+import { createReturnLedger } from "./return-ledger.js";
+import { buildPoliticalPerformance } from "./performance.js";
 const DAY = 86400000;
 const date = (n) => new Date(n).toISOString().slice(0, 10);
 const time = (d) => Date.parse(d + "T00:00:00Z");
 const round = (n) => Math.round(n * 100) / 100;
-export const RETURN_MODEL_VERSION = 1;
+export const RETURN_MODEL_VERSION = 2;
 export const returnReasons = {
   instrument: "Options, bonds & unsupported instruments",
   action: "Exchanges, transfers & other actions",
@@ -160,95 +162,9 @@ function lookup(points, day, forward = false) {
     : null;
 }
 function reconstruct(rows, marks, fraction) {
-  const books = new Map(),
-    assets = new Map();
-  let purchases = 0,
-    realized = 0,
-    unmatched = 0,
-    matchedSales = 0,
-    partialSales = 0;
-  for (const r of rows) {
-    const key = bucket(r),
-      lots = books.get(key) || [],
-      a = assets.get(r.ticker) || {
-        symbol: r.ticker,
-        purchases: 0,
-        realized: 0,
-        open: 0,
-        buys: 0,
-        sells: 0,
-      };
-    const amount = r.low + (r.high - r.low) * fraction;
-    if (r.side === "buy") {
-      lots.push({ units: amount / r.price, price: r.price });
-      purchases += amount;
-      a.purchases += amount;
-      a.buys++;
-    } else {
-      let units = amount / r.price,
-        matched = 0;
-      // A declared full sale closes the modeled lot rather than inventing a
-      // remaining holding from an arbitrary amount-band midpoint.
-      if (/\b(full|all)\b/i.test(r.type || "") && lots.length)
-        units = lots.reduce((n, l) => n + l.units, 0);
-      while (units > 1e-8 && lots.length) {
-        const lot = lots[0],
-          used = Math.min(units, lot.units),
-          gain = used * (r.price - lot.price);
-        realized += gain;
-        a.realized += gain;
-        matched += used;
-        units -= used;
-        lot.units -= used;
-        if (lot.units < 1e-8) lots.shift();
-      }
-      if (matched) {
-        matchedSales++;
-        a.sells++;
-      }
-      if (units > 1e-8) {
-        unmatched += units * r.price;
-        partialSales++;
-      }
-    }
-    books.set(key, lots);
-    assets.set(r.ticker, a);
-  }
-  let open = 0,
-    remaining = 0;
-  for (const [key, lots] of books) {
-    const symbol = key.split("|")[0],
-      a = assets.get(symbol),
-      mark = marks.get(symbol);
-    for (const lot of lots) {
-      const gain = lot.units * (mark.close - lot.price);
-      open += gain;
-      a.open += gain;
-      remaining += lot.units * mark.close;
-    }
-  }
-  const gain = realized + open;
-  return {
-    purchases: round(purchases),
-    realized: round(realized),
-    open: round(open),
-    gain: round(gain),
-    remaining: round(remaining),
-    gainOnBuys: purchases ? (gain / purchases) * 100 : null,
-    unmatchedSales: round(unmatched),
-    matchedSales,
-    partialSales,
-    assets: [...assets.values()]
-      .filter((a) => a.buys > 0)
-      .map((a) => ({
-        ...a,
-        purchases: round(a.purchases),
-        realized: round(a.realized),
-        open: round(a.open),
-        gain: round(a.realized + a.open),
-      }))
-      .sort((a, b) => Math.abs(b.gain) - Math.abs(a.gain)),
-  };
+  const ledger = createReturnLedger(fraction);
+  for (const row of rows) ledger.apply(row);
+  return ledger.summary((symbol) => marks.get(symbol)?.close);
 }
 export function estimateReturns(rows, histories, career, now = Date.now()) {
   const through = returnCutoff(career, now),
@@ -325,6 +241,10 @@ export function estimateReturns(rows, histories, career, now = Date.now()) {
     through: asOf,
     requestedThrough: through,
     computedAt: now,
+    performance: buildPoliticalPerformance(eligible, histories, career.salary, {
+      from,
+      through: asOf,
+    }),
     salary,
     variants,
     available: Boolean(from),

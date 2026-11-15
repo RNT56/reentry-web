@@ -604,6 +604,59 @@ test("asset views persist independently of private analyses, accounts and surfac
     ).json();
     assert.equal(saved.slots[0].revision, 1);
     assert.deepEqual(saved.slots[0].state.priceRange, view.priceRange);
+    const performance = {
+      ...view,
+      range: "ytd",
+      currency: "USD",
+      priceCurrency: "USD",
+      scale: "linear",
+      priceRange: { min: -300, max: 5000 },
+    };
+    const performancePath = "/api/chart-views/PF.P000197/performance";
+    assert.equal(
+      (
+        await f.call("first", performancePath, "PUT", {
+          revision: 0,
+          state: performance,
+        })
+      ).statusCode,
+      200,
+    );
+    const restored = (
+      await f.call(
+        "first",
+        "/api/chart-views?symbol=PF.P000197&surface=performance",
+      )
+    ).json().slots[0];
+    assert.equal(restored.state.range, "ytd");
+    assert.deepEqual(restored.state.priceRange, performance.priceRange);
+    assert.equal(
+      (
+        await f.call(
+          "second",
+          "/api/chart-views?symbol=PF.P000197&surface=performance",
+        )
+      ).json().slots[0].state,
+      null,
+    );
+    assert.equal(
+      (
+        await f.call("first", performancePath, "PUT", {
+          revision: 0,
+          state: performance,
+        })
+      ).statusCode,
+      409,
+    );
+    assert.equal(
+      (
+        await f.call("first", performancePath, "PUT", {
+          revision: 1,
+          state: null,
+        })
+      ).statusCode,
+      400,
+    );
     for (const [owner, symbol, surface] of [
       ["second", "INTC", "price"],
       ["first", "AAPL", "price"],
