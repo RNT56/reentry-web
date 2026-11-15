@@ -3,12 +3,8 @@ import { esc } from "../../shared/format.js";
 import { icon, monogram, bindLogos, toast } from "../../shared/ui.js";
 import { chooseWatchlists } from "../watchlists/controls.js";
 import { mountPriceChart } from "../charts/price-chart.js";
+import { avatar, chamber, party, choosePolitician } from "./people.js";
 
-const portraits = {
-  oge_donald_trump: "/people/donald-trump.jpg",
-  oge_kevin_warsh: "/people/kevin-warsh.png",
-  oge_scott_kupor: "/people/scott-kupor.jpg",
-};
 const count = (n) => Number(n || 0).toLocaleString();
 const date = (v) =>
   v
@@ -27,22 +23,6 @@ function band(r) {
   return r.low !== null && r.high !== null
     ? "$" + compact(r.low) + "–" + compact(r.high)
     : r.amount || "Not specified";
-}
-const chamber = (v) =>
-  ({ house: "House", senate: "Senate", executive: "Executive" })[v] || "";
-const party = (v) =>
-  ({ D: "Democrat", R: "Republican", I: "Independent" })[v] || "";
-function avatar(p, large = false) {
-  const name = p.name || p.member,
-    portrait = p.portrait || portraits[p.memberId || p.id];
-  return `<span class="political-avatar ${large ? "large" : ""}" aria-hidden="true"><span>${esc(
-    name
-      .split(/\s+/)
-      .map((s) => s[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join(""),
-  )}</span>${portrait ? `<img src="${esc(portrait)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ""}</span>`;
 }
 function architecture() {
   return `<svg class="capitol-architecture" viewBox="0 0 1000 440" fill="none" aria-hidden="true"><defs><radialGradient id="capitol-aura"><stop stop-color="#387e61" stop-opacity=".32"/><stop offset="1" stop-color="#17372b" stop-opacity="0"/></radialGradient><linearGradient id="capitol-lines" x2="0" y2="1"><stop stop-color="#9ac3a7" stop-opacity=".65"/><stop offset="1" stop-color="#568d74" stop-opacity=".03"/></linearGradient></defs><ellipse cx="690" cy="230" rx="380" ry="270" fill="url(#capitol-aura)"/><g stroke="url(#capitol-lines)" stroke-width="1"><path d="M210 392h760M245 380h690M270 367h640M290 350h600M310 338h560M335 320h510M355 280h470M355 275l235-65 235 65M548 210v-32h84v32M542 178h96M548 170c0-63 20-103 42-109 22 6 42 46 42 109M538 170h104M555 160c0-57 17-89 35-99 18 10 35 42 35 99M568 160c0-50 10-86 22-99 12 13 22 49 22 99M578 160l12-99 12 99M580 61V45h20v16M590 45V29m-5 0h10M365 280v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40m28-40v40"/><ellipse cx="590" cy="178" rx="48" ry="5"/><ellipse cx="590" cy="170" rx="52" ry="5"/><path d="M80 420 500 220m500 200L680 220M0 400h1000M70 430h930M270 440V320m50 120V300m550 140V300m50 140V320" stroke-dasharray="2 10"/></g><g fill="#8ec8a5"><circle cx="590" cy="29" r="2.5"/><circle cx="310" cy="338" r="2" opacity=".5"/><circle cx="870" cy="338" r="2" opacity=".5"/></g></svg>`;
@@ -70,9 +50,13 @@ export function mountPolitics(root, { model, navigate }) {
     lists = [],
     rows = [],
     more = false,
-    resetting = false;
+    resetting = false,
+    feedMetadata = null,
+    checking = false,
+    statusController = null,
+    lastClientCheck = 0;
   const live = () => alive && root.isConnected;
-  root.innerHTML = `<header class="capitol-hero">${architecture()}<div class="capitol-title"><span class="eyebrow">US · PUBLIC RECORD</span><h1>Capitol<span>.</span></h1><div class="capitol-freshness" data-feed-status role="status">Fetching disclosures</div></div><div class="capitol-stats" data-capitol-stats><div><span>Disclosures</span><b>—</b></div><div><span>Filers</span><b>—</b></div><div><span>Median filing lag</span><b>—</b></div></div></header><div class="capitol-controls"><div class="capitol-search">${icon("sliders")}<input type="search" aria-label="Search politicians and assets" placeholder="Person, ticker or asset" value="${esc(memory.q)}" autocomplete="off"></div><div class="capitol-filters"><select data-filter="scope" aria-label="Disclosure scope"><option value="all">All disclosures</option><option value="portfolio">My holdings</option></select><select data-filter="chamber" aria-label="Branch or chamber">${[
+  root.innerHTML = `<header class="capitol-hero">${architecture()}<div class="capitol-title"><span class="eyebrow">US · PUBLIC RECORD</span><h1>Capitol<span>.</span></h1><div class="capitol-freshness" data-feed-status role="status">Fetching disclosures</div></div><div class="capitol-stats" data-capitol-stats><div><span>Disclosures</span><b>—</b></div><div><span>Filers</span><b>—</b></div><div><span>Median filing lag</span><b>—</b></div></div></header><div class="capitol-sync-row" data-sync-status role="status"></div><div class="capitol-controls"><div class="capitol-search">${icon("sliders")}<input type="search" aria-label="Search politicians and assets" placeholder="Person, ticker or asset" value="${esc(memory.q)}" autocomplete="off"></div><button class="link capitol-people-button" data-people>People ${icon("chevron")}</button><div class="capitol-filters"><select data-filter="scope" aria-label="Disclosure scope"><option value="all">All disclosures</option><option value="portfolio">My holdings</option></select><select data-filter="chamber" aria-label="Branch or chamber">${[
     ["all", "All chambers"],
     ["house", "House"],
     ["senate", "Senate"],
@@ -132,11 +116,87 @@ export function mountPolitics(root, { model, navigate }) {
     const s = data.summary;
     root.querySelector("[data-capitol-stats]").innerHTML =
       `<div><span>Disclosures</span><b>${count(s.count)}</b></div><div><span>Filers</span><b>${count(s.people)}</b></div><div><span>Median filing lag</span><b>${s.medianLag === null ? "—" : count(s.medianLag)}<small>d</small></b></div>`;
-    const c = data.coverage;
-    root.querySelector("[data-feed-status]").innerHTML = c
-      ? `<span class="capitol-status-dot ${data.status === "available" ? "" : "delayed"}"></span><span>Filed through ${date(c.through)}${data.status === "cached" ? " · cached" : data.status === "delayed" ? " · delayed" : ""}</span><button class="link" data-coverage>Coverage ${icon("arrow")}</button>`
-      : '<span>Disclosures unavailable</span><button class="link" data-retry>Retry</button>';
+    freshness();
   }
+  function freshness() {
+    const meta = feedMetadata || data;
+    if (!meta || !live()) return;
+    const c = meta.coverage;
+    root.querySelector("[data-feed-status]").innerHTML = c
+      ? `<span class="capitol-status-dot ${meta.status === "available" ? "" : "delayed"}"></span><span>Filed through ${date(c.through)}${meta.status === "cached" ? " · cached" : meta.status === "stale" ? " · check overdue" : meta.status === "delayed" ? " · source lag" : ""}</span><button class="link" data-coverage>Coverage ${icon("arrow")}</button>`
+      : "<span>Disclosures unavailable</span>";
+    const age = meta.checkedAt
+      ? Math.max(0, Math.floor((Date.now() - meta.checkedAt) / 60000))
+      : null;
+    const checked =
+      age === null
+        ? "Check for updates"
+        : age < 1
+          ? "Checked just now"
+          : age < 60
+            ? `Checked ${age}m ago`
+            : `Checked ${Math.floor(age / 60)}h ago`;
+    const pending =
+      data?.version && meta.version && meta.version !== data.version;
+    root.querySelector("[data-sync-status]").innerHTML =
+      `<button class="link capitol-refresh ${checking || meta.refreshing ? "is-checking" : ""}" data-refresh aria-label="Check for new disclosures" ${checking ? "disabled" : ""} title="Automatic checks every five minutes">${icon("refresh")}<span>${checking || meta.refreshing ? "Checking source" : checked}</span></button>${pending ? '<button class="link capitol-new-filings" data-apply-update>New filings · Show latest ' + icon("arrow") + "</button>" : '<span class="capitol-sync-cadence">Every 5 min</span>'}`;
+    const fetched = root.querySelector("[data-last-checked]");
+    if (fetched)
+      fetched.textContent = meta.checkedAt
+        ? new Date(meta.checkedAt).toLocaleString()
+        : "Not verified yet";
+  }
+  async function checkUpdates(force = false) {
+    if (
+      !live() ||
+      checking ||
+      document.hidden ||
+      (!force && Date.now() - lastClientCheck < 10000)
+    )
+      return;
+    checking = true;
+    lastClientCheck = Date.now();
+    statusController = new AbortController();
+    freshness();
+    try {
+      const next = await request(
+        force ? "/api/politics/refresh" : "/api/politics/status",
+        force ? "POST" : "GET",
+        force ? {} : undefined,
+        { signal: statusController.signal, timeout: 30000, ownerId },
+      );
+      if (!live()) return;
+      feedMetadata = next;
+      // Never remount an active chart, close an expanded filing, or steal keyboard focus.
+      if (
+        data &&
+        next.version &&
+        data.version !== next.version &&
+        !chart &&
+        !root.querySelector(".disclosure-detail:not([hidden])") &&
+        !root.contains(document.activeElement) &&
+        !document.querySelector("dialog[open]") &&
+        root
+          .querySelector("[data-capitol-results]")
+          .getAttribute("aria-busy") !== "true"
+      )
+        await load(false, { quiet: true });
+    } catch (e) {
+      if (live() && e.name !== "AbortError") {
+        if (feedMetadata || data)
+          feedMetadata = {
+            ...(feedMetadata || data),
+            status: "cached",
+            refreshing: false,
+          };
+        if (force) toast(e.message);
+      }
+    } finally {
+      checking = false;
+      freshness();
+    }
+  }
+
   function tradeRow(r) {
     return `<article class="disclosure-row" data-disclosure="${esc(r.id)}"><button class="disclosure-person" data-person="${esc(r.memberId)}">${avatar(r)}<span><strong>${esc(r.member)}</strong><small>${esc(chamber(r.chamber))}${r.state ? " · " + esc(r.state) : ""}${r.party ? " · " + esc(r.party) : ""}</small></span></button><button class="disclosure-asset" ${r.ticker ? `data-ticker="${esc(r.ticker)}"` : "disabled"}>${r.ticker ? monogram({ symbol: r.ticker, name: r.asset }) : '<span class="disclosure-unlisted">—</span>'}<span><strong>${esc(r.ticker || "No ticker")}</strong><small>${esc(r.asset)}</small></span></button><span class="disclosure-side ${r.side}">${icon(r.side === "buy" ? "arrowUpRight" : r.side === "sell" ? "arrowDownRight" : "swap")}${r.side === "buy" ? "Buy" : r.side === "sell" ? "Sell" : r.side === "exchange" ? "Exchange" : "Other"}</span><span class="disclosure-amount" title="${esc(r.amount || "Reported USD range")}">${esc(band(r))}<small>USD range</small></span><span class="disclosure-dates"><time datetime="${r.filed}">${date(r.filed)}</time><small>${r.lag}d after trade</small></span><button class="icon-button disclosure-expand" data-details="${esc(r.id)}" aria-label="Details for ${esc(r.member)} ${esc(r.ticker || r.asset)}" aria-expanded="false">${icon("plus")}</button><div class="disclosure-detail" hidden><dl><div class="disclosure-instrument"><dt>Asset as reported${r.assetType ? " · " + esc(r.assetType) : ""}</dt><dd>${esc(r.asset)}</dd></div><div><dt>Traded</dt><dd>${date(r.traded)}</dd></div><div><dt>Filed</dt><dd>${date(r.filed)}</dd></div><div><dt>Owner</dt><dd>${esc(r.owner)}</dd></div><div><dt>Transaction</dt><dd>${esc(r.type)}</dd></div><div><dt>Reported range · USD</dt><dd>${esc(r.amount || band(r))}</dd></div></dl>${r.comment ? `<p>${esc(r.comment)}</p>` : ""}<div class="disclosure-detail-actions"><a class="link" href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">Official filing ${icon("arrow")}</a>${r.ticker ? `<button class="link" data-watch="${esc(r.ticker)}">${icon("plus")} Watchlist</button><button class="link" data-research="${esc(r.ticker)}">Research ${icon("arrow")}</button>` : ""}</div></div></article>`;
   }
@@ -163,9 +223,9 @@ export function mountPolitics(root, { model, navigate }) {
       : null;
     result.innerHTML = `${
       data.member
-        ? `<section class="politician-focus">${avatar(data.member, true)}<div><span class="eyebrow">${esc(chamber(data.member.chamber))}${data.member.party ? " · " + party(data.member.party) : ""}</span><h2>${esc(data.member.name)}</h2><p>${esc(data.member.office)}</p><button class="link" data-clear-person>${icon("arrowLeft")} All filers</button></div>${flow()}</section>`
+        ? `<section class="politician-focus">${avatar(data.member, true)}<div><span class="eyebrow">${esc(chamber(data.member.chamber))}${data.member.party ? " · " + party(data.member.party) : ""}</span><h2>${esc(data.member.name)}</h2><p>${esc(data.member.state || data.member.office)}</p><button class="link" data-clear-person>${icon("arrowLeft")} All filers</button></div>${flow()}</section>`
         : s.members.length
-          ? `<section class="politician-section"><div class="capitol-section-title"><h2>In the filings</h2><span>${count(s.people)} filers in view</span></div><div class="politician-rail">${s.members
+          ? `<section class="politician-section"><div class="capitol-section-title"><h2>In the filings</h2><button class="link" data-people>All people ${icon("arrow")}</button></div><div class="politician-rail">${s.members
               .slice(0, 12)
               .map(
                 (p) =>
@@ -188,7 +248,7 @@ export function mountPolitics(root, { model, navigate }) {
           : ""
     }
     <section class="disclosure-ledger"><header class="capitol-section-title"><h2>Disclosures <span>${count(s.count)}</span></h2><span><i class="buy">${count(s.buys)} buys</i> · <i class="sell">${count(s.sells)} sells</i></span></header><div class="disclosure-columns" aria-hidden="true"><span>Filer</span><span>Asset</span><span>Action</span><span>Reported value</span><span>Filed</span><span></span></div><div data-trade-rows>${rows.map(tradeRow).join("") || `<div class="capitol-empty"><span>${icon("layers")}</span><h3>${data.coverage ? "No matching disclosures" : "The disclosure feed is unavailable"}</h3><button class="link" ${data.coverage ? "data-reset" : "data-retry"}>${data.coverage ? "Reset filters" : "Retry"} ${icon("arrow")}</button></div>`}</div><button class="disclosure-more link" data-more ${data.nextOffset === null ? "hidden" : ""}>Load more ${icon("plus")}</button></section>
-    <details class="capitol-coverage"><summary>Sources & coverage ${icon("chevron")}</summary><div><p><a href="https://github.com/kadoa-org/congress-trading-monitor" target="_blank" rel="noopener noreferrer">Kadoa · Congress Trading Monitor ${icon("arrow")}</a></p>${data.coverage ? `<dl><div><dt>Published feed window</dt><dd>${date(data.coverage.from)} – ${date(data.coverage.through)}</dd></div><div><dt>Disclosed transactions</dt><dd>${count(data.coverage.rows)}</dd></div><div><dt>Last fetched</dt><dd>${new Date(data.fetchedAt).toLocaleString()}</dd></div></dl>` : ""}<p>House Clerk · Senate eFD · Office of Government Ethics. Reported USD ranges and filing dates. Feed window may be partial; filing dates can differ from first publication.</p><p>Portraits: <a href="https://github.com/unitedstates/images" target="_blank" rel="noopener noreferrer">United States project · public domain</a></p></div></details>`;
+    <details class="capitol-coverage"><summary>Sources & coverage ${icon("chevron")}</summary><div><p><a href="https://github.com/kadoa-org/congress-trading-monitor" target="_blank" rel="noopener noreferrer">Kadoa · Congress Trading Monitor ${icon("arrow")}</a></p>${data.coverage ? `<dl><div><dt>Published feed window</dt><dd>${date(data.coverage.from)} – ${date(data.coverage.through)}</dd></div><div><dt>Disclosed transactions</dt><dd>${count(data.coverage.rows)}</dd></div><div><dt>Last checked</dt><dd data-last-checked>${data.checkedAt ? new Date(data.checkedAt).toLocaleString() : "Not verified yet"}</dd></div><div><dt>Source published</dt><dd>${data.publishedAt ? new Date(data.publishedAt).toLocaleString() : "—"}</dd></div><div><dt>Automatic checks</dt><dd>Every 5 minutes</dd></div></dl>` : ""}<p>House Clerk · Senate eFD · Office of Government Ethics. Reported USD ranges and filing dates. Feed window may be partial; filing dates can differ from first publication.</p><p>Portraits: <a href="https://github.com/unitedstates/images" target="_blank" rel="noopener noreferrer">United States project · public domain</a></p></div></details>`;
     if (asset) {
       chartTicker = asset.symbol;
       chart = mountPriceChart(
@@ -201,7 +261,7 @@ export function mountPolitics(root, { model, navigate }) {
     photos();
     result.setAttribute("aria-busy", "false");
   }
-  async function load(append = false) {
+  async function load(append = false, { quiet = false } = {}) {
     if (!live()) return;
     const operation = ++epoch;
     controller?.abort();
@@ -235,6 +295,7 @@ export function mountPolitics(root, { model, navigate }) {
       });
       if (!live() || operation !== epoch) return;
       data = next;
+      feedMetadata = next;
       rows = append ? [...rows, ...next.rows] : next.rows;
       if (append) {
         root
@@ -249,7 +310,7 @@ export function mountPolitics(root, { model, navigate }) {
         await load();
         return;
       }
-      toast(e.message);
+      if (!quiet) toast(e.message);
       if (!data)
         result.innerHTML =
           '<div class="capitol-empty"><h3>Disclosures unavailable</h3><button class="link" data-retry>Retry</button></div>';
@@ -294,7 +355,26 @@ export function mountPolitics(root, { model, navigate }) {
   root.onclick = (e) => {
     const b = e.target.closest("button");
     if (!b || b.disabled) return;
-    if (b.dataset.days !== undefined) {
+    if (b.hasAttribute("data-people")) {
+      b.disabled = true;
+      choosePolitician({
+        isAlive: live,
+        onSelect: (id) => {
+          resetFilters();
+          memory.member = id;
+          load();
+        },
+      })
+        .catch((e) => toast(e.message))
+        .finally(() => {
+          b.disabled = false;
+        });
+    } else if (b.hasAttribute("data-refresh")) checkUpdates(true);
+    else if (b.hasAttribute("data-apply-update")) {
+      if (chart?.canLeave?.() === false)
+        toast("Your chart is saving. Try again in a moment.");
+      else load();
+    } else if (b.dataset.days !== undefined) {
       memory.days = Number(b.dataset.days);
       root
         .querySelectorAll("[data-days]")
@@ -348,30 +428,40 @@ export function mountPolitics(root, { model, navigate }) {
         detail.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     } else if (b.hasAttribute("data-reset")) {
-      Object.assign(memory, {
-        days: 0,
-        scope: "all",
-        chamber: "all",
-        side: "all",
-        q: "",
-        member: "",
-        ticker: "",
-      });
-      root.querySelector("input").value = "";
-      resetting = true;
-      root.querySelectorAll("select").forEach((n) => {
-        n.value = "all";
-        n.dispatchEvent(new Event("change", { bubbles: false }));
-      });
-      resetting = false;
-      root
-        .querySelectorAll("[data-days]")
-        .forEach((n) =>
-          n.setAttribute("aria-pressed", String(n.dataset.days === "0")),
-        );
+      resetFilters();
       load();
     }
   };
+  function resetFilters() {
+    Object.assign(memory, {
+      days: 0,
+      scope: "all",
+      chamber: "all",
+      side: "all",
+      q: "",
+      member: "",
+      ticker: "",
+    });
+    root.querySelector("input").value = "";
+    resetting = true;
+    root.querySelectorAll("select").forEach((n) => {
+      n.value = "all";
+      n.dispatchEvent(new Event("change", { bubbles: false }));
+    });
+    resetting = false;
+    root
+      .querySelectorAll("[data-days]")
+      .forEach((n) =>
+        n.setAttribute("aria-pressed", String(n.dataset.days === "0")),
+      );
+  }
+  const onResume = () => {
+    if (!document.hidden) checkUpdates();
+  };
+  const refreshTimer = setInterval(() => checkUpdates(), 60000);
+  document.addEventListener("visibilitychange", onResume);
+  window.addEventListener("focus", onResume);
+
   (async () => {
     try {
       lists = (await request("/api/watchlists")).lists;
@@ -402,6 +492,10 @@ export function mountPolitics(root, { model, navigate }) {
       alive = false;
       epoch++;
       controller?.abort();
+      statusController?.abort();
+      clearInterval(refreshTimer);
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("focus", onResume);
       clearTimeout(searchTimer);
       chart?.destroy();
       chart = null;

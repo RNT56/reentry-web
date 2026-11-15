@@ -348,6 +348,37 @@ test("Political scopes use only the signed-in account, paginate deterministicall
     404,
   );
   assert.equal((await f.app.inject({ url: "/api/politics" })).statusCode, 401);
+  for (const url of [
+    "/api/politics/people",
+    "/api/politics/status",
+    "/api/politics/refresh",
+  ]) {
+    const method = url.endsWith("refresh") ? "POST" : "GET";
+    const payload = method === "POST" ? {} : undefined;
+    assert.equal(
+      (
+        await f.app.inject({
+          method,
+          url,
+          headers: { origin, "x-reentry-request": "1" },
+          payload,
+        })
+      ).statusCode,
+      401,
+    );
+    const response = await f.request(f.a, method, url, payload);
+    assert.equal(response.statusCode, 200);
+    assert.equal("rows" in response.json(), false);
+  }
+  const directory = (
+    await f.request(f.a, "GET", "/api/politics/people")
+  ).json();
+  assert.equal(directory.people[0].id, "member");
+  assert.equal(directory.people[0].count, 55);
+  const profile = (
+    await f.request(f.a, "GET", "/api/politics?member=member&days=0")
+  ).json();
+  assert.equal(profile.member.name, "Example Member");
   assert.equal(
     (await f.request(f.a, "GET", "/api/politics?version=stale")).statusCode,
     409,

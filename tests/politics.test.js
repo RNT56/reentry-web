@@ -197,3 +197,261 @@ test("Unavailable initial sources stay empty and malformed replacements cannot d
   await service.refresh();
   assert.equal((await service.get()).rows.length, 1);
 });
+
+test("Real published Pelosi, Blumenthal and Gottheimer filings retain identity, ownership, ranges and portraits", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const fixture = JSON.parse(
+    await readFile(
+      new URL("./fixtures/political-named-filings.json", import.meta.url),
+    ),
+  );
+  const data = normalizePoliticalFeed(fixture.rows, fixture.people, { now });
+  assert.equal(data.rejected, 0);
+  assert.deepEqual(data.people.map((p) => p.name).sort(), [
+    "Josh Gottheimer",
+    "Nancy Pelosi",
+    "Richard Blumenthal",
+  ]);
+  const pelosi = data.rows.find((r) => r.member === "Nancy Pelosi");
+  assert.equal(pelosi.owner, "Spouse");
+  assert.equal(pelosi.ticker, "WBD");
+  assert.equal(pelosi.filed, "2026-11-06");
+  assert.equal(pelosi.low, 50001);
+  assert.equal(pelosi.high, 100000);
+  assert.ok(pelosi.portrait.endsWith("P000197.jpg"));
+  assert.equal(
+    data.rows.find((r) => r.member === "Josh Gottheimer").owner,
+    "Joint",
+  );
+  assert.equal(
+    data.rows
+      .find((r) => r.member === "Richard Blumenthal")
+      .asset.includes("\n"),
+    false,
+  );
+});
+
+test("People remain discoverable outside the rolling feed; featured profiles are not hidden by activity rankings", async () => {
+  const { politicalPeople, featuredPeople } = await import(
+    "../server/politics/people.js"
+  );
+  const directory = politicalPeople(
+    [
+      {
+        id: "house_nancy_pelosi",
+        full_name: "Nancy Pelosi",
+        chamber: "house",
+        trade_count: 9999,
+      },
+    ],
+    normalize().rows,
+  );
+  const p = directory.find((p) => p.name === "Nancy Pelosi");
+  assert.equal(p.count, 0); // Do not use an upstream lifetime count for our partial feed.
+  assert.equal(p.latestFiled, null);
+  assert.equal(
+    featuredPeople([
+      ...Array.from({ length: 20 }, (_, i) => ({ id: String(i) })),
+      p,
+    ])[0].id,
+    p.id,
+  );
+});
+
+test("Five-minute checks use ETags and never redownload unchanged datasets; manual checks share a cooldown", async (t) => {
+  let clock = now,
+    calls = 0;
+  const db = openStore(":memory:");
+  migratePlatform(db);
+  const service = createPoliticalFeed({
+    db,
+    now: () => clock,
+    fetcher: async (url, options) => {
+      calls++;
+      if (url.includes("/commits?")) {
+        if (options.headers["If-None-Match"]) {
+          assert.equal(options.headers["If-None-Match"], '"revision-1"');
+          return new Response(null, { status: 304 });
+        }
+        return new Response(
+          JSON.stringify([
+            {
+              sha,
+              commit: { committer: { date: new Date(now).toISOString() } },
+            },
+          ]),
+          { headers: { ETag: '"revision-1"' } },
+        );
+      }
+      return mock(url);
+    },
+  });
+  t.after(async () => {
+    await service.stop();
+    db.close();
+  });
+  const first = await service.get();
+  assert.equal(calls, 3);
+  await service.get({ force: true });
+  assert.equal(calls, 3);
+  clock += 60000;
+  const checked = await service.get({ force: true });
+  assert.equal(calls, 4);
+  assert.equal(checked.version, first.version);
+  assert.equal(checked.fetchedAt, first.fetchedAt);
+  assert.equal(checked.checkedAt, clock);
+  assert.equal(checked.nextCheckAt, clock + 5 * 60000);
+  clock += 5 * 60000;
+  await service.get({ force: true });
+  assert.equal(calls, 5);
+  const restart = createPoliticalFeed({
+    db,
+    now: () => clock,
+    fetcher: () => {
+      throw Error("Must retain shared cooldown");
+    },
+  });
+  const restarted = await restart.get({ force: true });
+  assert.equal(restarted.checkedAt, clock);
+  assert.equal(restarted.status, "available");
+  await restart.stop();
+});
+
+test("New revisions replace snapshots atomically; failed imports keep the last verified data and retry after backoff", async (t) => {
+  let clock = now,
+    revision = sha,
+    broken = false,
+    count = 0;
+  const db = openStore(":memory:");
+  migratePlatform(db);
+  const service = createPoliticalFeed({
+    db,
+    now: () => clock,
+    fetcher: async (url) => {
+      count++;
+      if (url.includes("/commits?"))
+        return Response.json([
+          {
+            sha: revision,
+            commit: { committer: { date: new Date(clock).toISOString() } },
+          },
+        ]);
+      if (url.endsWith("filers.json")) return Response.json(people);
+      return Response.json(
+        broken
+          ? [{ ...trade, doc_url: "https://evil.test/filing" }]
+          : [{ ...trade, id: revision }],
+      );
+    },
+  });
+  t.after(async () => {
+    await service.stop();
+    db.close();
+  });
+  const first = await service.get();
+  clock += 5 * 60000;
+  revision = "b".repeat(40);
+  broken = true;
+  const failed = await service.get({ force: true });
+  assert.equal(failed.version, first.version);
+  assert.equal(failed.status, "cached");
+  assert.equal(failed.checkedAt, first.checkedAt);
+  const before = count;
+  await service.get({ force: true });
+  assert.equal(count, before);
+  broken = false;
+  clock = failed.nextCheckAt;
+  const recovered = await service.get({ force: true });
+  assert.notEqual(recovered.version, first.version);
+  assert.equal(recovered.rows[0].id, revision);
+  assert.equal(recovered.status, "available");
+  assert.equal(recovered.checkedAt, clock);
+});
+
+test("Rate limits survive restarts and override manual refresh without a request storm", async (t) => {
+  let clock = now,
+    calls = 0;
+  const db = openStore(":memory:");
+  migratePlatform(db);
+  const options = {
+    db,
+    now: () => clock,
+    fetcher: async () => {
+      calls++;
+      return new Response("limited", {
+        status: 429,
+        headers: { "Retry-After": "900" },
+      });
+    },
+  };
+  const service = createPoliticalFeed(options);
+  t.after(() => db.close());
+  const first = await service.get();
+  assert.equal(first.status, "unavailable");
+  assert.equal(first.nextCheckAt, now + 900000);
+  await service.stop();
+  const restart = createPoliticalFeed(options);
+  t.after(() => restart.stop());
+  clock += 60000;
+  await Promise.all(
+    Array.from({ length: 20 }, () => restart.get({ force: true })),
+  );
+  assert.equal(calls, 1);
+  clock = first.nextCheckAt;
+  await restart.get({ force: true });
+  assert.equal(calls, 2);
+});
+
+test("A recently checked old publication is marked delayed, never presented as newly published", async (t) => {
+  const db = openStore(":memory:");
+  migratePlatform(db);
+  const service = createPoliticalFeed({
+    db,
+    now: () => now + 5 * 86400000,
+    fetcher: mock,
+  });
+  t.after(async () => {
+    await service.stop();
+    db.close();
+  });
+  const data = await service.get();
+  assert.equal(data.status, "delayed");
+  assert.equal(data.publishedAt, "2026-11-13T00:00:00Z");
+  assert.equal(data.checkedAt, now + 5 * 86400000);
+});
+
+test("The background worker checks at the next due time even with no visitors and stops cleanly", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let clock = now,
+    calls = 0;
+  const db = openStore(":memory:");
+  migratePlatform(db);
+  const service = createPoliticalFeed({
+    db,
+    enabled: true,
+    now: () => clock,
+    fetcher: async (url) => {
+      calls++;
+      return mock(url);
+    },
+  });
+  t.after(async () => {
+    await service.stop();
+    db.close();
+  });
+  service.start();
+  service.start();
+  await service.refresh();
+  assert.equal(calls, 3);
+  clock += 299999;
+  t.mock.timers.tick(299999);
+  assert.equal(calls, 3);
+  clock++;
+  t.mock.timers.tick(1);
+  await service.refresh();
+  assert.equal(calls, 4);
+  await service.stop();
+  clock += 300000;
+  t.mock.timers.tick(300000);
+  assert.equal(calls, 4);
+});

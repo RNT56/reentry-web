@@ -1,6 +1,24 @@
 import { fail } from "../platform/util.js";
 import { portfolioAssets } from "../intelligence/portfolio-sources.js";
 import { ownedList } from "../watchlists/store.js";
+import { featuredPeople, politicalPeople } from "./people.js";
+
+export function feedStatus(data) {
+  return Object.fromEntries(
+    [
+      "coverage",
+      "status",
+      "fetchedAt",
+      "publishedAt",
+      "version",
+      "checkedAt",
+      "attemptedAt",
+      "nextCheckAt",
+      "checkIntervalMs",
+      "refreshing",
+    ].map((key) => [key, data[key] ?? null]),
+  );
+}
 
 export function summarizeDisclosures(rows) {
   const members = new Map(),
@@ -75,7 +93,7 @@ export function filterDisclosures(
   symbols = null,
   now = Date.now(),
 ) {
-  const days = Number(query.days || 90);
+  const days = Number(query.days ?? 90);
   if (![30, 90, 365, 0].includes(days)) throw fail("Invalid date window.");
   const q = String(query.q || "")
     .trim()
@@ -108,6 +126,20 @@ export function filterDisclosures(
   );
 }
 export function registerPoliticalRoutes(app, { db, politics }) {
+  const auth = { preHandler: app.requireUser };
+  app.get("/api/politics/status", auth, async () =>
+    feedStatus(await politics.get()),
+  );
+  app.post("/api/politics/refresh", auth, async () =>
+    feedStatus(await politics.get({ force: true })),
+  );
+  app.get("/api/politics/people", auth, async () => {
+    const data = await politics.get();
+    return {
+      people: data.people || politicalPeople([], data.rows),
+      ...feedStatus(data),
+    };
+  });
   app.get("/api/politics", { preHandler: app.requireUser }, async (req) => {
     const user = req.auth.user_id,
       q = req.query,
@@ -127,32 +159,20 @@ export function registerPoliticalRoutes(app, { db, politics }) {
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > 20000)
       throw fail("Invalid page.");
     const member = q.member
-      ? data.rows.find((r) => r.memberId === q.member)
+      ? (data.people || politicalPeople([], data.rows)).find(
+          (p) => p.id === q.member,
+        )
       : null;
     return {
       rows: rows.slice(offset, offset + 50),
       nextOffset: offset + 50 < rows.length ? offset + 50 : null,
       summary: {
         ...summary,
-        members: summary.members.slice(0, 16),
+        members: featuredPeople(summary.members, 16),
         tickers: summary.tickers.slice(0, 10),
       },
-      member: member
-        ? {
-            id: member.memberId,
-            name: member.member,
-            portrait: member.portrait,
-            party: member.party,
-            state: member.state,
-            chamber: member.chamber,
-            office: member.office,
-          }
-        : null,
-      coverage: data.coverage,
-      status: data.status,
-      fetchedAt: data.fetchedAt,
-      publishedAt: data.publishedAt,
-      version: data.version,
+      member,
+      ...feedStatus(data),
       rejected: data.rejected || 0,
     };
   });

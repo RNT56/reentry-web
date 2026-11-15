@@ -51,6 +51,10 @@ export const platformMigrations = [
     CREATE TABLE political_feed(id TEXT PRIMARY KEY,payload TEXT NOT NULL,fetched_at INTEGER NOT NULL,version TEXT NOT NULL);
   `,
   },
+  {
+    version: 6,
+    sql: `CREATE TABLE political_sync(id TEXT PRIMARY KEY,checked_at INTEGER,attempted_at INTEGER,next_check_at INTEGER NOT NULL DEFAULT 0,etag TEXT,failures INTEGER NOT NULL DEFAULT 0,last_error TEXT);`,
+  },
 ];
 export function migratePlatform(db) {
   db.exec(

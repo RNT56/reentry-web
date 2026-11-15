@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import { politicalPeople } from "./people.js";
+import { portraitURL } from "./portraits.js";
+export { portraitURL } from "./portraits.js";
+
+export const POLITICAL_CHECK_INTERVAL = 5 * 60000;
 
 export const POLITICAL_SOURCE =
   "https://github.com/kadoa-org/congress-trading-monitor";
@@ -11,7 +16,7 @@ const OFFICIAL = new Set([
   "www.oge.gov",
 ]);
 const string = (v, n = 200) =>
-  typeof v === "string" ? v.trim().slice(0, n) : "";
+  typeof v === "string" ? v.trim().replace(/\s+/g, " ").slice(0, n) : "";
 function date(v, now) {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
   const t = Date.parse(v);
@@ -35,14 +40,6 @@ function officialURL(v) {
   } catch {
     return null;
   }
-}
-export function portraitURL(value) {
-  const match = String(value || "").match(
-    /^https:\/\/unitedstates\.github\.io\/images\/congress\/(?:225x275|450x550)\/([A-Z]\d{6})\.jpg$/,
-  );
-  return match
-    ? `https://unitedstates.github.io/images/congress/225x275/${match[1]}.jpg`
-    : null;
 }
 export function normalizePoliticalFeed(
   trades,
@@ -135,7 +132,12 @@ export function normalizePoliticalFeed(
       assetType: string(r.asset_type, 80) || null,
       side,
       type,
-      owner: string(r.owner, 80) || "Unspecified",
+      owner:
+        { SP: "Spouse", JT: "Joint", DC: "Dependent child", SELF: "Self" }[
+          r.owner
+        ] ||
+        string(r.owner, 80) ||
+        "Unspecified",
       low,
       high,
       amount: string(r.amount_range_label, 80) || null,
@@ -156,6 +158,7 @@ export function normalizePoliticalFeed(
   );
   return {
     rows,
+    people: politicalPeople(filers, rows),
     rejected,
     coverage: {
       from: rows.at(-1).filed,
@@ -166,18 +169,29 @@ export function normalizePoliticalFeed(
     },
   };
 }
-async function json(fetcher, url, signal, limit = 12000000) {
+async function json(fetcher, url, signal, limit = 12000000, etag = null) {
   const r = await fetcher(url, {
     signal,
     redirect: "error",
     headers: {
       Accept: "application/json",
       "User-Agent": "Reentry public-disclosure research",
+      ...(etag ? { "If-None-Match": etag } : {}),
     },
   });
+  if (r.status === 304) return { unchanged: true, etag };
   if (!r.ok) {
     await r.body?.cancel();
-    throw Error("Disclosure source unavailable");
+    const error = Error("Disclosure source unavailable");
+    if ([429, 403, 503].includes(r.status)) {
+      const retry = r.headers.get("retry-after");
+      error.retryAfter =
+        retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : 0;
+      error.retryAt = retry && !/^\d+$/.test(retry) ? Date.parse(retry) : 0;
+      if (r.headers.get("x-ratelimit-remaining") === "0")
+        error.retryAt = Number(r.headers.get("x-ratelimit-reset")) * 1000;
+    }
+    throw error;
   }
   const reader = r.body.getReader();
   let size = 0;
@@ -193,7 +207,10 @@ async function json(fetcher, url, signal, limit = 12000000) {
   } finally {
     await reader.cancel().catch(() => {});
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  return {
+    value: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+    etag: r.headers.get("etag"),
+  };
 }
 export function createPoliticalFeed({
   db,
@@ -205,85 +222,182 @@ export function createPoliticalFeed({
     inflight = null,
     timer = null,
     controller = null,
-    lastAttempt = 0,
-    lastError = null,
+    started = false,
     stopped = false;
+  const savedSync = db
+    .prepare("SELECT * FROM political_sync WHERE id='kadoa'")
+    .get();
+  const sync = savedSync || {
+    checked_at: null,
+    attempted_at: null,
+    next_check_at: 0,
+    etag: null,
+    failures: 0,
+    last_error: null,
+  };
+  function saveSync() {
+    db.prepare(
+      "INSERT INTO political_sync(id,checked_at,attempted_at,next_check_at,etag,failures,last_error) VALUES('kadoa',?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET checked_at=excluded.checked_at,attempted_at=excluded.attempted_at,next_check_at=excluded.next_check_at,etag=excluded.etag,failures=excluded.failures,last_error=excluded.last_error",
+    ).run(
+      sync.checked_at,
+      sync.attempted_at,
+      sync.next_check_at,
+      sync.etag,
+      sync.failures,
+      sync.last_error,
+    );
+  }
   const stored = db
     .prepare("SELECT * FROM political_feed WHERE id='kadoa'")
     .get();
   if (stored)
     try {
-      cached = {
-        ...JSON.parse(stored.payload),
-        fetchedAt: stored.fetched_at,
-        version: stored.version,
-      };
+      const payload = JSON.parse(stored.payload);
+      if (
+        Array.isArray(payload.rows) &&
+        payload.rows.length &&
+        payload.coverage
+      )
+        cached = {
+          ...payload,
+          fetchedAt: stored.fetched_at,
+          version: stored.version,
+        };
     } catch {
-      /* Invalid cache is replaced only after a validated fetch. */
+      /* Replace a corrupt cache only after a validated fetch. */
     }
-  const due = () => !cached || now() - cached.fetchedAt > 6 * 3600000;
+  if (!cached || !cached.people) sync.etag = null;
+  const due = () => now() >= sync.next_check_at;
+  function schedule() {
+    if (!started || stopped) return;
+    clearTimeout(timer);
+    timer = setTimeout(
+      () => {
+        timer = null;
+        if (due()) void refresh().catch(() => {});
+        else schedule();
+      },
+      Math.max(1000, sync.next_check_at - now()),
+    );
+    timer.unref?.();
+  }
   function refresh() {
     if (inflight) return inflight;
     if (stopped) return Promise.resolve();
     controller = new AbortController();
-    lastAttempt = now();
+    sync.attempted_at = now();
     const signal = AbortSignal.any([
       controller.signal,
       AbortSignal.timeout(25000),
     ]);
     inflight = (async () => {
-      // Pin both files to one revision, so a publish cannot mix identities and trades.
-      const commits = await json(
+      const response = await json(
         fetcher,
         "https://api.github.com/repos/kadoa-org/congress-trading-monitor/commits?path=public/data&per_page=1",
         signal,
         100000,
+        cached?.people ? sync.etag : null,
       );
-      const sha = commits?.[0]?.sha;
-      if (!/^[a-f0-9]{40}$/.test(sha || ""))
-        throw Error("Invalid disclosure revision");
-      const [trades, people] = await Promise.all(
-        ["trades", "filers"].map((name) =>
-          json(fetcher, BASE + sha + "/public/data/" + name + ".json", signal),
-        ),
-      );
-      const payload = normalizePoliticalFeed(trades, people, { now: now() });
-      payload.publishedAt = commits[0].commit?.committer?.date || null;
-      const encoded = JSON.stringify(payload),
-        version =
-          sha +
-          ":" +
-          createHash("sha256").update(encoded).digest("hex").slice(0, 16);
+      if (!response.unchanged) {
+        const commits = response.value,
+          sha = commits?.[0]?.sha;
+        if (!/^[a-f0-9]{40}$/.test(sha || ""))
+          throw Error("Invalid disclosure revision");
+        // A successful unchanged revision check is fresh even when no new filings were published.
+        if (!cached?.people || cached.version.split(":")[0] !== sha) {
+          const [trades, people] = await Promise.all(
+            ["trades", "filers"].map(
+              async (name) =>
+                (
+                  await json(
+                    fetcher,
+                    BASE + sha + "/public/data/" + name + ".json",
+                    signal,
+                  )
+                ).value,
+            ),
+          );
+          const payload = normalizePoliticalFeed(trades, people, {
+            now: now(),
+          });
+          payload.publishedAt = commits[0].commit?.committer?.date || null;
+          const encoded = JSON.stringify(payload),
+            version =
+              sha +
+              ":" +
+              createHash("sha256").update(encoded).digest("hex").slice(0, 16);
+          if (stopped) return;
+          db.prepare(
+            "INSERT INTO political_feed(id,payload,fetched_at,version) VALUES('kadoa',?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,fetched_at=excluded.fetched_at,version=excluded.version",
+          ).run(encoded, now(), version);
+          cached = { ...payload, version, fetchedAt: now() };
+        }
+        sync.etag = response.etag;
+      } else if (!cached) throw Error("No cached disclosure snapshot");
       if (stopped) return;
-      db.prepare(
-        "INSERT INTO political_feed(id,payload,fetched_at,version) VALUES('kadoa',?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,fetched_at=excluded.fetched_at,version=excluded.version",
-      ).run(encoded, now(), version);
-      cached = { ...payload, version, fetchedAt: now() };
-      lastError = null;
+      Object.assign(sync, {
+        checked_at: now(),
+        next_check_at: now() + POLITICAL_CHECK_INTERVAL,
+        failures: 0,
+        last_error: null,
+      });
+      saveSync();
     })()
       .catch((e) => {
-        lastError = "Source temporarily unavailable";
+        if (stopped) return;
+        sync.failures++;
+        const backoff = Math.min(
+          3600000,
+          60000 * 2 ** Math.min(sync.failures - 1, 6),
+        );
+        const requested = Math.max(
+          e.retryAfter || 0,
+          Number.isFinite(e.retryAt) ? e.retryAt - now() : 0,
+        );
+        sync.next_check_at =
+          now() + Math.max(backoff, Math.min(86400000, requested));
+        sync.last_error = "Source temporarily unavailable";
+        saveSync();
         if (!cached) throw e;
       })
       .finally(() => {
         inflight = null;
         controller = null;
+        schedule();
       });
     return inflight;
   }
-  async function get() {
-    if (!cached && now() - lastAttempt > 60000) await refresh().catch(() => {});
-    else if (due() && now() - lastAttempt > 60000)
-      void refresh().catch(() => {});
+  async function get({ force = false } = {}) {
+    // A single shared schedule governs workers, page loads and manual refreshes.
+    // Failed requests retain their backoff even when many clients reconnect.
+    const manualDue =
+      force && !sync.failures && now() - (sync.attempted_at || 0) >= 60000;
+    if (due() || manualDue) {
+      const pending = refresh().catch(() => {});
+      if (!cached || force) await pending;
+    } else if (!cached && inflight) await inflight.catch(() => {});
+    const oldCheck =
+      !sync.checked_at ||
+      now() - sync.checked_at > 2 * POLITICAL_CHECK_INTERVAL;
+    const oldPublication =
+      cached?.publishedAt &&
+      now() - Date.parse(cached.publishedAt) > 72 * 3600000;
     return {
-      ...(cached || { rows: [], coverage: null, fetchedAt: null }),
+      ...(cached || { rows: [], people: [], coverage: null, fetchedAt: null }),
+      checkedAt: sync.checked_at,
+      attemptedAt: sync.attempted_at,
+      nextCheckAt: sync.next_check_at,
+      checkIntervalMs: POLITICAL_CHECK_INTERVAL,
       status: !cached
         ? "unavailable"
-        : lastError
+        : sync.last_error
           ? "cached"
-          : now() - Date.parse(cached.coverage.through) > 7 * 86400000
-            ? "delayed"
-            : "available",
+          : oldCheck
+            ? "stale"
+            : oldPublication ||
+                now() - Date.parse(cached.coverage.through) > 7 * 86400000
+              ? "delayed"
+              : "available",
       refreshing: !!inflight,
     };
   }
@@ -321,16 +435,14 @@ export function createPoliticalFeed({
         }));
     },
     start() {
-      if (!enabled || timer || stopped) return;
-      timer = setInterval(() => {
-        if (due()) void refresh().catch(() => {});
-      }, 6 * 3600000);
-      timer.unref?.();
-      void refresh().catch(() => {});
+      if (!enabled || started || stopped) return;
+      started = true;
+      if (due()) void refresh().catch(() => {});
+      else schedule();
     },
     async stop() {
       stopped = true;
-      clearInterval(timer);
+      clearTimeout(timer);
       controller?.abort();
       await inflight?.catch(() => {});
     },

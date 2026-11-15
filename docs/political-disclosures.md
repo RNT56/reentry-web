@@ -47,8 +47,20 @@ use before repackaging or selling the records. Source references:
 
 ## Reliability and privacy
 
-- Every six hours, one shared server worker fetches the latest data revision. Both
-  JSON files are pinned to the same commit. On-demand cold loads use the same job.
+- Every five minutes, one shared server worker checks the published data revision,
+  including when nobody is browsing. ETag/304 checks and unchanged revisions skip
+  both data downloads. Both JSON files remain pinned to the same commit.
+- Open Capitol pages check server status each minute and on return to the tab.
+  Changed data updates idle views; active charts and expanded filings retain their
+  state with a compact “New filings” action. Manual checks share a one-minute
+  cooldown. No client can bypass a source-imposed retry period.
+- Last successful check, last downloaded snapshot, upstream publication date and
+  latest filing date are separate values. Source lag, an overdue check and an outage
+  remain visible. Frequent checking cannot make an upstream publisher deliver a
+  filing sooner; the UI never describes a successful check as a new publication.
+- Retry schedules and ETags persist across restarts. Backoff grows from one minute
+  to an hour, respects Retry-After / GitHub reset times, and serves the last good
+  snapshot while recovering. A new validated revision replaces the snapshot atomically.
 - Bounded responses, fixed HTTPS endpoints, strict official-document host allowlist,
   valid date/range checks, stable-ID deduplication, and rejection thresholds protect
   the cache. An invalid replacement never replaces a good snapshot.
@@ -64,6 +76,22 @@ use before repackaging or selling the records. Source references:
 - Watchlists are independent account-owned containers. Membership changes commute;
   reorder/rename/delete use revisions. Removing a list never deletes a holding,
   source, scenario, analysis, or research asset. Watchlists are included in export.
+
+## People directory
+
+All filer identities in the published index are searchable, including people whose
+transactions fall outside its rolling window. Counts come only from imported rows,
+never the index's full-history trade counts. Pelosi, Blumenthal and Gottheimer are
+placed first in the matching profile rail, followed by activity-ranked people.
+Selecting a directory profile clears unrelated filters and shows its available data.
+No matching rows means “outside this feed window,” not that a person never traded.
+
+Real-source regression fixtures include the latest available named records from
+Nancy Pelosi, Richard Blumenthal and Josh Gottheimer, with their pinned repository
+revision. Pelosi's 20035780 and Gottheimer's 20035770 were cross-checked against
+original House PDFs; source links remain on every disclosure. House ownership codes
+SP/JT/DC are displayed as Spouse/Joint/Dependent child. Senate whitespace is normalized
+without inventing tickers for private partnerships or funds.
 
 ## Portraits
 
